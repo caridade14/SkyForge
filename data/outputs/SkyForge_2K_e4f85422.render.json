@@ -1,0 +1,21 @@
+{
+  "id": "e4f85422-91e7-49cf-b1b9-c70ee48f8166",
+  "projectId": "default",
+  "projectName": "SkyForge Demo Scene",
+  "filename": "SkyForge_2K_e4f85422.png",
+  "dimensions": "2048x1024",
+  "settings": {
+    "format": "PNG Preview",
+    "resolution": "2K"
+  },
+  "scene": {
+    "city": "paris",
+    "output": {
+      "format": "PNG Preview",
+      "resolution": "2K"
+    }
+  },
+  "status": "done",
+  "completedAt": "2026-05-29T17:17:40.418Z",
+  "note": "Prototype render artifact. Replace this worker with a true HDRI/EXR renderer when the image pipeline is ready."
+}

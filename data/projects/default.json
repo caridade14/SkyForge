@@ -1,0 +1,30 @@
+{
+  "id": "default",
+  "name": "SkyForge Demo Scene",
+  "createdAt": "2026-05-29T09:38:54.709Z",
+  "updatedAt": "2026-05-29T10:01:39.470Z",
+  "scene": {
+    "city": "paris",
+    "date": "2026-05-29",
+    "time": "18:27",
+    "latitude": "48.8566",
+    "longitude": "2.3522",
+    "weather": "Clear",
+    "sun": {
+      "elevation": "7.0",
+      "azimuth": "215",
+      "intensity": "1.8",
+      "turbidity": "2.4"
+    },
+    "clouds": {
+      "type": "Cumulus",
+      "coverage": "62",
+      "altitude": "2400",
+      "density": "0.70"
+    },
+    "output": {
+      "format": "EXR 32-bit",
+      "resolution": "4K"
+    }
+  }
+}

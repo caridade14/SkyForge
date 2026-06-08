@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyForge — Cinematic Sky & HDRI Platform</title>
+  <meta name="description" content="SkyForge is a professional sky, HDRI, real-world sun data and lookdev platform for CGI, VFX, Blender and studio pipelines." />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div class="site-bg"></div>
+
+  <header class="navbar" id="navbar">
+    <div class="nav-inner">
+      <a href="#home" class="brand" aria-label="SkyForge Home">
+        <div class="brand-mark">SF</div>
+        <div class="brand-name">
+          <span class="brand-sky">Sky</span><span class="brand-forge">Forge</span>
+        </div>
+      </a>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="#product">Product</a>
+        <a href="#demo">Demo</a>
+        <a href="#features">Features</a>
+        <a href="#showcase">Showcase</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#download">Download</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a class="btn btn-ghost" href="#login">Login</a>
+        <a class="btn btn-primary" href="#download">Get SkyForge</a>
+      </div>
+
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="#product">Product</a>
+      <a href="#demo">Demo</a>
+      <a href="#features">Features</a>
+      <a href="#showcase">Showcase</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#download">Download</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn btn-primary mobile-cta" href="#download">Get SkyForge</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero section" id="home">
+      <div class="hero-glow"></div>
+
+      <div class="container hero-content reveal">
+        <div class="badge">
+          <span class="badge-icon">✦</span>
+          Professional sky, HDRI and lookdev platform for CGI studios
+        </div>
+
+        <h1>Forge cinematic skies for every shot.</h1>
+
+        <p class="hero-subtitle">
+          SkyForge é uma plataforma premium para criar céus procedurais, HDRIs,
+          presets de iluminação, dados solares reais e estrutura de pipeline —
+          pensada para publicidade, VFX, Blender e estúdios CGI.
+        </p>
+
+        <div class="hero-buttons">
+          <a href="#demo" class="btn btn-primary btn-large">Start Creating <span>→</span></a>
+          <a href="#showcase" class="btn btn-ghost btn-large">▶ Watch Product Demo</a>
+        </div>
+      </div>
+
+      <div class="container app-mockup-wrap reveal delay-1">
+        <div class="app-glow"></div>
+        <div class="app-window">
+          <div class="app-topbar">
+            <div class="window-dots">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <div class="window-title">SkyForge Render Environment · Live Preview</div>
+            <div class="window-version">v1.0 Studio Preview</div>
+          </div>
+
+          <div class="app-layout">
+            <aside class="app-panel left-panel">
+              <p class="panel-label">Preset Browser</p>
+
+              <div class="preset-card active">
+                <div class="preset-thumb sunset"></div>
+                <div class="preset-row">
+                  <span>Sunset Commercial</span>
+                  <strong>›</strong>
+                </div>
+              </div>
+
+              <div class="preset-card">
+                <div class="preset-thumb studio"></div>
+                <div class="preset-row">
+                  <span>HDRI Studio Soft</span>
+                  <strong>›</strong>
+                </div>
+              </div>
+
+              <div class="preset-card">
+                <div class="preset-thumb storm"></div>
+                <div class="preset-row">
+                  <span>Storm Cinematic</span>
+                  <strong>›</strong>
+                </div>
+              </div>
+
+              <div class="preset-card">
+                <div class="preset-thumb fantasy"></div>
+                <div class="preset-row">
+                  <span>Fantasy Dawn</span>
+                  <strong>›</strong>
+                </div>
+              </div>
+
+              <div class="project-card">
+                <small>Project</small>
+                <strong>CStudio_Car_Ad</strong>
+                <span>SQ010 · SH020 · Lookdev</span>
+              </div>
+            </aside>
+
+            <section class="viewport">
+              <div class="sun"></div>
+              <div class="sun-glow"></div>
+              <div class="safe-frame"></div>
+              <div class="third third-v-one"></div>
+              <div class="third third-v-two"></div>
+              <div class="third third-h"></div>
+              <div class="horizon"></div>
+
+              <div class="viewport-top">
+                <div class="badge small">Real-time sky lookdev</div>
+                <div class="location-pill">Luanda · 18:34</div>
+              </div>
+
+              <div class="composition-pill">
+                Rule of thirds · Horizon safe · 35mm · 16:9
+              </div>
+
+              <div class="viewport-stats">
+                <div>
+                  <small>Sun Azimuth</small>
+                  <strong>248°</strong>
+                </div>
+                <div>
+                  <small>Cloud Density</small>
+                  <strong>62%</strong>
+                </div>
+                <div>
+                  <small>Exposure</small>
+                  <strong>+1.4</strong>
+                </div>
+              </div>
+            </section>
+
+            <aside class="app-panel right-panel">
+              <p class="panel-label">Scene Controls</p>
+
+              <div class="control-card">
+                <small>Location</small>
+                <strong>Luanda, AO</strong>
+              </div>
+
+              <div class="control-card">
+                <small>Date</small>
+                <strong>31 May 2026</strong>
+              </div>
+
+              <div class="control-card">
+                <small>Time</small>
+                <strong>18:34</strong>
+              </div>
+
+              <div class="control-card">
+                <small>Lens</small>
+                <strong>35mm</strong>
+              </div>
+
+              <div class="ai-card">
+                <div class="ai-title">◎ AI Suggest Preset</div>
+                <p>Commercial sunset with warm highlights, soft contrast and clean product reflections.</p>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-section">
+      <div class="container stats-grid">
+        <div class="stat-card reveal">
+          <strong>4K</strong>
+          <span>HDRI export ready</span>
+        </div>
+        <div class="stat-card reveal delay-1">
+          <strong>Real</strong>
+          <span>Sun position data</span>
+        </div>
+        <div class="stat-card reveal delay-2">
+          <strong>100+</strong>
+          <span>Preset targets</span>
+        </div>
+        <div class="stat-card reveal delay-3">
+          <strong>Live</strong>
+          <span>Scene preview</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="pipeline-strip">
+      <div class="container pipeline-box reveal">
+        <p>Designed for modern CGI pipelines</p>
+        <div class="tool-badges">
+          <span>Blender</span>
+          <span>Nuke</span>
+          <span>Unreal</span>
+          <span>Houdini</span>
+          <span>DaVinci</span>
+          <span>USD Ready</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="product">
+      <div class="container">
+        <div class="section-heading center reveal">
+          <div class="badge">✦ Problem / Solution</div>
+          <h2>O problema não é só criar um céu bonito. É manter consistência em produção.</h2>
+          <p>
+            Muitos artistas perdem tempo a recriar luz, atmosfera, folder structure,
+            referências e parâmetros entre cenas. SkyForge resolve isso como uma ferramenta
+            de estúdio, não apenas como um gerador visual.
+          </p>
+        </div>
+
+        <div class="cards-grid three">
+          <article class="feature-card reveal">
+            <div class="icon-box">✦</div>
+            <h3>Creative Sky Forge</h3>
+            <p>Gera atmosferas cinematográficas para CGI, publicidade, archviz, product renders e VFX.</p>
+          </article>
+
+          <article class="feature-card reveal delay-1">
+            <div class="icon-box">◎</div>
+            <h3>Real World Sun Data</h3>
+            <p>Controla cidade, data, hora, direção solar, golden hour e variações de exposição.</p>
+          </article>
+
+          <article class="feature-card reveal delay-2">
+            <div class="icon-box">⌘</div>
+            <h3>Studio Pipeline Layer</h3>
+            <p>Organiza projetos, sequences, shots, presets, versões e exports com lógica de produção.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="demo">
+      <div class="container demo-grid">
+        <div class="demo-panel reveal">
+          <div class="demo-header">
+            <div>
+              <h3>Interactive Demo Concept</h3>
+              <p>Simula como a área de controlo do produto pode funcionar.</p>
+            </div>
+            <span>Live UI</span>
+          </div>
+
+          <div class="mood-buttons" id="moodButtons">
+            <button class="mood-btn active" data-mood="sunset">Sunset</button>
+            <button class="mood-btn" data-mood="studio">Studio</button>
+            <button class="mood-btn" data-mood="storm">Storm</button>
+            <button class="mood-btn" data-mood="fantasy">Fantasy</button>
+          </div>
+
+          <div class="mood-preview mood-sunset" id="moodPreview"></div>
+
+          <div class="demo-meta">
+            <div>
+              <small>Mood</small>
+              <strong id="selectedMood">Sunset</strong>
+            </div>
+            <div>
+              <small>Export</small>
+              <strong>EXR/HDRI</strong>
+            </div>
+            <div>
+              <small>Target</small>
+              <strong>Blender</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-copy reveal delay-1">
+          <div class="badge">✦ Interactive section</div>
+          <h2>Mostra ao visitante que o SkyForge é mais do que uma imagem bonita.</h2>
+          <p>
+            Esta secção dá a sensação de produto funcional, com escolhas de preset,
+            preview e dados técnicos. Depois podes ligar estes botões ao backend real.
+          </p>
+
+          <div class="mini-grid">
+            <div>↖ Clickable UI</div>
+            <div>☷ Real controls</div>
+            <div>◎ Sun direction</div>
+            <div>▣ Composition guides</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-heading reveal">
+          <div class="badge">✦ Feature stack</div>
+          <h2>Tudo o que um estúdio precisa para controlar o céu.</h2>
+          <p>
+            Do lookdev ao export final, SkyForge combina ferramentas criativas com
+            estrutura técnica para manter consistência visual entre shots.
+          </p>
+        </div>
+
+        <div class="cards-grid three">
+          <article class="feature-card reveal"><div class="icon-box">☁</div><h3>Procedural Sky System</h3><p>Cria céus cinematográficos, HDRIs estilizados e atmosferas realistas para Blender, Unreal e pipelines CGI.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">◎</div><h3>Real World Data</h3><p>Simulação solar baseada em cidade, data e hora para lighting previsível e tecnicamente consistente.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">▣</div><h3>Camera Composition Tools</h3><p>Overlays profissionais: rule of thirds, horizon line, safe frame, FOV, lens guides e framing para anúncios CGI.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">▤</div><h3>Preset Library</h3><p>Biblioteca visual com thumbnails, categorias, favoritos e presets inteligentes para acelerar lookdev.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">⌁</div><h3>Project Structure Builder</h3><p>Cria estrutura por cliente, projeto, sequência, shot, renders, cache, textures, comps e deliverables.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">⚡</div><h3>Blender Bridge</h3><p>Prepara world shader, sun direction, camera guides e metadados para integração com Blender.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">◫</div><h3>Asset Database</h3><p>Guarda presets, versões, thumbnails, comentários e metadados técnicos para cada ambiente criado.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">⌘</div><h3>Command Palette</h3><p>Acesso rápido a presets, export, project setup, render notes, scene sync e ações internas.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">✓</div><h3>Shot Consistency</h3><p>Mantém direção de luz, atmosfera, exposição e mood entre várias cenas de uma campanha CGI.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">☁</div><h3>Cloud Library Ready</h3><p>Conceito preparado para sincronizar presets de equipa, bibliotecas de céu e dados de projeto.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">{ }</div><h3>JSON Preset System</h3><p>Presets exportáveis e legíveis, pensados para versionamento, automação e pipeline interno.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">✎</div><h3>Production Notes</h3><p>Adiciona notas por shot: intenção de luz, referências, problemas, estado e instruções para artistas.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section modules-section">
+      <div class="container">
+        <div class="section-heading center reveal">
+          <div class="badge">✦ Product modules</div>
+          <h2>Transforma o SkyForge numa suite, não apenas numa página.</h2>
+          <p>Estas áreas fazem o site parecer preparado para uma aplicação real com dashboard, documentação, downloads e licenças.</p>
+        </div>
+
+        <div class="cards-grid three">
+          <article class="module-card reveal"><div class="icon-box filled">▣</div><h3>Live Sky Viewport</h3><p>Preview visual com horizonte, sol, grelha e mood cinematográfico.</p></article>
+          <article class="module-card reveal"><div class="icon-box filled">◐</div><h3>Look Builder</h3><p>Controla paleta, contraste, haze, temperatura e exposição.</p></article>
+          <article class="module-card reveal"><div class="icon-box filled">↔</div><h3>Shot Navigator</h3><p>Alterna entre sequences e shots sem perder o contexto de produção.</p></article>
+          <article class="module-card reveal"><div class="icon-box filled">?</div><h3>Documentation Hub</h3><p>Guia interno com exemplos, shortcuts e boas práticas do pipeline.</p></article>
+          <article class="module-card reveal"><div class="icon-box filled">⌁</div><h3>Licensing Panel</h3><p>Estrutura para licenças Indie, Studio e Pipeline.</p></article>
+          <article class="module-card reveal"><div class="icon-box filled">⎇</div><h3>Version History</h3><p>Histórico de presets e alterações por shot.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="showcase">
+      <div class="container">
+        <div class="section-heading center reveal">
+          <div class="badge">✦ Showcase</div>
+          <h2>Feito para renders que precisam vender uma ideia.</h2>
+          <p>SkyForge não é só uma interface bonita. O objetivo é dar direção visual rápida para campanhas, cenas, anúncios e projetos de estúdio.</p>
+        </div>
+
+        <div class="showcase-grid">
+          <article class="showcase-card reveal">
+            <div class="showcase-img car"><span>Commercial Lighting</span></div>
+            <div><h3>Automotive CGI</h3><p>Cria sunsets controlados para carros, reflexos limpos e ambiente premium para publicidade automóvel.</p></div>
+          </article>
+
+          <article class="showcase-card reveal delay-1">
+            <div class="showcase-img product"><span>Studio HDRI</span></div>
+            <div><h3>Product Advertising</h3><p>Gera iluminação suave para perfumes, garrafas, tecnologia, cosméticos e renders de produto.</p></div>
+          </article>
+
+          <article class="showcase-card reveal delay-2">
+            <div class="showcase-img vfx"><span>Film Lookdev</span></div>
+            <div><h3>VFX Environment</h3><p>Define céu, atmosfera, direção solar e mood antes de enviar assets para composição ou render final.</p></div>
+          </article>
+
+          <article class="showcase-card reveal delay-3">
+            <div class="showcase-img archviz"><span>Real Sun Data</span></div>
+            <div><h3>Architectural Visualization</h3><p>Simula posição solar real para apresentações arquitetónicas, interiores e exteriores realistas.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="pipeline">
+      <div class="container workflow-grid">
+        <div class="workflow-copy reveal">
+          <div class="badge">✦ Artist-first workflow</div>
+          <h2>Menos tentativa e erro. Mais direção visual.</h2>
+          <p>
+            SkyForge transforma o processo de iluminação exterior em um fluxo claro:
+            escolhe contexto real, gera ambiente, ajusta composição e envia para produção.
+          </p>
+
+          <div class="tags">
+            <span>Blender</span>
+            <span>Nuke</span>
+            <span>Unreal</span>
+            <span>CGI Ads</span>
+            <span>Lookdev</span>
+            <span>HDRI</span>
+            <span>Shot Setup</span>
+            <span>Compositing</span>
+          </div>
+        </div>
+
+        <div class="workflow-steps reveal delay-1">
+          <div class="step"><strong>1</strong><div><h3>Cria ou abre um projeto</h3><p>Começa por cliente, campanha ou produção.</p></div></div>
+          <div class="step"><strong>2</strong><div><h3>Define cliente, sequência e shot</h3><p>Organiza visualmente o contexto da cena.</p></div></div>
+          <div class="step"><strong>3</strong><div><h3>Escolhe cidade, data, hora e mood</h3><p>Base real para direção solar e atmosfera.</p></div></div>
+          <div class="step"><strong>4</strong><div><h3>Gera sky preset, HDRI ou look base</h3><p>Começa com uma fundação visual rápida.</p></div></div>
+          <div class="step"><strong>5</strong><div><h3>Ajusta sol, nuvens, haze e exposição</h3><p>Refina até chegar ao look desejado.</p></div></div>
+          <div class="step"><strong>6</strong><div><h3>Aplica overlays de câmara</h3><p>Controla composição, horizonte e safe frame.</p></div></div>
+          <div class="step"><strong>7</strong><div><h3>Exporta para o pipeline</h3><p>Blender, Nuke, Unreal ou estrutura própria.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section integrations-section">
+      <div class="container integrations-grid">
+        <div class="section-heading reveal">
+          <div class="badge">✦ Integrations</div>
+          <h2>Pronto para conversar com o pipeline do estúdio.</h2>
+          <p>A ideia é transformar SkyForge num hub visual que prepara informações úteis para os softwares que já usas.</p>
+        </div>
+
+        <div class="cards-grid two">
+          <article class="feature-card reveal"><div class="icon-box">⚡</div><h3>Blender</h3><p>Scene setup, world shader, sun direction, camera overlays.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">◆</div><h3>Nuke</h3><p>EXR workflow, look references, metadata and compositing notes.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">▣</div><h3>Unreal Engine</h3><p>Environment lookdev, HDRI reference and previs lighting.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">⌁</div><h3>Houdini</h3><p>FX mood, sky reference and simulation lighting context.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">◐</div><h3>DaVinci Resolve</h3><p>Color mood references and grading direction.</p></article>
+          <article class="feature-card reveal"><div class="icon-box">{ }</div><h3>Custom Pipeline</h3><p>JSON presets, project folders and automation-ready structure.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="white-block-section">
+      <div class="container white-block">
+        <div class="white-copy reveal">
+          <div class="dark-badge">Built for C-Studio / SkyForge pipeline</div>
+          <h2>Uma ferramenta com aparência de produto real.</h2>
+          <p>
+            A interface foi pensada para vender confiança: visual premium, linguagem profissional,
+            módulos claros e posicionamento de software para artistas, freelancers e estúdios.
+          </p>
+
+          <div class="white-mini-grid">
+            <div>✓ Pipeline consistency</div>
+            <div>✓ Fast look creation</div>
+            <div>✓ Production ready UI</div>
+            <div>✓ Premium brand feel</div>
+          </div>
+        </div>
+
+        <div class="sync-panel reveal delay-1">
+          <div class="sync-header">
+            <strong>Shot Environment</strong>
+            <span>Synced</span>
+          </div>
+
+          <div class="progress-list">
+            <div><span>Sky model</span><b style="width: 60%"></b></div>
+            <div><span>Cloud layer</span><b style="width: 68%"></b></div>
+            <div><span>Sun intensity</span><b style="width: 76%"></b></div>
+            <div><span>HDRI export</span><b style="width: 84%"></b></div>
+            <div><span>Blender bridge</span><b style="width: 92%"></b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section technical-section">
+      <div class="container">
+        <div class="section-heading center reveal">
+          <div class="badge">✦ Technical details</div>
+          <h2>Estrutura técnica clara para evoluir de landing page para produto.</h2>
+          <p>A página agora comunica não só o visual, mas também a arquitetura mental do SkyForge como software profissional.</p>
+        </div>
+
+        <div class="technical-grid">
+          <div><small>Preset Format</small><strong>JSON / local database ready</strong></div>
+          <div><small>Export Targets</small><strong>HDRI, EXR, PNG preview, metadata</strong></div>
+          <div><small>Viewport</small><strong>Live preview with composition guides</strong></div>
+          <div><small>Pipeline</small><strong>Project / Sequence / Shot structure</strong></div>
+          <div><small>Lookdev</small><strong>Sun, cloud, haze, exposure, color temperature</strong></div>
+          <div><small>Branding</small><strong>Designed for C-Studio / SkyForge ecosystem</strong></div>
+          <div><small>Backend</small><strong>Express / API-ready architecture</strong></div>
+          <div><small>Future</small><strong>Cloud sync, accounts, teams and preset marketplace</strong></div>
+          <div><small>Addon</small><strong>Blender bridge and local scene sync concept</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section comparison-section">
+      <div class="container">
+        <div class="section-heading center reveal">
+          <div class="badge">✦ Comparison</div>
+          <h2>Porque SkyForge pode ser diferente.</h2>
+          <p>A proposta é juntar UI de produto, direção visual e lógica de pipeline numa só ferramenta.</p>
+        </div>
+
+        <div class="comparison-table reveal">
+          <div class="table-row table-head">
+            <div>Feature</div>
+            <div>SkyForge</div>
+            <div>Basic Addon</div>
+            <div>Manual Setup</div>
+          </div>
+          <div class="table-row"><div>Visual preset library</div><div class="yes">✓</div><div class="yes">✓</div><div class="no">×</div></div>
+          <div class="table-row"><div>Real-world solar simulation</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div></div>
+          <div class="table-row"><div>Shot / sequence workflow</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div></div>
+          <div class="table-row"><div>Blender bridge concept</div><div class="yes">✓</div><div class="yes">✓</div><div class="no">×</div></div>
+          <div class="table-row"><div>Camera composition overlays</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div></div>
+          <div class="table-row"><div>Studio branding and pipeline structure</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div></div>
+          <div class="table-row"><div>Project folder automation</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div></div>
+          <div class="table-row"><div>Preset metadata and notes</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div></div>
+          <div class="table-row"><div>Download / licensing area</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="download">
+      <div class="container download-grid">
+        <div class="download-card reveal">
+          <div class="badge">✦ Download beta</div>
+          <h2>Cria uma área de download que parece oficial.</h2>
+          <p>Esta secção prepara o site para receber versão beta, changelog, documentação e requisitos do sistema.</p>
+          <div class="download-actions">
+            <a href="#" class="btn btn-primary btn-large">⬇ Download Beta 0.1</a>
+            <a href="#" class="btn btn-ghost btn-large">▤ Read Documentation</a>
+          </div>
+        </div>
+
+        <div class="requirements reveal delay-1">
+          <div><strong>OS</strong><span>Windows 10/11, macOS concept, Linux concept</span></div>
+          <div><strong>Recommended GPU</strong><span>NVIDIA RTX / modern GPU for DCC viewport</span></div>
+          <div><strong>Storage</strong><span>2GB base install + preset libraries</span></div>
+          <div><strong>Backend</strong><span>Node.js / Express for account and preset services</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section roadmap-section">
+      <div class="container">
+        <div class="section-heading reveal">
+          <div class="badge">✦ Roadmap</div>
+          <h2>Um plano claro para transformar SkyForge em produto final.</h2>
+          <p>O site agora já pode vender a visão do projeto enquanto o software continua a ser desenvolvido por fases.</p>
+        </div>
+
+        <div class="roadmap-grid">
+          <article class="roadmap-card reveal"><div><small>Phase 01</small><span>Ready</span></div><h3>Professional Website</h3><p>✓ Premium landing page</p><p>✓ Product story</p><p>✓ Pricing concept</p><p>✓ Beta capture</p></article>
+          <article class="roadmap-card reveal delay-1"><div><small>Phase 02</small><span>Next</span></div><h3>Interactive Frontend</h3><p>✓ Preset filters</p><p>✓ Live controls</p><p>✓ Project dashboard</p><p>✓ Preview gallery</p></article>
+          <article class="roadmap-card reveal delay-2"><div><small>Phase 03</small><span>Planned</span></div><h3>Backend & Database</h3><p>✓ User accounts</p><p>✓ Preset database</p><p>✓ Cloud sync</p><p>✓ Team libraries</p></article>
+          <article class="roadmap-card reveal delay-3"><div><small>Phase 04</small><span>Planned</span></div><h3>Blender Bridge</h3><p>✓ Addon connector</p><p>✓ Scene export</p><p>✓ World shader sync</p><p>✓ Batch shot setup</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section testimonials-section">
+      <div class="container">
+        <div class="section-heading center reveal">
+          <div class="badge">✦ Studio proof</div>
+          <h2>Feedback que ajuda a vender a ferramenta.</h2>
+          <p>Usa esta área depois com reviews reais, beta testers ou clientes do C-Studio.</p>
+        </div>
+
+        <div class="cards-grid three">
+          <article class="testimonial reveal"><div class="stars">★★★★★</div><p>“SkyForge looks like the type of tool every small CGI studio needs: focused, visual and pipeline-aware.”</p><strong>Creative Director</strong><span>Advertising CGI Studio</span></article>
+          <article class="testimonial reveal delay-1"><div class="stars">★★★★★</div><p>“The real-world sun controls and shot consistency features would save hours during lookdev.”</p><strong>Lighting Artist</strong><span>Freelance VFX / Blender</span></article>
+          <article class="testimonial reveal delay-2"><div class="stars">★★★★★</div><p>“It feels less like a plugin and more like a complete production environment for cinematic skies.”</p><strong>Pipeline TD</strong><span>3D Production Team</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="pricing">
+      <div class="container">
+        <div class="section-heading center reveal">
+          <div class="badge">✦ Pricing concept</div>
+          <h2>Planos pensados para crescer com o teu estúdio.</h2>
+          <p>Uma estrutura comercial simples para apresentar o SkyForge como produto vendável.</p>
+        </div>
+
+        <div class="pricing-grid">
+          <article class="price-card reveal">
+            <small>Indie</small>
+            <h3>$29</h3>
+            <p>Para freelancers, estudantes e pequenos artistas CGI.</p>
+            <ul>
+              <li>✓ Preset library</li>
+              <li>✓ Procedural skies</li>
+              <li>✓ Basic Blender export</li>
+              <li>✓ Community updates</li>
+            </ul>
+            <a href="#" class="btn btn-ghost">Choose Indie</a>
+          </article>
+
+          <article class="price-card highlighted reveal delay-1">
+            <small>Studio</small>
+            <h3>$79</h3>
+            <p>Para equipas que precisam de workflow consistente em vários shots.</p>
+            <ul>
+              <li>✓ Tudo do Indie</li>
+              <li>✓ Project templates</li>
+              <li>✓ Shot workflow</li>
+              <li>✓ Advanced overlays</li>
+              <li>✓ Priority updates</li>
+            </ul>
+            <a href="#" class="btn btn-dark">Choose Studio</a>
+          </article>
+
+          <article class="price-card reveal delay-2">
+            <small>Pipeline</small>
+            <h3>Custom</h3>
+            <p>Para estúdios com pipeline próprio, automações e necessidades avançadas.</p>
+            <ul>
+              <li>✓ Custom integration</li>
+              <li>✓ Team standards</li>
+              <li>✓ Pipeline presets</li>
+              <li>✓ Dedicated support</li>
+            </ul>
+            <a href="#" class="btn btn-ghost">Choose Pipeline</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="faq">
+      <div class="container faq-grid">
+        <div class="section-heading reveal">
+          <div class="badge">✦ FAQ</div>
+          <h2>Perguntas que o site deve responder antes do cliente perguntar.</h2>
+          <p>Esta secção deixa o produto mais credível e ajuda visitantes a entenderem exatamente o que é o SkyForge.</p>
+        </div>
+
+        <div class="faq-list reveal delay-1">
+          <details open>
+            <summary>SkyForge é um render engine completo?</summary>
+            <p>Nesta versão, SkyForge está posicionado como uma ferramenta de sky, HDRI, lookdev e pipeline para preparar ambientes e iluminação. Depois pode evoluir para motor próprio ou bridge avançado com Blender.</p>
+          </details>
+
+          <details>
+            <summary>O site já está pronto para vender o produto?</summary>
+            <p>A estrutura visual e comercial já está forte. Para vender de verdade, o próximo passo é ligar botões, criar página de download, screenshots reais, vídeo demo e formulário de beta.</p>
+          </details>
+
+          <details>
+            <summary>Dá para integrar com o projeto SkyForge em Node.js?</summary>
+            <p>Sim. Esta interface pode virar a landing page principal do frontend e depois conectar ao backend Express que já começaste.</p>
+          </details>
+
+          <details>
+            <summary>Posso adaptar para HTML simples?</summary>
+            <p>Sim. O layout já está em HTML, CSS e JavaScript puro para poderes abrir diretamente no navegador.</p>
+          </details>
+
+          <details>
+            <summary>O SkyForge será vendido como addon ou app?</summary>
+            <p>A melhor estratégia é ter os dois: uma app/website para presets, conta, downloads e documentação; e um addon Blender para aplicar tudo diretamente na cena.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="final-cta section">
+      <div class="container">
+        <div class="cta-box reveal">
+          <div class="badge">✦ Ready for production</div>
+          <h2>Transforma o SkyForge numa ferramenta que parece pronta para o mercado.</h2>
+          <p>Usa esta landing page para apresentar o produto, captar utilizadores beta, vender licenças ou mostrar o potencial do software para clientes e parceiros.</p>
+          <div class="hero-buttons">
+            <a href="#download" class="btn btn-primary btn-large">Request Beta Access</a>
+            <a href="#" class="btn btn-ghost btn-large">Download Product Deck</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-grid">
+      <div>
+        <a href="#home" class="brand footer-brand">
+          <div class="brand-mark">SF</div>
+          <div class="brand-name">
+            <span class="brand-sky">Sky</span><span class="brand-forge">Forge</span>
+          </div>
+        </a>
+        <p>© 2026 C-Studio. All rights reserved.</p>
+      </div>
+
+      <div class="footer-links">
+        <a href="#product">Product</a>
+        <a href="#demo">Demo</a>
+        <a href="#features">Features</a>
+        <a href="#showcase">Showcase</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#download">Download</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+      </div>
+
+      <form class="newsletter" id="newsletterForm">
+        <label>Join the beta list</label>
+        <div>
+          <input type="email" placeholder="email@studio.com" required />
+          <button type="submit">Send</button>
+        </div>
+        <small id="newsletterMsg"></small>
+      </form>
+    </div>
+  </footer>
+
+  <script src="./js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+SkyForge prototype render artifact
+Render ID: 45e01501-c9b4-40db-894f-61ac4291822e
+Filename: SkyForge_8K_45e01501.exr
+Dimensions: 8192x4096
+Format request: EXR 32-bit
+
+This is not a real HDRI/EXR pixel payload yet.
+The render worker created this artifact so the backend pipeline can be tested end to end.
+
+{
+  "id": "45e01501-c9b4-40db-894f-61ac4291822e",
+  "projectId": "cm",
+  "projectName": "CM",
+  "filename": "SkyForge_8K_45e01501.exr",
+  "dimensions": "8192x4096",
+  "settings": {
+    "format": "EXR 32-bit",
+    "resolution": "8K"
+  },
+  "scene": {
+    "city": "paris",
+    "date": "2026-05-29",
+    "time": "18:27",
+    "latitude": "48.8566",
+    "longitude": "2.3522",
+    "weather": "Clear",
+    "sun": {
+      "elevation": "7.0",
+      "azimuth": "215",
+      "intensity": "1.8",
+      "turbidity": "2.4"
+    },
+    "clouds": {
+      "type": "Cumulus",
+      "coverage": "62",
+      "altitude": "2400",
+      "density": "0.70"
+    },
+    "output": {
+      "format": "EXR 32-bit",
+      "resolution": "8K"
+    }
+  },
+  "status": "done",
+  "completedAt": "2026-05-29T16:59:42.230Z",
+  "note": "Prototype render artifact. Replace this worker with a true HDRI/EXR renderer when the image pipeline is ready."
+}

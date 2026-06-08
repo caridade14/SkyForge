@@ -1,0 +1,130 @@
+{
+  "id": "0bc99ed7-af7c-4ab3-b86f-4c9f1e9ab347",
+  "projectId": "default",
+  "projectName": "SkyForge Demo Scene",
+  "filename": "SkyForge_2K_0bc99ed7.png",
+  "dimensions": "2048x1024",
+  "settings": {
+    "format": "PNG Preview",
+    "resolution": "2K"
+  },
+  "scene": {
+    "city": "luanda",
+    "date": "2026-05-29",
+    "time": "18:27",
+    "latitude": "-8.8390",
+    "longitude": "13.2894",
+    "weather": "Humid warm",
+    "sun": {
+      "elevation": "7.0",
+      "azimuth": "149",
+      "intensity": "0.5",
+      "turbidity": "1.0"
+    },
+    "clouds": {
+      "type": "Cumulus",
+      "coverage": "62",
+      "altitude": "2400",
+      "density": "0.00"
+    },
+    "output": {
+      "format": "EXR 32-bit",
+      "resolution": "4K"
+    },
+    "objects": [
+      {
+        "icon": "🌍",
+        "name": "Procedural Sky",
+        "type": "SKY",
+        "visible": true,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "☀️",
+        "name": "Sun Key Light",
+        "type": "LIGHT",
+        "visible": false,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "🌙",
+        "name": "Moon / Night Disc",
+        "type": "LIGHT",
+        "visible": false,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "🌫️",
+        "name": "Haze Volume",
+        "type": "VOL",
+        "visible": false,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "🌁",
+        "name": "Ground Fog Pass",
+        "type": "FX",
+        "visible": false,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "☁️",
+        "name": "Cumulus Layer",
+        "type": "CLOUD",
+        "visible": false,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "🌩️",
+        "name": "Storm Layer",
+        "type": "CLOUD",
+        "visible": false,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "📷",
+        "name": "Preview Camera",
+        "type": "CAM",
+        "visible": false,
+        "locked": false,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "💡",
+        "name": "HDRI Light Probe",
+        "type": "HDRI",
+        "visible": false,
+        "locked": true,
+        "selected": false,
+        "added": false
+      },
+      {
+        "icon": "📝",
+        "name": "Shot Notes",
+        "type": "NOTE",
+        "visible": false,
+        "locked": false,
+        "selected": true,
+        "added": false
+      }
+    ]
+  },
+  "status": "done",
+  "completedAt": "2026-05-29T21:45:30.104Z",
+  "note": "Prototype render artifact. Replace this worker with a true HDRI/EXR renderer when the image pipeline is ready."
+}

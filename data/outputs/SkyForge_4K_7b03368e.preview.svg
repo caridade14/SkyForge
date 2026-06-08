@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="SkyForge render preview">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#07111f"/>
+      <stop offset="28%" stop-color="#17345c"/>
+      <stop offset="52%" stop-color="#b9651f"/>
+      <stop offset="72%" stop-color="#5a2110"/>
+      <stop offset="100%" stop-color="#090608"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="50%" cy="95.1%" r="28%">
+      <stop offset="0%" stop-color="#fff9c8" stop-opacity="1"/>
+      <stop offset="18%" stop-color="#ffd64c" stop-opacity=".95"/>
+      <stop offset="55%" stop-color="#df781d" stop-opacity=".35"/>
+      <stop offset="100%" stop-color="#df781d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="haze" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#254d80" stop-opacity=".18"/>
+      <stop offset="50%" stop-color="#ffb156" stop-opacity="0.39"/>
+      <stop offset="100%" stop-color="#121a30" stop-opacity=".22"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#sky)"/>
+  <rect width="1280" height="720" fill="url(#sun)"/>
+  <rect y="300" width="1280" height="220" fill="url(#haze)" opacity=".82"/>
+  <g filter="blur(1px)">
+    <ellipse cx="60" cy="90" rx="80" ry="22" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="233" cy="151" rx="99" ry="33" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="406" cy="212" rx="118" ry="44" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="579" cy="273" rx="137" ry="31" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="752" cy="334" rx="86" ry="42" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="925" cy="95" rx="105" ry="29" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="1098" cy="156" rx="124" ry="40" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="111" cy="217" rx="143" ry="27" fill="#fff4d8" opacity="0.40"/>
+    <ellipse cx="284" cy="278" rx="92" ry="38" fill="#fff4d8" opacity="0.40"/>
+  </g>
+  <circle cx="640" cy="685" r="34" fill="#fff2a4" opacity=".92"/>
+  <path d="M0 530 C240 500 420 565 640 535 C850 508 1020 545 1280 515 L1280 720 L0 720 Z" fill="#0b0a0b" opacity=".55"/>
+  <g font-family="DM Mono, Consolas, monospace" fill="#fff" opacity=".9">
+    <text x="32" y="48" font-size="24">SkyForge Preview</text>
+    <text x="32" y="82" font-size="16">paris · Clear · 4K</text>
+    <text x="32" y="686" font-size="13">SkyForge_4K_7b03368e.exr · 7b03368e-d5b1-487a-b75c-fd684fbaa67d</text>
+  </g>
+</svg>
