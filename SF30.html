@@ -5810,11 +5810,20 @@ function sfResetCurve(){
 }
 function sfApplyCurveAtPlayhead(silent){
   var ch=sfCurveChannel(),value=sfCurveValueAt(SF_CURVES.active,sfCurveFrame01());
+  if(typeof sfApplyCurveValue!=='function'){
+    if(!silent)sfCurveStatus('Curve target not ready','warn');
+    return;
+  }
   sfApplyCurveValue(SF_CURVES.active,value,true);
   sfCurveStatus('Applied '+ch.label+' '+sfCurveFormat(value,ch)+' at F'+sfTimelineFrame(),'ok');
   if(!silent&&typeof triToast==='function')triToast('Curve applied: '+ch.label+' '+sfCurveFormat(value,ch));
 }
 function sfBakeCurvesToScene(){
+  if(typeof sfApplyCurveValue!=='function'){
+    sfCurveStatus('Curve target not ready','warn');
+    if(typeof triToast==='function')triToast('Curve target not ready');
+    return;
+  }
   Object.keys(SF_CURVES.channels).forEach(function(channel){sfApplyCurveValue(channel,sfCurveValueAt(channel,sfCurveFrame01()),true);});
   sfDrawCurveEditor();sfCurveStatus('Curves baked to scene rig','ok');if(typeof triToast==='function')triToast('Curves baked to scene rig');
 }

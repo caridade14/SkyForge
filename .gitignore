@@ -1,6 +1,6 @@
 node_modules/
 npm-debug.log*
-server-run.log
+server-run*.log
 .env
 .env.*
 Thumbs.db
