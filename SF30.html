@@ -1966,7 +1966,7 @@ body.sf-ab-on .ab-label{display:block}
           <input id="sf-hdri-file" type="file" accept="image/*,.hdr,.exr" hidden onchange="sfLoadHDRIFile(this.files&&this.files[0])">
           <canvas id="sf-hdri-preview" width="260" height="96"></canvas>
           <b id="sf-hdri-file-name">Drop or choose HDRI</b>
-          <span>Reads luminance, dominant direction, color temperature and light color. Radiance .hdr and preview images are supported.</span>
+          <span>Reads luminance, dominant direction, color temperature and light color. OpenEXR, Radiance .hdr and preview images are supported.</span>
         </div>
         <div class="sf-hdri-readouts">
           <div class="sf-hdri-cell"><b>Average</b><span id="sf-hdri-avg">--</span></div>
@@ -10508,6 +10508,219 @@ function sfDecodeRadianceHDR(buffer,fileName){
   SF_HDRI_ANALYSIS=a;sfSetHDRIReadouts(a);sfDrawHDRIPreviewFromLinear(samples,pW,pH,a);
   sfHDRIStatus('Radiance HDR decoded: '+width+' x '+height+' map analyzed and ready for lighting extraction.','good');
 }
+function sfHalfToFloat(h){
+  var s=(h&0x8000)?-1:1,e=(h>>10)&31,f=h&1023;
+  if(e===0)return s*(f?Math.pow(2,-14)*(f/1024):0);
+  if(e===31)return f?NaN:s*Infinity;
+  return s*Math.pow(2,e-15)*(1+f/1024);
+}
+function sfFloatToHalf(value){
+  if(!Number.isFinite(value))return value<0?0xfc00:0x7c00;
+  var s=value<0?0x8000:0;value=Math.abs(value);
+  if(value===0)return s;
+  if(value<6.103515625e-5)return s|Math.max(1,Math.round(value/5.960464477539063e-8));
+  var e=Math.floor(Math.log2(value)),m=value/Math.pow(2,e)-1;
+  e+=15;
+  if(e<=0)return s|Math.max(1,Math.round(value/5.960464477539063e-8));
+  if(e>=31)return s|0x7c00;
+  return s|(e<<10)|(Math.round(m*1024)&1023);
+}
+function sfEXRReadString(bytes,pos){
+  var start=pos.i;
+  while(pos.i<bytes.length&&bytes[pos.i]!==0)pos.i++;
+  var text=new TextDecoder('ascii').decode(bytes.slice(start,pos.i));
+  pos.i++;
+  return text;
+}
+function sfEXRReadBox2i(dv,offset){
+  return {xMin:dv.getInt32(offset,true),yMin:dv.getInt32(offset+4,true),xMax:dv.getInt32(offset+8,true),yMax:dv.getInt32(offset+12,true)};
+}
+function sfEXRParseChannels(bytes,dv,offset,size){
+  var channels=[],pos={i:offset},end=offset+size;
+  while(pos.i<end&&bytes[pos.i]!==0){
+    var name=sfEXRReadString(bytes,pos);
+    if(pos.i+16>end)throw new Error('Invalid EXR channel list');
+    channels.push({
+      name:name,
+      pixelType:dv.getInt32(pos.i,true),
+      pLinear:bytes[pos.i+4],
+      xSampling:dv.getInt32(pos.i+8,true)||1,
+      ySampling:dv.getInt32(pos.i+12,true)||1
+    });
+    pos.i+=16;
+  }
+  return channels;
+}
+function sfEXRParseHeader(buffer){
+  var bytes=new Uint8Array(buffer),dv=new DataView(buffer);
+  if(dv.getUint32(0,true)!==20000630)throw new Error('Not an OpenEXR file');
+  var version=dv.getUint32(4,true),pos={i:8},header={channels:null,compression:0,dataWindow:null,displayWindow:null,lineOrder:0,version:version};
+  while(pos.i<bytes.length&&bytes[pos.i]!==0){
+    var name=sfEXRReadString(bytes,pos),type=sfEXRReadString(bytes,pos);
+    if(pos.i+4>bytes.length)throw new Error('Invalid EXR header');
+    var size=dv.getUint32(pos.i,true);pos.i+=4;
+    var valueOffset=pos.i;
+    if(valueOffset+size>bytes.length)throw new Error('EXR header ended early');
+    if(name==='channels'&&type==='chlist')header.channels=sfEXRParseChannels(bytes,dv,valueOffset,size);
+    else if(name==='compression'&&type==='compression')header.compression=bytes[valueOffset]||0;
+    else if(name==='dataWindow'&&type==='box2i')header.dataWindow=sfEXRReadBox2i(dv,valueOffset);
+    else if(name==='displayWindow'&&type==='box2i')header.displayWindow=sfEXRReadBox2i(dv,valueOffset);
+    else if(name==='lineOrder'&&type==='lineOrder')header.lineOrder=bytes[valueOffset]||0;
+    pos.i+=size;
+  }
+  pos.i++;
+  if(!header.channels||!header.channels.length)throw new Error('EXR channel list missing');
+  if(!header.dataWindow)throw new Error('EXR data window missing');
+  if(header.version&0x200)throw new Error('Tiled EXR files are not supported yet');
+  var w=header.dataWindow.xMax-header.dataWindow.xMin+1,h=header.dataWindow.yMax-header.dataWindow.yMin+1;
+  if(w<1||h<1)throw new Error('Invalid EXR dimensions');
+  header.width=w;header.height=h;header.headerEnd=pos.i;
+  return header;
+}
+function sfEXRCompressionName(type){
+  return ['None','RLE','ZIPS','ZIP','PIZ','PXR24','B44','B44A','DWAA','DWAB'][type]||('type '+type);
+}
+function sfEXRLinesPerBlock(type){
+  return type===3?16:1;
+}
+async function sfEXRInflate(bytes){
+  if(typeof DecompressionStream!=='function')throw new Error('ZIP-compressed EXR needs browser deflate support');
+  var stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+function sfEXRUndoZipPrediction(bytes){
+  for(var i=1;i<bytes.length;i++)bytes[i]=(bytes[i]+bytes[i-1]-128)&255;
+  var out=new Uint8Array(bytes.length),t1=0,t2=(bytes.length+1)>>1;
+  for(var j=0;j<bytes.length;j+=2){
+    out[j]=bytes[t1++];
+    if(j+1<bytes.length)out[j+1]=bytes[t2++];
+  }
+  return out;
+}
+async function sfEXRDecodeChunkData(raw,compression,expectedSize){
+  if(compression===0)return raw;
+  if(compression===2||compression===3){
+    var inflated=await sfEXRInflate(raw);
+    var decoded=sfEXRUndoZipPrediction(inflated);
+    if(expectedSize&&decoded.length<expectedSize)throw new Error('EXR ZIP block ended early');
+    return decoded;
+  }
+  throw new Error('EXR '+sfEXRCompressionName(compression)+' compression is not supported yet. Download the same HDRI as .hdr, JPG/PNG preview, or ZIP/no-compression EXR.');
+}
+function sfEXRChannelRole(name,index){
+  var n=String(name||'').toLowerCase(),tail=n.split(/[.\-_]/).pop();
+  if(tail==='r'||n==='red')return 'r';
+  if(tail==='g'||n==='green')return 'g';
+  if(tail==='b'||n==='blue')return 'b';
+  if(tail==='y'||n==='luminance'||n==='lum')return 'y';
+  return index<3?['r','g','b'][index]:null;
+}
+function sfEXRPixelSize(type){
+  return type===1?2:4;
+}
+function sfEXRReadValue(dv,offset,type){
+  if(type===1)return sfHalfToFloat(dv.getUint16(offset,true));
+  if(type===2)return dv.getFloat32(offset,true);
+  if(type===0)return dv.getUint32(offset,true)/4294967295;
+  return 0;
+}
+function sfEXRDecodeScanlineBlock(data,header,startY,lineCount,samples,counts,pW,pH){
+  var dv=new DataView(data.buffer,data.byteOffset,data.byteLength),width=header.width,height=header.height,channels=header.channels,roles=channels.map(sfEXRChannelRole),bytesPerPixel=channels.map(function(ch){return sfEXRPixelSize(ch.pixelType);});
+  var offset=0,lineR=new Float32Array(width),lineG=new Float32Array(width),lineB=new Float32Array(width),seenR=false,seenG=false,seenB=false,seenY=false;
+  for(var line=0;line<lineCount;line++){
+    lineR.fill(0);lineG.fill(0);lineB.fill(0);seenR=seenG=seenB=seenY=false;
+    for(var ci=0;ci<channels.length;ci++){
+      var ch=channels[ci],role=roles[ci],size=bytesPerPixel[ci],sampledY=((startY+line-header.dataWindow.yMin)%Math.max(1,ch.ySampling))===0;
+      for(var x=0;x<width;x++){
+        if(offset+size>data.length)throw new Error('EXR pixel block ended early');
+        var sampledX=(x%Math.max(1,ch.xSampling))===0,val=sampledX&&sampledY?sfEXRReadValue(dv,offset,ch.pixelType):0;
+        if(role==='r'){lineR[x]=val;seenR=true;}
+        else if(role==='g'){lineG[x]=val;seenG=true;}
+        else if(role==='b'){lineB[x]=val;seenB=true;}
+        else if(role==='y'){lineR[x]=lineG[x]=lineB[x]=val;seenY=true;}
+        offset+=size;
+      }
+    }
+    if(seenY&&!seenR&&!seenG&&!seenB){seenR=seenG=seenB=true;}
+    for(var sx=0;sx<width;sx++){
+      var py=Math.min(pH-1,Math.max(0,Math.floor((startY+line-header.dataWindow.yMin)/height*pH))),px=Math.min(pW-1,Math.floor(sx/width*pW)),idx=(py*pW+px)*3,ci2=py*pW+px;
+      var rr=seenR?lineR[sx]:(seenY?lineR[sx]:0),gg=seenG?lineG[sx]:rr,bb=seenB?lineB[sx]:rr;
+      samples[idx]+=rr;
+      samples[idx+1]+=gg;
+      samples[idx+2]+=bb;
+      counts[ci2]++;
+    }
+  }
+}
+async function sfDecodeOpenEXR(buffer,fileName){
+  var header=sfEXRParseHeader(buffer),bytes=new Uint8Array(buffer),dv=new DataView(buffer),linesPerBlock=sfEXRLinesPerBlock(header.compression);
+  var chunks=Math.ceil(header.height/linesPerBlock),pos=header.headerEnd+chunks*8;
+  if(pos>bytes.length)throw new Error('EXR offset table is incomplete');
+  var pW=Math.min(640,header.width),pH=Math.max(16,Math.round(header.height*(pW/header.width)));
+  if(pH>320){pH=320;pW=Math.max(32,Math.round(header.width*(pH/header.height)));}
+  var samples=new Float32Array(pW*pH*3),counts=new Uint16Array(pW*pH);
+  var expectedLineBytes=header.channels.reduce(function(sum,ch){return sum+header.width*sfEXRPixelSize(ch.pixelType);},0);
+  for(var chunk=0;chunk<chunks&&pos+8<=bytes.length;chunk++){
+    var y=dv.getInt32(pos,true),size=dv.getUint32(pos+4,true);pos+=8;
+    if(pos+size>bytes.length)throw new Error('EXR chunk data ended early');
+    var lineCount=Math.min(linesPerBlock,header.dataWindow.yMax-y+1);
+    var raw=bytes.slice(pos,pos+size);pos+=size;
+    var decoded=await sfEXRDecodeChunkData(raw,header.compression,expectedLineBytes*lineCount);
+    sfEXRDecodeScanlineBlock(decoded,header,y,lineCount,samples,counts,pW,pH);
+  }
+  for(var n=0;n<counts.length;n++){
+    var ct=counts[n]||1,pi=n*3;samples[pi]/=ct;samples[pi+1]/=ct;samples[pi+2]/=ct;
+  }
+  var a=sfAnalyzeLinearSamples(samples,pW,pH,fileName||'OpenEXR HDRI','openexr');
+  a.width=header.width;a.height=header.height;a.compression=sfEXRCompressionName(header.compression);
+  SF_HDRI_ANALYSIS=a;sfSetHDRIReadouts(a);sfDrawHDRIPreviewFromLinear(samples,pW,pH,a);
+  sfHDRIStatus('OpenEXR decoded: '+header.width+' x '+header.height+' '+a.compression+' map analyzed and ready for lighting extraction.','good');
+}
+function sfPushU16(out,value){out.push(value&255,(value>>8)&255);}
+function sfPushU32(out,value){value=value>>>0;out.push(value&255,(value>>8)&255,(value>>16)&255,(value>>24)&255);}
+function sfPushI32(out,value){sfPushU32(out,value);}
+function sfPushText(out,text){text=String(text||'');for(var i=0;i<text.length;i++)out.push(text.charCodeAt(i)&255);out.push(0);}
+function sfSetU64At(out,pos,value){for(var i=0;i<8;i++)out[pos+i]=Math.floor(value/Math.pow(256,i))&255;}
+function sfPushEXRAttr(out,name,type,data){sfPushText(out,name);sfPushText(out,type);sfPushU32(out,data.length);Array.prototype.push.apply(out,data);}
+function sfBuildOpenEXRSelfTestBuffer(){
+  var w=4,h=2,out=[];sfPushU32(out,20000630);sfPushU32(out,2);
+  var ch=[];['R','G','B'].forEach(function(name){sfPushText(ch,name);sfPushI32(ch,1);ch.push(0,0,0,0);sfPushI32(ch,1);sfPushI32(ch,1);});ch.push(0);
+  sfPushEXRAttr(out,'channels','chlist',ch);
+  sfPushEXRAttr(out,'compression','compression',[0]);
+  var box=[];sfPushI32(box,0);sfPushI32(box,0);sfPushI32(box,w-1);sfPushI32(box,h-1);
+  sfPushEXRAttr(out,'dataWindow','box2i',box);sfPushEXRAttr(out,'displayWindow','box2i',box.slice());
+  sfPushEXRAttr(out,'lineOrder','lineOrder',[0]);
+  out.push(0);
+  var table=out.length;
+  for(var y=0;y<h;y++)for(var z=0;z<8;z++)out.push(0);
+  for(var yy=0;yy<h;yy++){
+    sfSetU64At(out,table+yy*8,out.length);
+    var data=[];
+    ['R','G','B'].forEach(function(channel){
+      for(var x=0;x<w;x++){
+        var v=channel==='R'?.25+x*.08:(channel==='G'?.2+yy*.1:.18);
+        if(x===3&&yy===0)v=channel==='R'?8:(channel==='G'?5:2);
+        sfPushU16(data,sfFloatToHalf(v));
+      }
+    });
+    sfPushI32(out,yy);sfPushU32(out,data.length);Array.prototype.push.apply(out,data);
+  }
+  return new Uint8Array(out).buffer;
+}
+function sfRunOpenEXRSelfTestQuery(){
+  if(!/[?&]sfEXRSelfTest=1\b/i.test(location.search))return;
+  setTimeout(function(){
+    var pre=document.createElement('pre');
+    pre.id='sf-exr-self-test-result';
+    document.body.appendChild(pre);
+    sfDecodeOpenEXR(sfBuildOpenEXRSelfTestBuffer(),'synthetic.exr').then(function(){
+      pre.textContent=JSON.stringify({ok:true,status:document.getElementById('sf-hdri-status')?.textContent||'',analysis:SF_HDRI_ANALYSIS});
+    }).catch(function(err){
+      pre.textContent=JSON.stringify({ok:false,error:String(err&&err.message||err)});
+    });
+  },800);
+}
+sfRunOpenEXRSelfTestQuery();
 function sfLoadHDRIFile(file){
   if(!file)return;
   var name=file.name||'HDRI',label=document.getElementById('sf-hdri-file-name');
@@ -10518,7 +10731,7 @@ function sfLoadHDRIFile(file){
     return;
   }
   if(/\.exr$/i.test(name)){
-    sfHDRIStatus('EXR selected. This browser build has no native EXR decoder yet; load a Radiance .hdr or a JPG/PNG preview to extract lighting without errors.','bad');
+    file.arrayBuffer().then(function(buffer){return sfDecodeOpenEXR(buffer,name);}).catch(function(err){sfHDRIStatus('EXR decode failed: '+(err&&err.message?err.message:err),'bad');});
     return;
   }
   sfLoadImageHDRI(file);
