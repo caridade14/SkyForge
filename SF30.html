@@ -380,9 +380,11 @@ body.sf-ab-on .ab-label{display:block}
    RIGHT PANEL
 ═══════════════════════════════════════════ */
 .rpanel{background:var(--bg1);border-left:1px solid var(--b1);display:flex;flex-direction:column;overflow:hidden}
-.rp-tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto}
+.rp-tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--b1);flex-shrink:0;overflow:hidden}
 .rp-tabs::-webkit-scrollbar{display:none}
-.rtab{flex-shrink:0;padding:5px 6px;font-size:9px;font-weight:700;color:var(--t3);text-align:center;cursor:pointer;transition:all .1s;letter-spacing:.07em;text-transform:uppercase;border-bottom:2px solid transparent;font-family:var(--fd)}
+.rtab{flex:1 1 0;min-width:0;padding:5px 2px;font-size:8.4px;font-weight:700;color:var(--t3);text-align:center;cursor:pointer;transition:all .1s;letter-spacing:.04em;text-transform:uppercase;border-bottom:2px solid transparent;font-family:var(--fd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-tabs .tabs-add-btn{flex:0 0 22px;min-width:22px;padding:0}
+.rp-tabs .module-close{display:none!important}
 .rtab:hover{color:var(--t1)}.rtab.active{color:var(--acc);border-bottom-color:var(--acc);background:var(--bg1)}
 .rp-body{flex:1;overflow-y:auto}
 .rp-sec{padding:8px 10px;border-bottom:1px solid var(--b0)}
@@ -2188,13 +2190,13 @@ body.sf-ab-on .ab-label{display:block}
 <!-- ── RIGHT PANEL ── -->
 <div class="rpanel">
   <div class="rp-tabs">
-    <div class="rtab active" onclick="setRtab(this)">Hierarchy</div>
-    <div class="rtab" onclick="setRtab(this)">Nodes</div>
-    <div class="rtab" onclick="setRtab(this)">Preview</div>
-    <div class="rtab" onclick="setRtab(this)">Review</div>
-    <div class="rtab" onclick="setRtab(this)">Library</div>
-    <div class="rtab" onclick="setRtab(this)">Export</div>
-    <div class="rtab" onclick="setRtab(this)">Queue</div>
+    <div class="rtab active" title="Hierarchy" onclick="setRtab(this)">Hier</div>
+    <div class="rtab" title="Nodes" onclick="setRtab(this)">Nodes</div>
+    <div class="rtab" title="Preview" onclick="setRtab(this)">Prev</div>
+    <div class="rtab" title="Review" onclick="setRtab(this)">Review</div>
+    <div class="rtab" title="Library" onclick="setRtab(this)">Lib</div>
+    <div class="rtab" title="Export" onclick="setRtab(this)">Export</div>
+    <div class="rtab" title="Queue" onclick="setRtab(this)">Queue</div>
     <div class="tabs-add-btn" title="Restore or customize right tabs" onclick="sfOpenLayoutManager()">+</div>
   </div>
   <div class="rp-body">
@@ -2497,9 +2499,21 @@ function setRtab(el){
   if(typeof sfApplyRightPanelTab==='function')sfApplyRightPanelTab(el);
 }
 function setPreset(el){document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
-function setFmt(el){el.closest('.fmt-grid').querySelectorAll('.fmt-b').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
-function setRes(el){el.parentElement.querySelectorAll('.res-b').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
-function setSeg(el){document.querySelectorAll('.mseg-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
+function sfResolutionDimensions(res){
+  return { '2K':'2048x1024','4K':'4096x2048','8K':'8192x4096','16K':'16384x8192' }[res]||'4096x2048';
+}
+function sfSyncRenderSummary(){
+  var fmt=sfActiveText('.fmt-b.active','EXR 32-bit');
+  var res=sfActiveText('.res-b.active','4K');
+  var pills=document.querySelectorAll('.mb-r .mb-pill');
+  if(pills[0])pills[0].textContent=sfResolutionDimensions(res).replace('x','×');
+  if(pills[1])pills[1].textContent=fmt;
+  var btn=document.querySelector('.btn-export');
+  if(btn)btn.textContent='Export HDRI · '+res+' '+fmt.replace(/\s*Preview/i,'');
+}
+function setFmt(el){el.closest('.fmt-grid').querySelectorAll('.fmt-b').forEach(b=>b.classList.remove('active'));el.classList.add('active');sfSyncRenderSummary();}
+function setRes(el){el.parentElement.querySelectorAll('.res-b').forEach(b=>b.classList.remove('active'));el.classList.add('active');sfSyncRenderSummary();}
+function setSeg(el){document.querySelectorAll('.mseg-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(typeof triToast==='function')triToast('Mode: '+(el.textContent||'').trim());}
 function toggleSec(hdr){hdr.closest('.s-sec').classList.toggle('closed');}
 function randomizeSeed(){var seed=document.getElementById('seed-inp');if(seed)seed.value=Math.floor(Math.random()*99999);}
 function newScene(){randomizeSeed();sfToast('New scene started');}
@@ -2591,7 +2605,7 @@ function sfTextValue(id,fallback){
 
 function sfActiveText(selector,fallback){
   var el=document.querySelector(selector);
-  return el?el.textContent.trim():fallback;
+  return (el&&el.textContent||fallback||'').replace(/\s+/g,' ').trim();
 }
 
 var SF_OUTLINER_GROUP_COUNTER=0;
@@ -4383,13 +4397,36 @@ function sfApplyScene(scene){
 }
 
 /* ── DROPDOWN MENUS ── */
-function toggleMenu(el){
+function sfCloseTopMenus(){
+  document.querySelectorAll('.mb-m').forEach(function(m){
+    m.classList.remove('open');
+    m.setAttribute('aria-expanded','false');
+  });
+}
+function sfPositionMenuDropdown(menu){
+  var dd=menu&&menu.querySelector('.mb-dd');
+  if(!dd)return;
+  dd.style.left='0px';
+  dd.style.right='';
+  var rect=dd.getBoundingClientRect(),pad=8;
+  if(rect.right>window.innerWidth-pad)dd.style.left=Math.floor(window.innerWidth-pad-rect.right)+'px';
+  if(rect.left<pad)dd.style.left=Math.floor(pad-rect.left)+'px';
+}
+function toggleMenu(el,event){
+  if(event){event.preventDefault();event.stopPropagation();}
   var open=el.classList.contains('open');
-  document.querySelectorAll('.mb-m').forEach(m=>m.classList.remove('open'));
-  if(!open)el.classList.add('open');
+  sfCloseTopMenus();
+  if(!open){
+    el.classList.add('open');
+    el.setAttribute('aria-expanded','true');
+    requestAnimationFrame(function(){sfPositionMenuDropdown(el);});
+  }
 }
 document.addEventListener('click',function(e){
-  if(!e.target.closest('.mb-m'))document.querySelectorAll('.mb-m').forEach(m=>m.classList.remove('open'));
+  if(!e.target.closest('.mb-m'))sfCloseTopMenus();
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')sfCloseTopMenus();
 });
 
 function sfMenuLabel(item){
@@ -4406,23 +4443,48 @@ function sfSelectMarketplace(label){
   if(card && card.scrollIntoView)card.scrollIntoView({block:'nearest'});
   triToast('Marketplace: '+label);
 }
+function sfSetWorkingSpace(name){
+  var label=String(name||'ACES').replace(/\s+working space/i,'').trim()||'ACES';
+  var select=document.getElementById('set-color-space');
+  if(select){
+    var opt=Array.from(select.options).find(function(o){
+      var text=o.textContent.toLowerCase();
+      return text.includes(label.toLowerCase()) || label.toLowerCase().includes(text);
+    });
+    if(opt)select.value=opt.value||opt.textContent;
+  }
+  var pill=document.querySelectorAll('.mb-r .mb-pill')[2];
+  if(pill)pill.textContent=label;
+  if(typeof triToast==='function')triToast('Color space: '+label);
+}
+function sfSetLookSlider(label,value){
+  var section=document.getElementById('sec-look-development');if(!section)return false;
+  var row=Array.from(section.querySelectorAll('.sl-wrap')).find(function(w){
+    return (w.querySelector('.sl-name')?.textContent||'').toLowerCase().includes(String(label).toLowerCase());
+  });
+  var input=row&&row.querySelector('input[type=range]');
+  if(!input)return false;
+  input.value=value;
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  return true;
+}
 function sfRunMenuAction(label){
   var l=String(label||'').toLowerCase();
   if(l.includes('open recent')){sfOpenProjectBrowser();return true;}
   if(l.includes('publish package')){sfSaveProject('Publish package');triToast('Package prepared for publishing');return true;}
-  if(l.includes('import hdri')){sfApplyAssetPreset('HDRIs');return true;}
-  if(l.includes('reference plate')){sfAddSceneObject('ITEM','Reference Plate',{props:{mode:'Reference',size:140,opacity:82,color:'#b8c7d9'}});return true;}
+  if(l.includes('import hdri')){sfScrollSidebarTo('sec-hdri-lighting','HDRI');sfOpenHDRIFilePicker();return true;}
+  if(l.includes('reference plate')){sfAddSceneObject('ITEM','Reference Plate',{props:{mode:'Reference',size:140,opacity:82,color:'#b8c7d9'}});if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('hierarchy');return true;}
   if(l.includes('suggest sun')||l.includes('suggest intensity')||l.includes('suggest hdri')||l.includes('suggest exposure')||l.includes('suggest color')){applySkyIntelligence();return true;}
   if(l.includes('match lighting')){openCmd();return true;}
   if(l.includes('generate variations')){sfCreateABSnapshot('Variation base');sfApplyAssetPreset('Presets');return true;}
-  if(l.includes('acescg')){sfSetNamedLook('AgX Filmic');return true;}
+  if(l.includes('acescg')){sfSetWorkingSpace('ACEScg');sfSetNamedLook('AgX Filmic');return true;}
   if(l.includes('filmic')||l.includes('agx')){sfSetNamedLook('AgX Filmic');return true;}
   if(l.includes('kodak')){sfSetNamedLook('Kodak 2383');return true;}
   if(l.includes('fuji')){sfSetNamedLook('Fuji 3513');return true;}
   if(l.includes('arri alexa look')){sfSetNamedLook('Arri Alexa');return true;}
-  if(l.includes('lut browser')){sfSelectRightPanelTab('library');return true;}
-  if(l.includes('highlight')){sfToggleViewportOption('horizon',true);return true;}
-  if(l.includes('split toning')){sfSetABMode('split');return true;}
+  if(l.includes('lut browser')){sfScrollSidebarTo('sec-look-development','Assets');sfSelectRightPanelTab('library');return true;}
+  if(l.includes('highlight')){sfSetLookSlider('highlight',86);sfApplyLookDevelopmentMenu(true);triToast('Highlight rolloff boosted');return true;}
+  if(l.includes('split toning')){sfSetABMode('split');triToast('Split toning preview enabled');return true;}
   if(l.includes('preview render')){sfSetViewportShading('server');return true;}
   if(l==='render queue'){sfSelectRightPanelTab('queue');return true;}
   if(l.includes('batch render')){startRender();return true;}
@@ -4437,19 +4499,43 @@ function sfRunMenuAction(label){
   if(l.includes('publish for review')){sfCreateABSnapshot('Review publish');sfSelectRightPanelTab('review');return true;}
   if(['hdris','clouds','skies','volumes','presets','materials','luts'].includes(l)){sfSelectMarketplace(label);return true;}
   if(l.includes('install asset pack')){sfSelectMarketplace('Presets');return true;}
-  if(l.includes('documentation')||l.includes('video tutorials')){triToast(label+' panel opened');return true;}
+  if(l.includes('documentation')||l.includes('video tutorials')){openCmd();triToast(label+' search opened');return true;}
   if(l.includes('keyboard shortcuts')){openCmd();return true;}
   if(l.includes('report a bug')){sfAddSceneObject('NOTE','Bug Report Note',{props:{status:'TODO',priority:3,text:'Describe issue, steps, expected result, actual result.'}});return true;}
   if(l.includes('about skyforge')){triToast('SkyForge v10 - cinematic HDRI/sky production tool');return true;}
   return false;
 }
 function sfInstallMenuActions(){
+  document.querySelectorAll('.mb-m').forEach(function(menu){
+    if(menu.dataset.menuRootReady==='1')return;
+    menu.dataset.menuRootReady='1';
+    menu.setAttribute('tabindex','0');
+    menu.setAttribute('role','button');
+    menu.setAttribute('aria-haspopup','menu');
+    menu.setAttribute('aria-expanded','false');
+    menu.addEventListener('mouseenter',function(){
+      if(document.querySelector('.mb-m.open')){
+        sfCloseTopMenus();
+        menu.classList.add('open');
+        menu.setAttribute('aria-expanded','true');
+        requestAnimationFrame(function(){sfPositionMenuDropdown(menu);});
+      }
+    });
+    menu.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '||e.key==='ArrowDown')toggleMenu(menu,e);
+    });
+  });
   document.querySelectorAll('.mb-dd .dd-item').forEach(function(item){
     if(item.dataset.menuReady==='1')return;
     item.dataset.menuReady='1';
-    item.addEventListener('click',function(){
-      if(!item.getAttribute('onclick'))sfRunMenuAction(sfMenuLabel(item));
-      document.querySelectorAll('.mb-m').forEach(function(m){m.classList.remove('open');});
+    item.setAttribute('role','menuitem');
+    item.addEventListener('click',function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      var handled=true,label=sfMenuLabel(item);
+      if(!item.getAttribute('onclick'))handled=sfRunMenuAction(label);
+      if(!handled&&typeof triToast==='function')triToast(label+' ready');
+      sfCloseTopMenus();
     });
   });
 }
@@ -7530,9 +7616,12 @@ var SF_NODE_LINK_SELECTED=-1;
 
 function sfRightPanelKeyFromLabel(label){
   label=String(label||'hierarchy').toLowerCase().replace(/x$/,'').trim();
+  if(label==='hier')return 'hierarchy';
   if(label.includes('node'))return 'nodes';
+  if(label==='prev')return 'preview';
   if(label.includes('preview'))return 'preview';
   if(label.includes('review'))return 'review';
+  if(label==='lib')return 'library';
   if(label.includes('library'))return 'library';
   if(label.includes('export'))return 'export';
   if(label.includes('queue'))return 'queue';
@@ -11351,6 +11440,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     sfSyncCameraPostControls();
     sfRefreshAuroraPalettePreview();
     sfUpdateViewportToolbar();
+    sfSyncRenderSummary();
     sfPickCreateType('CLOUD');
     sfRefreshOutlinerInspector(outliner.querySelector('.sel')||outliner.querySelector('.tri-out-extra,.tri-out-group'));
     sfHistoryReset('Scene ready',true);
