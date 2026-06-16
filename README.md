@@ -26,12 +26,12 @@ http://localhost:3000/SF30.html
 - `POST /api/scene/analyze` analisa sol/nuvens/output e devolve sugestoes para a UI.
 - `GET /api/projects` lista projetos salvos.
 - `POST /api/projects` cria um projeto.
-- `POST /api/projects/import` importa um bundle `.skyforge.json`.
+- `POST /api/projects/import` importa ficheiros `.skyforge` e bundles JSON antigos.
 - `GET /api/projects/:id` carrega um projeto.
 - `PUT /api/projects/:id` salva/substitui a cena de um projeto.
 - `DELETE /api/projects/:id` apaga um projeto, exceto `default`.
 - `POST /api/projects/:id/duplicate` duplica um projeto.
-- `GET /api/projects/:id/export` exporta um bundle JSON do projeto.
+- `GET /api/projects/:id/export` exporta o payload usado pelo ficheiro `.skyforge`.
 - `GET /api/projects/:id/versions` lista versoes/checkpoints do projeto.
 - `POST /api/projects/:id/versions` cria uma versao/checkpoint manual.
 - `POST /api/projects/:id/versions/:version/restore` restaura uma versao.
@@ -61,6 +61,10 @@ Os dados principais ficam em:
 - `data/outputs/*`
 
 Os JSON antigos em `data/projects/*.json` e `data/renders.json` sao migrados automaticamente para SQLite na primeira inicializacao do novo backend.
+
+## Formato SkyForge
+
+O botao Export guarda projetos como `nome-do-projeto.skyforge`. O ficheiro e JSON estruturado com assinatura `SkyForge Project File`, versao de formato, metadados da aplicacao, checksum simples e o payload do projeto. A importacao continua compativel com `.json` e `.skyforge.json` antigos.
 
 ## Render worker
 

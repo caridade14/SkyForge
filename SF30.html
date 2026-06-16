@@ -36,7 +36,7 @@ body.sf-hide-left .sidebar,body.sf-hide-right .rpanel,body.sf-hide-timeline .tim
 .dock-splitter:hover,.dock-splitter.dragging{background:rgba(232,129,42,.35)}
 .timeline-resizer{height:5px;background:linear-gradient(180deg,var(--b0),var(--b2),var(--b0));cursor:row-resize;flex-shrink:0}
 .timeline-resizer:hover,.timeline-resizer.dragging{background:rgba(232,129,42,.35)}
-.module-close{font-size:10px;color:var(--t4);margin-left:4px;padding:0 2px;border-radius:2px}
+.module-close{display:none;font-size:10px;color:var(--t4);margin-left:4px;padding:0 2px;border-radius:2px}
 .tab:hover .module-close,.stab:hover .module-close,.rtab:hover .module-close{color:var(--t2)}
 .module-close:hover{color:var(--rd)!important;background:var(--rdd)}
 .tabs-add-btn{display:flex;align-items:center;justify-content:center;min-width:22px;padding:0 7px;color:var(--t2);border-left:1px solid var(--b1);cursor:pointer;font-family:var(--fm);font-size:12px}
@@ -699,7 +699,7 @@ body.sf-ab-on .ab-label{display:block}
 .out-row{display:grid;grid-template-columns:16px 1fr auto;align-items:center;gap:6px;min-height:25px;padding:3px 5px;border-radius:4px;border:1px solid transparent;cursor:pointer}.out-row:hover{background:var(--bg3);border-color:var(--b0)}.out-row.sel{background:var(--accd);border-color:rgba(232,129,42,.3)}.out-ico{font-size:12px;text-align:center;opacity:.85}.out-name{font-size:10.5px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.out-row.sel .out-name{color:var(--acc)}.out-tag{font-size:8px;font-family:var(--fm);color:var(--t3);border:1px solid var(--b1);border-radius:2px;padding:1px 4px}.out-child{padding-left:18px}.out-eye{color:var(--t3);font-size:10px;margin-left:4px}
 .sf-shot-list{display:flex;flex-direction:column;gap:5px}.shot-row{display:flex;align-items:center;gap:7px;background:var(--bg3);border:1px solid var(--b1);border-radius:5px;padding:6px}.shot-dot{width:7px;height:7px;border-radius:50%;background:var(--gn);box-shadow:0 0 8px rgba(62,207,126,.5)}.shot-info{flex:1}.shot-name{font-size:10.5px;color:var(--t0)}.shot-meta{font-size:8.8px;color:var(--t3);font-family:var(--fm)}.shot-status{font-size:8.5px;font-family:var(--fm);color:var(--acc);border:1px solid rgba(232,129,42,.3);background:var(--accd);border-radius:3px;padding:1px 5px}
 .market-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}.market-card{border:1px solid var(--b1);border-radius:6px;overflow:hidden;background:var(--bg3);cursor:pointer;transition:.12s}.market-card:hover{transform:translateY(-1px);border-color:rgba(232,129,42,.42)}.market-thumb{height:42px;background:linear-gradient(135deg,#e8812a,#202024)}.market-thumb.cloud{background:linear-gradient(135deg,#8fb7ff,#242b36)}.market-thumb.vol{background:linear-gradient(135deg,#48305f,#111)}.market-thumb.mat{background:linear-gradient(135deg,#777,#222)}.market-lbl{padding:4px 6px;font-size:9.5px;color:var(--t1);font-family:var(--fm)}
-.sf-clean-note{font-size:9px;color:var(--t3);font-family:var(--fm);padding:0 10px 8px}.rp-body .rp-sec:first-child{border-top:0}.rtab{padding-left:8px;padding-right:8px}.statusbar .st.or{color:var(--acc)}
+.sf-clean-note{font-size:9px;color:var(--t3);font-family:var(--fm);padding:0 10px 8px}.rp-body .rp-sec:first-child{border-top:0}.statusbar .st.or{color:var(--acc)}
 
 
 /* =========================================================
@@ -1339,7 +1339,7 @@ body.sf-ab-on .ab-label{display:block}
       <button class="modal-btn ok" onclick="sfNewProject()">New</button>
       <button class="modal-btn cancel" onclick="document.getElementById('project-import-file').click()">Import</button>
       <button class="modal-btn cancel" onclick="sfRefreshProjects()">Refresh</button>
-      <input id="project-import-file" type="file" accept="application/json,.json,.skyforge" style="display:none" onchange="sfImportProjectFile(this)">
+      <input id="project-import-file" type="file" accept=".skyforge,.skyforge.json,.json,application/json,application/vnd.skyforge.project+json" style="display:none" onchange="sfImportProjectFile(this)">
     </div>
     <div class="project-list" id="project-list">
       <div class="project-empty">Loading projects...</div>
@@ -2579,6 +2579,10 @@ function sfToggleFullscreen(){
 
 /* ── BACKEND BRIDGE ── */
 var SF_API='/api';
+var SF_FILE_FORMAT='SkyForge Project File';
+var SF_FILE_KIND='skyforge.project';
+var SF_FILE_VERSION=1;
+var SF_FILE_MIME='application/vnd.skyforge.project+json';
 var SF_PROJECT_ID='default';
 var SF_PROJECT_NAME='SkyForge Demo Scene';
 var SF_ACTIVE_RENDER_JOB=null;
@@ -3971,18 +3975,65 @@ async function sfDeleteProject(id){
   }
 }
 
+function sfSkyForgeChecksum(bundle){
+  var text=JSON.stringify(bundle||{});
+  var hash=2166136261;
+  for(var i=0;i<text.length;i++){
+    hash^=text.charCodeAt(i);
+    hash=Math.imul(hash,16777619);
+  }
+  return ('00000000'+(hash>>>0).toString(16)).slice(-8);
+}
+
+function sfBuildSkyForgeFile(bundle){
+  var project=(bundle&&bundle.project)||{};
+  return {
+    format:SF_FILE_FORMAT,
+    kind:SF_FILE_KIND,
+    formatVersion:SF_FILE_VERSION,
+    app:{name:'SkyForge',version:'v10',build:'SF30'},
+    exportedAt:new Date().toISOString(),
+    projectId:project.id||SF_PROJECT_ID,
+    projectName:project.name||SF_PROJECT_NAME,
+    checksum:sfSkyForgeChecksum(bundle),
+    payload:bundle
+  };
+}
+
+function sfNormalizeSkyForgeBundle(file){
+  var isSkyForgeFile=file&&typeof file==='object'&&(file.format===SF_FILE_FORMAT||file.kind===SF_FILE_KIND);
+  if(isSkyForgeFile&&Number(file.formatVersion||SF_FILE_VERSION)>SF_FILE_VERSION){
+    throw new Error('Unsupported SkyForge file version');
+  }
+  if(isSkyForgeFile&&!file.payload){
+    throw new Error('Invalid SkyForge file payload');
+  }
+  if(isSkyForgeFile&&file.payload){
+    return file.payload;
+  }
+  return file;
+}
+
+function sfSkyForgeFileName(project){
+  var label=typeof project==='string'?project:((project&&(project.name||project.id))||SF_PROJECT_NAME||SF_PROJECT_ID||'skyforge-project');
+  return sfSlug(label)+'.skyforge';
+}
+
 async function sfExportProject(id){
   try{
     var bundle=await sfRequest('/projects/'+id+'/export');
-    var blob=new Blob([JSON.stringify(bundle,null,2)],{type:'application/json'});
+    var skyforgeFile=sfBuildSkyForgeFile(bundle);
+    var blob=new Blob([JSON.stringify(skyforgeFile,null,2)],{type:SF_FILE_MIME});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download=(bundle.project?.id||id)+'.skyforge.json';
+    a.download=sfSkyForgeFileName(bundle.project||id);
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(a.href);
-    sfToast('Project exported');
+    sfToast('SkyForge file exported');
   }catch(err){
-    sfToast('Could not export project');
+    sfToast('Could not export SkyForge file');
     console.error(err);
   }
 }
@@ -4069,16 +4120,18 @@ async function sfImportProjectFile(input){
   if(!file)return;
   try{
     var text=await file.text();
-    var bundle=JSON.parse(text);
+    var parsed=JSON.parse(text);
+    var bundle=sfNormalizeSkyForgeBundle(parsed);
+    if(!bundle||typeof bundle!=='object')throw new Error('Invalid SkyForge file');
     var project=await sfRequest('/projects/import',{
       method:'POST',
-      body:JSON.stringify(bundle)
+      body:JSON.stringify(parsed)
     });
     await sfRefreshProjects(false);
     await sfLoadProject(project.id);
-    sfToast('Project imported: '+project.name);
+    sfToast('SkyForge file imported: '+project.name);
   }catch(err){
-    sfToast('Import failed');
+    sfToast('Import failed: '+(err&&err.message?err.message:'invalid file'));
     console.error(err);
   }
 }
@@ -4586,12 +4639,16 @@ function sfInitModuleTabs(selector,group){
     var label=sfTabLabel(el);
     el.dataset.moduleGroup=group;
     el.dataset.moduleKey=el.dataset.moduleKey||sfSlug(label)+'-'+i;
-    if(!el.querySelector('.module-close')){
-      var close=document.createElement('span');
-      close.className='module-close';close.textContent='x';close.title='Close this tab. Reopen it from + Tabs.';
-      close.onclick=function(e){e.stopPropagation();sfSetModuleVisible(group,el.dataset.moduleKey,false);};
+    var close=el.querySelector('.module-close');
+    if(!close){
+      close=document.createElement('span');
       el.appendChild(close);
     }
+    close.className='module-close';
+    close.textContent='';
+    close.setAttribute('aria-hidden','true');
+    close.title='Close this tab. Reopen it from + Tabs.';
+    close.onclick=function(e){e.stopPropagation();sfSetModuleVisible(group,el.dataset.moduleKey,false);};
   });
 }
 function sfLoadLayoutState(){

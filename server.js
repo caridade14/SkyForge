@@ -14,6 +14,9 @@ const LEGACY_RENDERS_FILE = path.join(DATA_DIR, "renders.json");
 const DB_FILE = path.join(DATA_DIR, "skyforge.db");
 const INDEX_FILE = path.join(ROOT, "SF30.html");
 const WORKER_TICK_MS = Number(process.env.RENDER_WORKER_TICK_MS || 1000);
+const SKYFORGE_FILE_FORMAT = "SkyForge Project File";
+const SKYFORGE_FILE_KIND = "skyforge.project";
+const SKYFORGE_FILE_VERSION = 1;
 
 function safeLog(method, ...args) {
   try {
@@ -28,6 +31,7 @@ const MIME_TYPES = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".skyforge": "application/vnd.skyforge.project+json; charset=utf-8",
   ".svg": "image/svg+xml; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
   ".png": "image/png",
@@ -816,15 +820,35 @@ function exportProject(id) {
   };
 }
 
+function unwrapSkyForgeFile(body) {
+  if (!body || typeof body !== "object") return {};
+  const isSkyForgeFile =
+    body.format === SKYFORGE_FILE_FORMAT ||
+    body.kind === SKYFORGE_FILE_KIND;
+  if (!isSkyForgeFile) return body;
+  if (Number(body.formatVersion || SKYFORGE_FILE_VERSION) > SKYFORGE_FILE_VERSION) {
+    const error = new Error("Unsupported SkyForge file version");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (body.payload && typeof body.payload === "object") {
+    return body.payload;
+  }
+  const error = new Error("Invalid SkyForge file payload");
+  error.statusCode = 400;
+  throw error;
+}
+
 function importProjectBundle(body) {
-  const bundle = body.project ? body : { project: body };
+  const payload = unwrapSkyForgeFile(body);
+  const bundle = payload.project ? payload : { project: payload };
   const source = bundle.project || {};
   const now = new Date().toISOString();
-  const id = uniqueProjectId(body.id || source.id || source.name || "imported-project");
+  const id = uniqueProjectId(source.id || source.name || "imported-project");
   const project = {
     id,
-    name: body.name || source.name || "Imported SkyForge Project",
-    ownerId: body.ownerId || source.ownerId || "system",
+    name: source.name || "Imported SkyForge Project",
+    ownerId: source.ownerId || "system",
     createdAt: now,
     updatedAt: now,
     scene: source.scene || DEFAULT_SCENE
