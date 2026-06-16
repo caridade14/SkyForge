@@ -1187,7 +1187,6 @@ body.sf-ab-on .ab-label{display:block}
         </div>
         <div class="prefs-group">
           <div class="prefs-nav" data-pref-tab="addons" data-prefs-label="Add-ons" onclick="sfSetPreferenceSection('addons',this)">Add-ons</div>
-          <div class="prefs-nav" data-pref-tab="themes" data-prefs-label="Themes" onclick="sfSetPreferenceSection('themes',this)">Themes</div>
         </div>
         <div class="prefs-group">
           <div class="prefs-nav" data-pref-tab="input" data-prefs-label="Input" onclick="sfSetPreferenceSection('input',this)">Input</div>
@@ -1206,6 +1205,15 @@ body.sf-ab-on .ab-label{display:block}
           <div class="prefs-grid">
             <div class="prefs-field"><div class="prefs-lbl">Workspace Scale</div><select class="prefs-inp"><option>Auto</option><option>Compact</option><option>Large</option></select></div>
             <div class="prefs-field"><div class="prefs-lbl">Editor Theme</div><select class="prefs-inp"><option>SkyForge Dark</option><option>Production Grey</option><option>High Contrast</option></select></div>
+            <div class="prefs-field"><div class="prefs-lbl">Theme Preset</div><select class="prefs-inp" id="prefs-theme-preset" onchange="sfApplyThemePreset(this.value)"><option value="production">Production Grey</option><option value="graphite">Graphite Blue</option><option value="emerald">Emerald Studio</option><option value="neutral">Neutral Slate</option></select></div>
+            <div class="prefs-field"><div class="prefs-lbl">Accent</div><input class="prefs-inp" id="prefs-theme-accent-color" type="color" value="#e8812a" oninput="sfThemeColorProxy('accent',this.value)"></div>
+            <div class="prefs-field"><div class="prefs-lbl">Background</div><input class="prefs-inp" id="prefs-theme-bg-color" type="color" value="#0c0c0d" oninput="sfThemeColorProxy('background',this.value)"></div>
+            <div class="prefs-field"><div class="prefs-lbl">Panel</div><input class="prefs-inp" id="prefs-theme-panel-color" type="color" value="#171718" oninput="sfThemeColorProxy('panel',this.value)"></div>
+            <div class="prefs-field"><div class="prefs-lbl">Text</div><input class="prefs-inp" id="prefs-theme-text-color" type="color" value="#e8e8ea" oninput="sfThemeColorProxy('text',this.value)"></div>
+            <div class="prefs-field"><div class="prefs-lbl">Blue UI</div><input class="prefs-inp" id="prefs-theme-blue-color" type="color" value="#5a9fff" oninput="sfThemeColorProxy('blue',this.value)"></div>
+            <div class="prefs-field"><div class="prefs-lbl">Green UI</div><input class="prefs-inp" id="prefs-theme-green-color" type="color" value="#3ecf7e" oninput="sfThemeColorProxy('green',this.value)"></div>
+            <div class="prefs-field"><div class="prefs-lbl">Actions</div><button class="prefs-btn" onclick="sfSaveThemeColors()">Save Colors</button></div>
+            <div class="prefs-field"><div class="prefs-lbl">Reset</div><button class="prefs-btn" onclick="sfResetThemeColors()">Reset Theme</button></div>
             <label class="prefs-check">Show technical labels <input type="checkbox" checked></label>
             <label class="prefs-check">Restore last workspace <input type="checkbox" checked></label>
           </div>
@@ -1261,17 +1269,6 @@ body.sf-ab-on .ab-label{display:block}
             <label class="prefs-check">Nuke comp exporter <input type="checkbox"></label>
             <label class="prefs-check">Unreal cubemap exporter <input type="checkbox" checked></label>
             <label class="prefs-check">Weather intelligence tools <input type="checkbox" checked></label>
-          </div>
-        </div>
-        <div class="prefs-panel" data-pref-panel="themes">
-          <h3>Themes</h3>
-          <div class="prefs-grid">
-            <div class="prefs-field"><div class="prefs-lbl">Theme Preset</div><select class="prefs-inp" id="prefs-theme-preset" onchange="sfApplyThemePreset(this.value)"><option value="production">Production Grey</option><option value="graphite">Graphite Blue</option><option value="emerald">Emerald Studio</option><option value="neutral">Neutral Slate</option></select></div>
-            <div class="prefs-field"><div class="prefs-lbl">Accent</div><input class="prefs-inp" id="prefs-theme-accent-color" type="color" value="#e8812a" oninput="sfThemeColorProxy('accent',this.value)"></div>
-            <div class="prefs-field"><div class="prefs-lbl">Background</div><input class="prefs-inp" id="prefs-theme-bg-color" type="color" value="#0c0c0d" oninput="sfThemeColorProxy('background',this.value)"></div>
-            <div class="prefs-field"><div class="prefs-lbl">Panel</div><input class="prefs-inp" id="prefs-theme-panel-color" type="color" value="#171718" oninput="sfThemeColorProxy('panel',this.value)"></div>
-            <div class="prefs-field"><div class="prefs-lbl">Text</div><input class="prefs-inp" id="prefs-theme-text-color" type="color" value="#e8e8ea" oninput="sfThemeColorProxy('text',this.value)"></div>
-            <div class="prefs-field"><div class="prefs-lbl">Actions</div><button class="prefs-btn" onclick="sfResetThemeColors()">Reset Theme</button></div>
           </div>
         </div>
         <div class="prefs-panel" data-pref-panel="input">
@@ -1672,7 +1669,6 @@ body.sf-ab-on .ab-label{display:block}
     <div class="stab" onclick="setStab(this)">Curve</div>
     <div class="stab" onclick="setStab(this)">FX</div>
     <div class="stab" onclick="setStab(this)">HDRI</div>
-    <div class="stab" onclick="setStab(this)">Theme</div>
     <div class="stab" onclick="setStab(this)">Assets</div>
     <div class="tabs-add-btn" title="Restore or customize left tabs" onclick="sfOpenLayoutManager()">+</div>
   </div>
@@ -1982,30 +1978,6 @@ body.sf-ab-on .ab-label{display:block}
         <div class="s-btn-row"><button class="s-btn" onclick="sfOpenHDRIFilePicker()">Choose HDRI / EXR</button></div>
         <div class="s-btn-row"><button class="s-btn" onclick="sfApplyHDRILightingRig()">Apply HDRI Lighting Rig</button></div>
         <div class="s-btn-row"><button class="s-btn" onclick="sfClearHDRILighting()">Clear HDRI Analysis</button></div>
-      </div>
-    </div>
-
-    <!-- UI THEME -->
-    <div class="s-sec" id="sec-ui-theme">
-      <div class="s-hdr" onclick="toggleSec(this)"><span>Interface Colors</span><span class="s-hdr-arr">&#9662;</span></div>
-      <div class="s-body-inner">
-        <div class="sf-theme-preset-row">
-          <button onclick="sfApplyThemePreset('production')">Production</button>
-          <button onclick="sfApplyThemePreset('graphite')">Graphite</button>
-          <button onclick="sfApplyThemePreset('emerald')">Emerald</button>
-          <button onclick="sfApplyThemePreset('neutral')">Neutral</button>
-        </div>
-        <div class="sf-theme-grid">
-          <label class="sf-theme-field"><span>Accent</span><input id="theme-accent-color" type="color" value="#e8812a" oninput="sfThemeColorProxy('accent',this.value)"></label>
-          <label class="sf-theme-field"><span>Background</span><input id="theme-bg-color" type="color" value="#0c0c0d" oninput="sfThemeColorProxy('background',this.value)"></label>
-          <label class="sf-theme-field"><span>Panel</span><input id="theme-panel-color" type="color" value="#171718" oninput="sfThemeColorProxy('panel',this.value)"></label>
-          <label class="sf-theme-field"><span>Text</span><input id="theme-text-color" type="color" value="#e8e8ea" oninput="sfThemeColorProxy('text',this.value)"></label>
-          <label class="sf-theme-field"><span>Blue UI</span><input id="theme-blue-color" type="color" value="#5a9fff" oninput="sfThemeColorProxy('blue',this.value)"></label>
-          <label class="sf-theme-field"><span>Green UI</span><input id="theme-green-color" type="color" value="#3ecf7e" oninput="sfThemeColorProxy('green',this.value)"></label>
-        </div>
-        <div class="sf-theme-note">Axis colors stay production standard: X red, Y green, Z blue.</div>
-        <div class="s-btn-row"><button class="s-btn" onclick="sfSaveThemeColors()">Save Theme</button></div>
-        <div class="s-btn-row"><button class="s-btn" onclick="sfResetThemeColors()">Reset Theme</button></div>
       </div>
     </div>
 
@@ -2490,7 +2462,7 @@ function setStab(el){
   else if(label.includes('curve'))sfScrollSidebarTo('sec-curves','Curve');
   else if(label.includes('fx'))sfScrollSidebarTo('sec-fx','FX');
   else if(label.includes('hdri'))sfScrollSidebarTo('sec-hdri-lighting','HDRI');
-  else if(label.includes('theme')||label.includes('color'))sfScrollSidebarTo('sec-ui-theme','Theme');
+  else if(label.includes('theme')||label.includes('color'))sfOpenPreferences('interface');
   else if(label.includes('asset')){sfScrollSidebarTo('sec-look-development','Assets');if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('library');}
 }
 function setRtab(el){
@@ -2591,6 +2563,7 @@ var SF_PROJECTS=[];
 var SF_SETTINGS={};
 var SF_DIRTY=false;
 var SF_AUTOSAVE_IV=null;
+var SF_STARTUP_EMPTY_LOCK=true;
 
 function sfToast(msg){
   if(typeof triToast==='function')triToast(msg);
@@ -3756,6 +3729,46 @@ function sfCollectScene(){
   };
 }
 
+function sfCreateEmptyScene(){
+  return {
+    city:'',
+    date:sfTodayLocalIso(),
+    time:'',
+    latitude:'',
+    longitude:'',
+    weather:'No weather loaded',
+    sun:{elevation:'',azimuth:'',intensity:'',turbidity:''},
+    clouds:{type:'',coverage:'',altitude:'',density:''},
+    output:{
+      format:sfActiveText('.fmt-b.active','EXR 32-bit'),
+      resolution:sfActiveText('.res-b.active','4K')
+    },
+    groups:[],
+    objects:[],
+    timeline:{
+      framePercent:0,
+      duration:typeof sfTimelineDuration==='function'?sfTimelineDuration():300,
+      fps:typeof sfTimelineFps==='function'?sfTimelineFps():24,
+      zoom:1,
+      keyframes:[]
+    },
+    curves:typeof sfDefaultCurveState==='function'?sfDefaultCurveState():null,
+    layout:typeof SF_LAYOUT_STATE==='object'?SF_LAYOUT_STATE:null,
+    nodeGraph:{nodes:[],links:[],view:{x:0,y:0,zoom:1}},
+    view:{
+      panX:0,
+      panY:0,
+      zoom:1,
+      yaw:.48,
+      pitch:-.58,
+      distance:780,
+      mode:'perspective',
+      shading:'material',
+      options:Object.assign({},SF_VIEW_OPTIONS||{})
+    }
+  };
+}
+
 var SF_HISTORY={undo:[],redo:[],max:60,applying:false,lastKey:'',lastTime:0};
 
 function sfHistorySnapshot(){
@@ -3932,7 +3945,7 @@ async function sfNewProject(){
   try{
     var project=await sfRequest('/projects',{
       method:'POST',
-      body:JSON.stringify({name:name,scene:sfCollectScene()})
+      body:JSON.stringify({name:name,scene:sfCreateEmptyScene()})
     });
     SF_PROJECT_ID=project.id;
     SF_PROJECT_NAME=project.name;
@@ -6302,15 +6315,18 @@ function sfDraw3DLabel(text,p,cam,color){
 }
 function sfDraw3DGrid(cam){
   var zoom=Math.max(.25,Number(SF_VIEW.zoom)||1);
-  var grid=sfClamp(Math.ceil((8200/zoom)/160)*160,5200,52000);
-  var step=40;
-  while((grid*2)/step>340)step*=2;
-  var majorStep=step*4;
+  var step=20;
+  var desired=sfClamp(70/zoom,16,640);
+  while(step<desired)step*=2;
+  var majorStep=step*5;
+  var reach=sfClamp(((cam&&cam.distance)||780)*120/zoom,12000,320000);
+  var grid=Math.ceil(Math.max(reach,step*220)/majorStep)*majorStep;
+  while((grid*2)/step>420){step*=2;majorStep=step*5;}
   for(var i=-grid;i<=grid;i+=step){
-    var axis=i===0,major=(Math.round(i/step)%(majorStep/step))===0;
-    var fade=sfClamp(1-Math.abs(i)/grid,.18,1);
-    var minorAlpha=(.035+.055*fade).toFixed(3);
-    var majorAlpha=(.075+.105*fade).toFixed(3);
+    var axis=Math.abs(i)<.001,major=(Math.round(i/step)%(majorStep/step))===0;
+    var fade=sfClamp(1-Math.pow(Math.abs(i)/grid,3),.22,1);
+    var minorAlpha=(.028+.052*fade).toFixed(3);
+    var majorAlpha=(.07+.12*fade).toFixed(3);
     sfDraw3DLine(
       {x:-grid,y:0,z:i},
       {x:grid,y:0,z:i},
@@ -8644,7 +8660,10 @@ function sfSceneHasSunAtmosphere(sceneObjects){
   return (sceneObjects||[]).some(function(o){
     var name=String(o.name||''),type=String(o.type||'').toUpperCase(),props=o.props||{};
     var text=name+' '+String(props.source||'')+' '+String(props.weather||'')+' '+String(props.model||'');
-    return /(weather|hdri|environment lighting)/i.test(text)&&(type==='SKY'||type==='LIGHT'||type==='VOL'||type==='CLOUD'||type==='HDRI');
+    if(type==='SKY'||type==='HDRI')return true;
+    if(type==='LIGHT')return /(sun|sky|weather|hdri|atmosphere|environment lighting)/i.test(text);
+    if(type==='VOL'||type==='CLOUD')return /(cloud|volume|haze|fog|weather|atmosphere|environment lighting)/i.test(text);
+    return false;
   });
 }
 function drawSky(){
@@ -8656,11 +8675,10 @@ function drawSky(){
   var cam=sfMakeCamera(w,h);
   var sceneObjects=sfGetSceneObjects();
   var nightState=sfNightModeState(sceneObjects);
-  if(nightState.active)sfDrawNightSkyBackground(w,h,nightState);
-  else if(window.SF_SUN_ATMO_VIEWPORT_ACTIVE||sfSceneHasSunAtmosphere(sceneObjects))sfDrawSunAtmosphereBackground(w,h,sceneObjects);
+  if(sceneObjects.length && nightState.active)sfDrawNightSkyBackground(w,h,nightState);
+  else if(sceneObjects.length && (window.SF_SUN_ATMO_VIEWPORT_ACTIVE||sfSceneHasSunAtmosphere(sceneObjects)))sfDrawSunAtmosphereBackground(w,h,sceneObjects);
   else sfDrawNeutralViewportBackground(w,h);
   if(SF_VIEW_OPTIONS.overlay){sfDraw3DGrid(cam);sfDrawViewportAxisFallback(w,h);}
-  if(!sceneObjects.length)sfDrawEmptySceneReference(cam,w,h);
   sceneObjects
     .map(function(o,i){var pos=sfObjectWorld(o,i),p=sfProject3D(pos,cam);return {o:o,i:i,d:p?p.depth:-1};})
     .filter(function(x){return x.d>0;})
@@ -10015,7 +10033,11 @@ function sfSunControlChanged(options){
   triText('rp-temp',Math.round(s.temperature)+' K');
   sfUpdateSunAtmospherePreview();
   if(!options.init)try{drawSky();}catch(_){}
-  if(options.apply||sfSunRigAutoEnabled())sfApplySunAtmosphereMenu(true);
+  if(!options.init && (options.apply||sfSunRigAutoEnabled())){
+    window.SF_ALLOW_SILENT_SCENE_CREATE=true;
+    try{sfApplySunAtmosphereMenu(true);}
+    finally{window.SF_ALLOW_SILENT_SCENE_CREATE=false;}
+  }
 }
 function sfSetSunControlValues(values){
   values=values||{};
@@ -10137,6 +10159,8 @@ function sfInjectSunAtmospherePanel(){
   sfSunControlChanged({init:true});
 }
 function sfApplySunAtmosphereMenu(silent){
+  if(silent && SF_STARTUP_EMPTY_LOCK && !document.querySelector('#outliner-list .tri-out-extra[data-sf-added="1"]'))return null;
+  if(silent && !document.querySelector('#outliner-list .tri-out-extra[data-sf-added="1"]') && !window.SF_ALLOW_SILENT_SCENE_CREATE)return null;
   window.SF_SUN_ATMO_VIEWPORT_ACTIVE=true;
   var s=sfReadSunAtmosphereControls(),sunPos=sfSunDirection(s,420),model=s.model;
   if(!silent)sfHistoryCapture('Apply Sun & Atmosphere','sun-atmosphere');
@@ -10387,8 +10411,8 @@ function sfSyncThemeInputs(values){
     background:['theme-bg-color','prefs-theme-bg-color'],
     panel:['theme-panel-color','prefs-theme-panel-color'],
     text:['theme-text-color','prefs-theme-text-color'],
-    blue:['theme-blue-color'],
-    green:['theme-green-color']
+    blue:['theme-blue-color','prefs-theme-blue-color'],
+    green:['theme-green-color','prefs-theme-green-color']
   };
   Object.keys(map).forEach(function(key){
     map[key].forEach(function(id){var el=document.getElementById(id);if(el)el.value=sfNormalizeHex(values[key],SF_THEME_DEFAULTS[key]);});
@@ -10925,10 +10949,15 @@ function sfClearHDRILighting(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sfLoadThemeColors);
 else setTimeout(sfLoadThemeColors,0);
 function sfBuildSkyIntelligenceRig(){
-  sfApplySunAtmosphereMenu(true);
-  sfApplyLookDevelopmentMenu(true);
-  var text=(document.getElementById('ai-text')?.textContent||'').toLowerCase();
-  if(text.includes('cloud'))sfApplyCloudMenu(true);
+  window.SF_ALLOW_SILENT_SCENE_CREATE=true;
+  try{
+    sfApplySunAtmosphereMenu(true);
+    sfApplyLookDevelopmentMenu(true);
+    var text=(document.getElementById('ai-text')?.textContent||'').toLowerCase();
+    if(text.includes('cloud'))sfApplyCloudMenu(true);
+  }finally{
+    window.SF_ALLOW_SILENT_SCENE_CREATE=false;
+  }
   triToast('Sky Intelligence rig built');
 }
 function sfApplyCurveValue(channel,value,silent){
@@ -11309,14 +11338,14 @@ function syncLocationLook(){const sel=document.getElementById('city-select'); tr
 function sfInitCleanStartupScene(){
   var list=document.getElementById('outliner-list');
   if(list){
-    list.querySelectorAll('.tri-out-extra').forEach(function(row){row.remove();});
-    list.querySelectorAll('.tri-out-group').forEach(function(group){group.classList.remove('sel');group.dataset.collapsed='0';});
+    list.innerHTML='';
     sfUpgradeOutlinerGroups();
   }
+  SF_PROJECT_NAME='Untitled SkyForge Scene';
   SF_KEYFRAMES=[];
   if(typeof sfApplyTimelineState==='function')sfApplyTimelineState({framePercent:0,duration:sfTimelineDuration(),fps:sfTimelineFps(),zoom:SF_TIMELINE?.zoom||1,keyframes:[]});
   if(typeof sfApplyCurveState==='function')sfApplyCurveState(sfDefaultCurveState());
-  if(typeof sfRestoreNodeGraph==='function')sfRestoreNodeGraph({nodes:[{id:'node-output',type:'HDRI',name:'HDRI Output',x:260,y:120,props:{format:'EXR 32-bit'}}],links:[],view:{x:0,y:0,zoom:1}});
+  if(typeof sfRestoreNodeGraph==='function')sfRestoreNodeGraph({nodes:[],links:[],view:{x:0,y:0,zoom:1}});
   sfSetStartupLocationEmpty();
   triText('tri-selected-object','No selection');
   triText('tri-selected-type','-');
@@ -11435,6 +11464,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   sfLoadSettings();
   sfRefreshProjects(false);
   sfLoadRenderQueue();
+  setTimeout(function(){SF_STARTUP_EMPTY_LOCK=false;},1500);
   const outliner=document.getElementById('outliner-list');
   if(outliner){
     outliner.addEventListener('click',function(e){
@@ -11485,8 +11515,10 @@ document.addEventListener('DOMContentLoaded',()=>{
       sfRenameSelectedObject(row);
     });
     sfUpgradeOutlinerGroups();
-    sfEnsureDefaultSceneGroups();
-    sfOrganizeOutlinerByType(true);
+    if(outliner.querySelector('.tri-out-extra')){
+      sfEnsureDefaultSceneGroups();
+      sfOrganizeOutlinerByType(true);
+    }
     sfCleanupNightModeDuplicates();
     sfInstallOutlinerDragDrop();
     sfInstallContextMenus();
@@ -11656,7 +11688,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   function hideLegacyLayer(){var old=$('sf-vp-input-layer');if(old){old.style.pointerEvents='none';old.style.display='none';old.style.zIndex='0';}var legacy=$('gizmo-root');if(legacy){legacy.style.display='none';legacy.style.pointerEvents='none';}}
   function layer(){var el=vp();if(!el)return null;var l=$('sf-vp-blender-layer');if(!l){l=document.createElement('div');l.id='sf-vp-blender-layer';el.appendChild(l);}Object.assign(l.style,{position:'absolute',inset:'0',zIndex:'76',pointerEvents:'auto',background:'transparent',cursor:'default',touchAction:'none'});hideLegacyLayer();return l;}
   function injectStyle(){if($('sf-vp-v4-style'))return;var st=document.createElement('style');st.id='sf-vp-v4-style';st.textContent=`
-    #sf-vp-grid{position:absolute;left:-180%;right:-180%;bottom:-42%;height:150%;z-index:22;pointer-events:none;opacity:.42;transform-origin:50% 100%;background-image:linear-gradient(rgba(255,255,255,.13) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.12) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:160px 160px,160px 160px,32px 32px,32px 32px;mask-image:linear-gradient(to top,rgba(0,0,0,1),rgba(0,0,0,.92) 58%,rgba(0,0,0,.28) 86%,transparent 100%);}
+    #sf-vp-grid{position:absolute;left:-320%;right:-320%;bottom:-220%;height:520%;z-index:22;pointer-events:none;opacity:.36;transform-origin:50% 82%;background-image:linear-gradient(rgba(255,255,255,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.11) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:160px 160px,160px 160px,32px 32px,32px 32px;mask-image:radial-gradient(ellipse at 50% 58%,rgba(0,0,0,1) 0,rgba(0,0,0,.96) 42%,rgba(0,0,0,.50) 76%,transparent 100%);}
     #sf-vp-nav-gizmo{position:absolute;top:10px;right:12px;width:132px;height:132px;z-index:148;pointer-events:auto;user-select:none;}
     .sf-nav-stage{position:absolute;inset:0;border-radius:8px;overflow:hidden;background:linear-gradient(180deg,rgba(72,72,72,.22),rgba(12,13,15,.02));}
     .sf-nav-floor{position:absolute;left:-14px;right:-14px;bottom:-12px;height:54px;opacity:.45;transform:perspective(170px) rotateX(62deg);transform-origin:50% 100%;background-image:linear-gradient(rgba(255,255,255,.20) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.16) 1px,transparent 1px);background-size:15px 15px;mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent);}

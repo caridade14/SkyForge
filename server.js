@@ -64,15 +64,10 @@ const DEFAULT_SCENE = {
     format: "EXR 32-bit",
     resolution: "4K"
   },
-  groups: [
-    { key: "grp-world-environment", name: "World Environment", type: "ROOT", collapsed: false },
-    { key: "grp-atmosphere", name: "Atmosphere", type: "VOL", collapsed: false },
-    { key: "grp-cloud-system", name: "Cloud System", type: "CLOUDS", collapsed: false },
-    { key: "grp-cameras-probes", name: "Cameras / Probes", type: "CAM", collapsed: false }
-  ],
+  groups: [],
   objects: [],
   nodeGraph: {
-    nodes: [{ id: "node-output", type: "HDRI", name: "HDRI Output", x: 260, y: 120, props: { format: "EXR 32-bit" } }],
+    nodes: [],
     links: [],
     view: { x: 0, y: 0, zoom: 1 }
   }
