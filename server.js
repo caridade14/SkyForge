@@ -16,7 +16,7 @@ const INDEX_FILE = path.join(ROOT, "SF30.html");
 const WORKER_TICK_MS = Number(process.env.RENDER_WORKER_TICK_MS || 1000);
 const SKYFORGE_FILE_FORMAT = "SkyForge Project File";
 const SKYFORGE_FILE_KIND = "skyforge.project";
-const SKYFORGE_FILE_VERSION = 1;
+const SKYFORGE_FILE_VERSION = 2;
 
 function safeLog(method, ...args) {
   try {
@@ -370,6 +370,82 @@ function parseJson(value, fallback) {
   }
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value ?? null));
+}
+
+function normalizeColorSpace(value) {
+  const v = String(value || "ACEScg").trim();
+  return v.toLowerCase() === "aces" ? "ACEScg" : v;
+}
+
+function normalizeSkyForgeScene(scene = {}) {
+  const base = cloneJson(DEFAULT_SCENE);
+  const incoming = scene && typeof scene === "object" ? scene : {};
+  const normalized = {
+    ...base,
+    ...incoming,
+    metadata: {
+      schema: "skyforge.scene",
+      version: Math.max(1, Number(incoming.metadata?.version) || SKYFORGE_FILE_VERSION),
+      units: incoming.metadata?.units || "meters",
+      upAxis: incoming.metadata?.upAxis || "Y",
+      colorSpace: normalizeColorSpace(incoming.metadata?.colorSpace),
+      createdWith: incoming.metadata?.createdWith || { name: "SkyForge", version: "v10", build: "SF30" },
+      savedAt: incoming.metadata?.savedAt || new Date().toISOString()
+    },
+    sun: { ...(base.sun || {}), ...(incoming.sun || {}) },
+    clouds: { ...(base.clouds || {}), ...(incoming.clouds || {}) },
+    output: { ...(base.output || {}), ...(incoming.output || {}) },
+    timeline: {
+      framePercent: 0,
+      duration: 300,
+      fps: 24,
+      zoom: 1,
+      keyframes: [],
+      ...(incoming.timeline || {})
+    },
+    nodeGraph: {
+      ...(base.nodeGraph || {}),
+      ...(incoming.nodeGraph || {}),
+      view: { x: 0, y: 0, zoom: 1, ...(incoming.nodeGraph?.view || {}) }
+    },
+    view: {
+      panX: 0,
+      panY: 0,
+      zoom: 1,
+      yaw: 0.48,
+      pitch: -0.58,
+      distance: 780,
+      mode: "perspective",
+      shading: "material",
+      options: {},
+      ...(incoming.view || {}),
+      options: { ...((incoming.view && incoming.view.options) || {}) }
+    },
+    review: {
+      notes: [],
+      status: "WIP",
+      ...(incoming.review || {})
+    },
+    pipeline: {
+      exports: [],
+      lastAudit: null,
+      ...(incoming.pipeline || {})
+    }
+  };
+
+  normalized.groups = Array.isArray(incoming.groups) ? incoming.groups : [];
+  normalized.objects = Array.isArray(incoming.objects) ? incoming.objects : [];
+  normalized.timeline.keyframes = Array.isArray(normalized.timeline.keyframes) ? normalized.timeline.keyframes : [];
+  normalized.nodeGraph.nodes = Array.isArray(normalized.nodeGraph.nodes) ? normalized.nodeGraph.nodes : [];
+  normalized.nodeGraph.links = Array.isArray(normalized.nodeGraph.links) ? normalized.nodeGraph.links : [];
+  normalized.dependencies = Array.isArray(incoming.dependencies) ? incoming.dependencies : [];
+  normalized.review.notes = Array.isArray(normalized.review.notes) ? normalized.review.notes : [];
+  normalized.pipeline.exports = Array.isArray(normalized.pipeline.exports) ? normalized.pipeline.exports.slice(0, 24) : [];
+  return normalized;
+}
+
 async function parseBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -631,12 +707,12 @@ function projectFromRow(row) {
     ownerId: row.owner_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    scene: parseJson(row.scene_json, {})
+    scene: normalizeSkyForgeScene(parseJson(row.scene_json, {}))
   };
 }
 
 function projectSummaryFromRow(row) {
-  const scene = parseJson(row.scene_json, {});
+  const scene = normalizeSkyForgeScene(parseJson(row.scene_json, {}));
   const versions = db.prepare("SELECT COUNT(*) AS count FROM project_versions WHERE project_id = ?").get(row.id).count;
   const renders = db.prepare("SELECT COUNT(*) AS count FROM renders WHERE project_id = ?").get(row.id).count;
   return {
@@ -696,12 +772,13 @@ function assetFromRow(row) {
 }
 
 function versionFromRow(row) {
+  if (!row) return null;
   return {
     id: row.id,
     projectId: row.project_id,
     versionNumber: row.version_number,
     note: row.note,
-    scene: parseJson(row.scene_json, {}),
+    scene: normalizeSkyForgeScene(parseJson(row.scene_json, {})),
     createdAt: row.created_at
   };
 }
@@ -808,6 +885,8 @@ function exportProject(id) {
   }
 
   return {
+    schema: "skyforge.bundle",
+    formatVersion: SKYFORGE_FILE_VERSION,
     exportedAt: new Date().toISOString(),
     project,
     versions: listProjectVersions(project.id),
@@ -901,6 +980,7 @@ function uniqueProjectId(baseId) {
 }
 
 function saveProjectRecord(project, createVersion = false, versionNote = "Imported scene") {
+  const scene = normalizeSkyForgeScene(project.scene || {});
   db.prepare(`
     INSERT INTO projects (id, name, owner_id, scene_json, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -913,14 +993,14 @@ function saveProjectRecord(project, createVersion = false, versionNote = "Import
     safeId(project.id),
     project.name,
     safeId(project.ownerId || "system"),
-    stringify(project.scene || {}),
+    stringify(scene),
     project.createdAt || new Date().toISOString(),
     project.updatedAt || new Date().toISOString()
   );
 
   if (createVersion) {
     createProjectVersion(project.id, {
-      scene: project.scene || {},
+      scene,
       note: versionNote
     });
   }
@@ -960,7 +1040,7 @@ function createProjectVersion(projectId, body = {}) {
     projectId: project.id,
     versionNumber: row.nextVersion,
     note: body.note || "Manual checkpoint",
-    scene: body.scene || project.scene,
+    scene: normalizeSkyForgeScene(body.scene || project.scene),
     createdAt: new Date().toISOString()
   };
 

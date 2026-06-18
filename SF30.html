@@ -1231,7 +1231,7 @@ body.sf-ab-on .ab-label{display:block}
         <div class="prefs-panel" data-pref-panel="lights">
           <h3>Lights</h3>
           <div class="prefs-grid">
-            <div class="prefs-field"><div class="prefs-lbl">Color Space</div><select class="prefs-inp" id="set-color-space"><option>ACES</option><option>Linear</option><option>sRGB</option></select></div>
+            <div class="prefs-field"><div class="prefs-lbl">Color Space</div><select class="prefs-inp" id="set-color-space"><option>ACEScg</option><option>Linear</option><option>sRGB</option></select></div>
             <div class="prefs-field"><div class="prefs-lbl">Default Sun Temp</div><input class="prefs-inp" type="number" value="5200" step="50"></div>
             <label class="prefs-check">Use physically based units <input type="checkbox" checked></label>
             <label class="prefs-check">Clamp HDR highlights <input type="checkbox"></label>
@@ -2418,7 +2418,7 @@ body.sf-ab-on .ab-label{display:block}
   <div class="st">Ray march · 64 steps</div>
   <div class="st ml" id="st-frame">Frame 68 / 300</div>
   <div class="st" id="st-fps">24 fps</div>
-  <div class="st or">Pipeline · ACEScg · Ready</div>
+  <div class="st or" id="st-project-state">Pipeline · ACEScg · Ready</div>
 </div>
 
 </div><!-- shell -->
@@ -2554,8 +2554,10 @@ function sfToggleFullscreen(){
 var SF_API='/api';
 var SF_FILE_FORMAT='SkyForge Project File';
 var SF_FILE_KIND='skyforge.project';
-var SF_FILE_VERSION=1;
+var SF_FILE_VERSION=2;
 var SF_FILE_MIME='application/vnd.skyforge.project+json';
+var SF_APP_BUILD='SF30';
+var SF_APP_VERSION='v10';
 var SF_PROJECT_ID='default';
 var SF_PROJECT_NAME='SkyForge Demo Scene';
 var SF_ACTIVE_RENDER_JOB=null;
@@ -2565,6 +2567,115 @@ var SF_SETTINGS={};
 var SF_DIRTY=false;
 var SF_AUTOSAVE_IV=null;
 var SF_STARTUP_EMPTY_LOCK=true;
+var SF_LAST_SAVE_AT='';
+var SF_PIPELINE_EXPORTS=[];
+
+function sfNowIso(){return new Date().toISOString();}
+
+function sfClone(value){
+  try{return JSON.parse(JSON.stringify(value));}
+  catch(_){return value;}
+}
+
+function sfProjectDisplayName(){
+  return String(SF_PROJECT_NAME||SF_PROJECT_ID||'Untitled SkyForge Scene');
+}
+
+function sfSetProjectDirty(value,reason){
+  SF_DIRTY=!!value;
+  if(reason)window.__sfLastDirtyReason=reason;
+  sfUpdateProjectStatus();
+}
+
+function sfMarkSaved(){
+  SF_DIRTY=false;
+  SF_LAST_SAVE_AT=sfNowIso();
+  sfUpdateProjectStatus();
+}
+
+function sfUpdateProjectStatus(){
+  var el=document.getElementById('st-project-state');
+  if(el){
+    var name=sfProjectDisplayName();
+    var state=SF_DIRTY?'Unsaved changes':'Saved';
+    var extra=SF_LAST_SAVE_AT?(' · '+new Date(SF_LAST_SAVE_AT).toLocaleTimeString()):'';
+    el.textContent='Project · '+name+' · '+state+extra;
+    el.classList.toggle('dirty',!!SF_DIRTY);
+  }
+  var cleanTitle='SkyForge · '+sfProjectDisplayName();
+  if(document.title!==((SF_DIRTY?'* ':'')+cleanTitle))document.title=(SF_DIRTY?'* ':'')+cleanTitle;
+}
+
+function sfSceneDefaults(){
+  return {
+    metadata:{
+      schema:'skyforge.scene',
+      version:2,
+      units:'meters',
+      upAxis:'Y',
+      colorSpace:'ACEScg',
+      createdWith:{name:'SkyForge',version:SF_APP_VERSION,build:SF_APP_BUILD}
+    },
+    city:'',
+    date:typeof sfTodayLocalIso==='function'?sfTodayLocalIso():'',
+    time:'',
+    latitude:'',
+    longitude:'',
+    weather:'No weather loaded',
+    sun:{elevation:'',azimuth:'',intensity:'',turbidity:''},
+    clouds:{type:'',coverage:'',altitude:'',density:''},
+    output:{format:'EXR 32-bit',resolution:'4K'},
+    groups:[],
+    objects:[],
+    timeline:{framePercent:0,duration:300,fps:24,zoom:1,keyframes:[]},
+    curves:null,
+    layout:null,
+    nodeGraph:{nodes:[],links:[],view:{x:0,y:0,zoom:1}},
+    view:{panX:0,panY:0,zoom:1,yaw:.48,pitch:-.58,distance:780,mode:'perspective',shading:'material',options:{}},
+    dependencies:[],
+    review:{notes:[],status:'WIP'},
+    pipeline:{exports:[],lastAudit:null}
+  };
+}
+
+function sfNormalizeSkyForgeScene(scene){
+  var base=sfSceneDefaults();
+  scene=scene&&typeof scene==='object'?scene:{};
+  var normalized=Object.assign({},base,scene);
+  normalized.metadata=Object.assign({},base.metadata,scene.metadata||{});
+  normalized.metadata.version=Math.max(1,Number(normalized.metadata.version)||1);
+  normalized.metadata.schema='skyforge.scene';
+  normalized.sun=Object.assign({},base.sun,scene.sun||{});
+  normalized.clouds=Object.assign({},base.clouds,scene.clouds||{});
+  normalized.output=Object.assign({},base.output,scene.output||{});
+  normalized.timeline=Object.assign({},base.timeline,scene.timeline||{});
+  normalized.timeline.keyframes=Array.isArray(normalized.timeline.keyframes)?normalized.timeline.keyframes:[];
+  normalized.groups=Array.isArray(scene.groups)?scene.groups:[];
+  normalized.objects=Array.isArray(scene.objects)?scene.objects:[];
+  normalized.nodeGraph=Object.assign({},base.nodeGraph,scene.nodeGraph||{});
+  normalized.nodeGraph.nodes=Array.isArray(normalized.nodeGraph.nodes)?normalized.nodeGraph.nodes:[];
+  normalized.nodeGraph.links=Array.isArray(normalized.nodeGraph.links)?normalized.nodeGraph.links:[];
+  normalized.nodeGraph.view=Object.assign({},base.nodeGraph.view,normalized.nodeGraph.view||{});
+  normalized.view=Object.assign({},base.view,scene.view||{});
+  normalized.view.options=Object.assign({},base.view.options,scene.view&&scene.view.options||{});
+  normalized.dependencies=Array.isArray(scene.dependencies)?scene.dependencies:[];
+  normalized.review=Object.assign({},base.review,scene.review||{});
+  normalized.review.notes=Array.isArray(normalized.review.notes)?normalized.review.notes:[];
+  normalized.pipeline=Object.assign({},base.pipeline,scene.pipeline||{});
+  normalized.pipeline.exports=Array.isArray(normalized.pipeline.exports)?normalized.pipeline.exports:[];
+  return normalized;
+}
+
+function sfSceneAudit(scene){
+  scene=sfNormalizeSkyForgeScene(scene||sfCollectScene());
+  var issues=[];
+  if(!scene.objects.length)issues.push({level:'info',message:'Scene has no objects yet'});
+  if(!scene.objects.some(function(o){return String(o.type).toUpperCase()==='CAM';}))issues.push({level:'warn',message:'No cinema camera in scene'});
+  if(!scene.objects.some(function(o){return ['LIGHT','HDRI'].includes(String(o.type).toUpperCase());}))issues.push({level:'warn',message:'No light or HDRI rig in scene'});
+  if(!scene.output||!scene.output.resolution)issues.push({level:'warn',message:'Output resolution not set'});
+  if(!scene.metadata||sfNormalizeColorSpace(scene.metadata.colorSpace)!=='ACEScg')issues.push({level:'info',message:'Color pipeline is not ACEScg'});
+  return {checkedAt:sfNowIso(),issueCount:issues.length,issues:issues,ok:issues.filter(function(i){return i.level==='warn';}).length===0};
+}
 
 function sfToast(msg){
   if(typeof triToast==='function')triToast(msg);
@@ -2584,6 +2695,11 @@ function sfTextValue(id,fallback){
 function sfActiveText(selector,fallback){
   var el=document.querySelector(selector);
   return (el&&el.textContent||fallback||'').replace(/\s+/g,' ').trim();
+}
+
+function sfNormalizeColorSpace(value){
+  var v=String(value||'ACEScg').trim();
+  return v.toLowerCase()==='aces'?'ACEScg':v;
 }
 
 var SF_OUTLINER_GROUP_COUNTER=0;
@@ -3680,8 +3796,35 @@ function sfCollectOutlinerObjects(){
   });
 }
 
+function sfCollectSceneDependencies(){
+  var deps=[];
+  try{
+    sfCollectOutlinerObjects().forEach(function(obj){
+      var props=obj.props||{};
+      ['file','path','texture','image','hdri','source'].forEach(function(key){
+        var value=props[key];
+        if(value && typeof value==='string'){
+          deps.push({type:obj.type||'ASSET',name:obj.name||key,property:key,uri:value});
+        }
+      });
+    });
+  }catch(_){}
+  return deps.filter(function(dep,index,arr){
+    return arr.findIndex(function(other){return other.uri===dep.uri&&other.property===dep.property;})===index;
+  });
+}
+
 function sfCollectScene(){
-  return {
+  var scene={
+    metadata:{
+      schema:'skyforge.scene',
+      version:2,
+      units:'meters',
+      upAxis:'Y',
+      colorSpace:sfNormalizeColorSpace(document.getElementById('set-color-space')?.value),
+      createdWith:{name:'SkyForge',version:SF_APP_VERSION,build:SF_APP_BUILD},
+      savedAt:sfNowIso()
+    },
     city:sfInputValue('#city-select',''),
     date:sfInputValue('#scene-date',sfTodayLocalIso()),
     time:sfInputValue('#scene-time',''),
@@ -3726,12 +3869,16 @@ function sfCollectScene(){
       mode:SF_VIEWPORT_MODE,
       shading:SF_SHADING_MODE,
       options:SF_VIEW_OPTIONS
-    }:null
+    }:null,
+    dependencies:sfCollectSceneDependencies(),
+    review:{notes:[],status:'WIP'},
+    pipeline:{exports:SF_PIPELINE_EXPORTS.slice(0,24),lastAudit:window.__sfLastSceneAudit||null}
   };
+  return sfNormalizeSkyForgeScene(scene);
 }
 
 function sfCreateEmptyScene(){
-  return {
+  return sfNormalizeSkyForgeScene({
     city:'',
     date:sfTodayLocalIso(),
     time:'',
@@ -3767,7 +3914,7 @@ function sfCreateEmptyScene(){
       shading:'material',
       options:Object.assign({},SF_VIEW_OPTIONS||{})
     }
-  };
+  });
 }
 
 var SF_HISTORY={undo:[],redo:[],max:60,applying:false,lastKey:'',lastTime:0};
@@ -3872,7 +4019,7 @@ async function sfSaveProject(versionNote,options){
     SF_PROJECT_NAME=project.name||SF_PROJECT_NAME;
     if(!options.skipVersion)await sfLoadVersions();
     sfRefreshProjects(false);
-    SF_DIRTY=false;
+    sfMarkSaved();
     sfToast('Project saved: '+project.name);
   }catch(err){
     sfToast('Backend offline: start with npm run dev');
@@ -3886,10 +4033,11 @@ async function sfLoadProject(id){
     var project=await sfRequest('/projects/'+SF_PROJECT_ID);
     SF_PROJECT_ID=project.id;
     SF_PROJECT_NAME=project.name||SF_PROJECT_NAME;
-    sfApplyScene(project.scene||{});
+    sfApplyScene(sfNormalizeSkyForgeScene(project.scene||{}));
     await sfLoadVersions();
     sfLoadRenderQueue();
     closeModal('project-ov');
+    sfMarkSaved();
     sfToast('Project loaded: '+project.name);
   }catch(err){
     sfToast('No saved project found yet');
@@ -4000,18 +4148,38 @@ function sfSkyForgeChecksum(bundle){
 }
 
 function sfBuildSkyForgeFile(bundle){
+  bundle=sfClone(bundle||{});
   var project=(bundle&&bundle.project)||{};
+  if(project.scene)project.scene=sfNormalizeSkyForgeScene(project.scene);
+  var audit=sfSceneAudit(project.scene||sfCollectScene());
   return {
     format:SF_FILE_FORMAT,
     kind:SF_FILE_KIND,
     formatVersion:SF_FILE_VERSION,
-    app:{name:'SkyForge',version:'v10',build:'SF30'},
+    schema:'skyforge.file',
+    compatibility:{minReaderVersion:1,preferredReaderVersion:SF_FILE_VERSION},
+    app:{name:'SkyForge',version:SF_APP_VERSION,build:SF_APP_BUILD},
     exportedAt:new Date().toISOString(),
     projectId:project.id||SF_PROJECT_ID,
     projectName:project.name||SF_PROJECT_NAME,
+    audit:audit,
     checksum:sfSkyForgeChecksum(bundle),
     payload:bundle
   };
+}
+
+function sfValidateSkyForgeBundle(bundle){
+  var issues=[];
+  if(!bundle||typeof bundle!=='object')issues.push('File is not an object');
+  var payload=bundle&&bundle.project?bundle:{project:bundle&&bundle.project?bundle.project:bundle};
+  var project=payload&&payload.project;
+  if(!project||typeof project!=='object')issues.push('Missing project payload');
+  if(project && !project.scene)issues.push('Missing project scene');
+  if(project && project.scene){
+    var audit=sfSceneAudit(project.scene);
+    if(audit.issues.length)issues=issues.concat(audit.issues.map(function(i){return i.message;}));
+  }
+  return {ok:issues.filter(function(i){return !/^Scene has no/.test(i);}).length===0,issues:issues};
 }
 
 function sfNormalizeSkyForgeBundle(file){
@@ -4023,9 +4191,11 @@ function sfNormalizeSkyForgeBundle(file){
     throw new Error('Invalid SkyForge file payload');
   }
   if(isSkyForgeFile&&file.payload){
-    return file.payload;
+    file=file.payload;
   }
-  return file;
+  var bundle=file&&file.project?file:{project:file};
+  if(bundle.project&&bundle.project.scene)bundle.project.scene=sfNormalizeSkyForgeScene(bundle.project.scene);
+  return bundle;
 }
 
 function sfSkyForgeFileName(project){
@@ -4136,14 +4306,15 @@ async function sfImportProjectFile(input){
     var text=await file.text();
     var parsed=JSON.parse(text);
     var bundle=sfNormalizeSkyForgeBundle(parsed);
+    var validation=sfValidateSkyForgeBundle(bundle);
     if(!bundle||typeof bundle!=='object')throw new Error('Invalid SkyForge file');
     var project=await sfRequest('/projects/import',{
       method:'POST',
-      body:JSON.stringify(parsed)
+      body:JSON.stringify(bundle)
     });
     await sfRefreshProjects(false);
     await sfLoadProject(project.id);
-    sfToast('SkyForge file imported: '+project.name);
+    sfToast(validation.issues.length?'Imported with audit notes: '+project.name:'SkyForge file imported: '+project.name);
   }catch(err){
     sfToast('Import failed: '+(err&&err.message?err.message:'invalid file'));
     console.error(err);
@@ -4428,6 +4599,9 @@ function sfSetRangeByLabel(sectionId,label,value){
 }
 
 function sfApplyScene(scene){
+  scene=sfNormalizeSkyForgeScene(scene||{});
+  SF_PIPELINE_EXPORTS=Array.isArray(scene.pipeline&&scene.pipeline.exports)?scene.pipeline.exports.slice(0,24):[];
+  window.__sfLastSceneAudit=scene.pipeline&&scene.pipeline.lastAudit||null;
   if(typeof setCity==='function')setCity(scene.city||'');
   sfSetInput('#scene-date',scene.date);
   sfSetInput('#scene-time',scene.time);
@@ -4535,10 +4709,136 @@ function sfSetLookSlider(label,value){
   input.dispatchEvent(new Event('input',{bubbles:true}));
   return true;
 }
+function sfDownloadTextFile(filename,text,mime){
+  var blob=new Blob([String(text||'')],{type:mime||'text/plain;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},500);
+}
+function sfExportBaseName(suffix){
+  var slug=typeof sfSlug==='function'?sfSlug(sfProjectDisplayName()):sfProjectDisplayName().toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  return (slug||'skyforge-scene')+(suffix||'');
+}
+function sfRecordPipelineExport(kind,filename){
+  SF_PIPELINE_EXPORTS.unshift({kind:kind,filename:filename,createdAt:sfNowIso()});
+  SF_PIPELINE_EXPORTS=SF_PIPELINE_EXPORTS.slice(0,24);
+  window.__sfLastSceneAudit=sfSceneAudit(sfCollectScene());
+}
+function sfBuildUsdLightingRig(scene){
+  scene=sfNormalizeSkyForgeScene(scene||sfCollectScene());
+  var lines=[
+    '#usda 1.0',
+    '(',
+    '    defaultPrim = "SkyForgeLightingRig"',
+    '    metersPerUnit = 1',
+    '    upAxis = "Y"',
+    ')',
+    '',
+    'def Xform "SkyForgeLightingRig"',
+    '{'
+  ];
+  var lights=scene.objects.filter(function(o){return ['LIGHT','HDRI'].includes(String(o.type).toUpperCase());});
+  if(!lights.length)lights=[{name:'SkyForge_Key_Light',type:'LIGHT',x:0,y:450,z:0,props:scene.sun||{}}];
+  lights.forEach(function(light,index){
+    var props=light.props||{},name=String(light.name||('Light_'+index)).replace(/[^A-Za-z0-9_]+/g,'_');
+    var intensity=Number(props.intensity||scene.sun.intensity||1.8)*1000;
+    var temperature=Number(props.temperature||5200);
+    var color=String(props.color||'#ffffff').replace('#','');
+    var r=parseInt(color.slice(0,2)||'ff',16)/255,g=parseInt(color.slice(2,4)||'ff',16)/255,b=parseInt(color.slice(4,6)||'ff',16)/255;
+    lines.push('    def SphereLight "'+name+'"');
+    lines.push('    {');
+    lines.push('        float inputs:intensity = '+intensity.toFixed(3));
+    lines.push('        float inputs:colorTemperature = '+temperature.toFixed(1));
+    lines.push('        color3f inputs:color = ('+r.toFixed(4)+', '+g.toFixed(4)+', '+b.toFixed(4)+')');
+    lines.push('        double3 xformOp:translate = ('+(Number(light.x)||0).toFixed(3)+', '+(Number(light.y)||0).toFixed(3)+', '+(Number(light.z)||0).toFixed(3)+')');
+    lines.push('        uniform token[] xformOpOrder = ["xformOp:translate"]');
+    lines.push('    }');
+  });
+  lines.push('}');
+  return lines.join('\n')+'\n';
+}
+function sfBuildNukeTemplate(scene){
+  scene=sfNormalizeSkyForgeScene(scene||sfCollectScene());
+  return [
+    'Root {',
+    ' inputs 0',
+    ' name "'+sfProjectDisplayName().replace(/"/g,'')+'"',
+    ' format "4096 2048 0 0 4096 2048 1 SkyForge_4K_HDRI"',
+    ' colorManagement OCIO',
+    ' workingSpace ACEScg',
+    '}',
+    'Read {',
+    ' file "'+sfExportBaseName('.exr')+'"',
+    ' colorspace ACEScg',
+    ' name SkyForge_HDRI_Input',
+    '}',
+    'Vectorfield {',
+    ' vfield_file ""',
+    ' name SkyForge_LUT_Placeholder',
+    '}',
+    'Write {',
+    ' file "'+sfExportBaseName('_comp.%04d.exr')+'"',
+    ' colorspace ACEScg',
+    ' file_type exr',
+    ' name SkyForge_EXR_Output',
+    '}',
+    '# SkyForge audit: '+JSON.stringify(sfSceneAudit(scene))
+  ].join('\n')+'\n';
+}
+function sfBuildUnrealCubemapManifest(scene){
+  scene=sfNormalizeSkyForgeScene(scene||sfCollectScene());
+  return JSON.stringify({
+    schema:'skyforge.unreal.cubemap',
+    version:1,
+    project:sfProjectDisplayName(),
+    colorSpace:scene.metadata.colorSpace||'ACEScg',
+    sourceHdri:sfExportBaseName('.exr'),
+    target:'Unreal Engine',
+    importSettings:{textureGroup:'Skybox',compression:'HDR',mipGenSettings:'NoMipmaps',sRGB:false},
+    lighting:{sun:scene.sun,weather:scene.weather},
+    audit:sfSceneAudit(scene)
+  },null,2);
+}
+function sfExportPipelinePackage(kind){
+  var scene=sfCollectScene(),filename='',content='',mime='text/plain;charset=utf-8';
+  kind=String(kind||'manifest').toLowerCase();
+  if(kind==='usd'){
+    filename=sfExportBaseName('_lighting.usda');
+    content=sfBuildUsdLightingRig(scene);
+  }else if(kind==='nuke'){
+    filename=sfExportBaseName('_comp.nk');
+    content=sfBuildNukeTemplate(scene);
+  }else if(kind==='unreal'){
+    filename=sfExportBaseName('_unreal_cubemap.json');
+    content=sfBuildUnrealCubemapManifest(scene);
+    mime='application/json;charset=utf-8';
+  }else{
+    filename=sfExportBaseName('_publish_manifest.skyforge.json');
+    content=JSON.stringify(sfBuildSkyForgeFile({project:{id:SF_PROJECT_ID,name:SF_PROJECT_NAME,scene:scene}}),null,2);
+    mime=SF_FILE_MIME;
+  }
+  sfDownloadTextFile(filename,content,mime);
+  sfRecordPipelineExport(kind,filename);
+  sfSetProjectDirty(true,'pipeline-export');
+  triToast('Exported: '+filename);
+}
+function sfShowSceneAudit(){
+  var audit=sfSceneAudit(sfCollectScene());
+  window.__sfLastSceneAudit=audit;
+  var summary=audit.ok?'Scene audit passed':'Scene audit: '+audit.issueCount+' note(s)';
+  var note=audit.issues.map(function(i){return i.level.toUpperCase()+': '+i.message;}).join('\n')||'No blocking issues.';
+  triToast(summary);
+  if(audit.issues.length)console.info('SkyForge scene audit\n'+note);
+  return audit;
+}
 function sfRunMenuAction(label){
   var l=String(label||'').toLowerCase();
   if(l.includes('open recent')){sfOpenProjectBrowser();return true;}
-  if(l.includes('publish package')){sfSaveProject('Publish package');triToast('Package prepared for publishing');return true;}
+  if(l.includes('publish package')){sfSaveProject('Publish package');sfExportPipelinePackage('manifest');return true;}
   if(l.includes('import hdri')){sfScrollSidebarTo('sec-hdri-lighting','HDRI');sfOpenHDRIFilePicker();return true;}
   if(l.includes('reference plate')){sfAddSceneObject('ITEM','Reference Plate',{props:{mode:'Reference',size:140,opacity:82,color:'#b8c7d9'}});if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('hierarchy');return true;}
   if(l.includes('suggest sun')||l.includes('suggest intensity')||l.includes('suggest hdri')||l.includes('suggest exposure')||l.includes('suggest color')){applySkyIntelligence();return true;}
@@ -4557,13 +4857,13 @@ function sfRunMenuAction(label){
   if(l.includes('batch render')){startRender();return true;}
   if(l.includes('cloud render')){triToast('Cloud render job queued locally');startRender();return true;}
   if(l.includes('live sync')){triToast('Live Sync armed for Blender');return true;}
-  if(l.includes('nuke')){sfAddSceneObject('NOTE','Nuke Template Note',{props:{status:'WIP',priority:2,text:'Export Nuke comp template with HDRI and ACEScg nodes.'}});return true;}
-  if(l.includes('unreal')){sfAddSceneObject('HDRI','Unreal Cubemap Export',{props:{exposure:.35,rotation:0,strength:1,temperature:5600}});return true;}
-  if(l.includes('usd')){sfAddSceneObject('LIGHT','USD Lighting Rig',{props:{intensity:2.1,temperature:5200,spread:64,color:'#e8812a'}});return true;}
+  if(l.includes('nuke')){sfExportPipelinePackage('nuke');return true;}
+  if(l.includes('unreal')){sfExportPipelinePackage('unreal');return true;}
+  if(l.includes('usd')){sfExportPipelinePackage('usd');return true;}
   if(l.includes('version control')){sfOpenVersions(SF_PROJECT_ID);return true;}
-  if(l.includes('project overview')){sfOpenProjectBrowser();return true;}
+  if(l.includes('project overview')){sfShowSceneAudit();sfOpenProjectBrowser();return true;}
   if(l==='sequences'||l==='shots'||l.includes('approvals')||l.includes('review notes')){sfSelectRightPanelTab('review');return true;}
-  if(l.includes('publish for review')){sfCreateABSnapshot('Review publish');sfSelectRightPanelTab('review');return true;}
+  if(l.includes('publish for review')){sfShowSceneAudit();sfCreateABSnapshot('Review publish');sfSelectRightPanelTab('review');return true;}
   if(['hdris','clouds','skies','volumes','presets','materials','luts'].includes(l)){sfSelectMarketplace(label);return true;}
   if(l.includes('install asset pack')){sfSelectMarketplace('Presets');return true;}
   if(l.includes('documentation')||l.includes('video tutorials')){openCmd();triToast(label+' search opened');return true;}
@@ -11386,6 +11686,8 @@ function sfInitCleanStartupScene(){
   }
   SF_PROJECT_NAME='Untitled SkyForge Scene';
   SF_KEYFRAMES=[];
+  SF_PIPELINE_EXPORTS=[];
+  window.__sfLastSceneAudit=null;
   if(typeof sfApplyTimelineState==='function')sfApplyTimelineState({framePercent:0,duration:sfTimelineDuration(),fps:sfTimelineFps(),zoom:SF_TIMELINE?.zoom||1,keyframes:[]});
   if(typeof sfApplyCurveState==='function')sfApplyCurveState(sfDefaultCurveState());
   if(typeof sfRestoreNodeGraph==='function')sfRestoreNodeGraph({nodes:[],links:[],view:{x:0,y:0,zoom:1}});
@@ -11405,7 +11707,7 @@ function sfInitCleanStartupScene(){
     if(typeof sfSyncGizmoFromViewport==='function')sfSyncGizmoFromViewport('PERSP');
   }
   if(typeof drawSky==='function')drawSky();
-  SF_DIRTY=false;
+  sfMarkSaved();
 }
 async function applySkyIntelligence(){
   const bar=document.querySelector('.sf-ai-meter i'); if(bar){bar.style.width='100%'; setTimeout(()=>bar.style.width='92%',400)}
@@ -11579,6 +11881,26 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
   document.addEventListener('keydown',function(e){
     if(e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){
+      e.preventDefault();
+      sfSaveProject(e.altKey?'Incremental checkpoint':'Saved from shortcut',{skipVersion:false});
+      return;
+    }
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='o'){
+      e.preventDefault();
+      sfOpenProjectBrowser();
+      return;
+    }
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='n'){
+      e.preventDefault();
+      sfNewProject();
+      return;
+    }
+    if(e.key==='F12'){
+      e.preventDefault();
+      startRender();
+      return;
+    }
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!e.shiftKey){
       e.preventDefault();
       sfUndo();
@@ -11663,8 +11985,14 @@ document.addEventListener('DOMContentLoaded',()=>{
       sfRenameSelectedObject();
     }
   });
-  document.addEventListener('input',function(e){if(e.target.closest('.shell'))SF_DIRTY=true;});
-  document.addEventListener('change',function(e){if(e.target.closest('.shell'))SF_DIRTY=true;});
+  document.addEventListener('input',function(e){if(e.target.closest('.shell'))sfSetProjectDirty(true,'input');});
+  document.addEventListener('change',function(e){if(e.target.closest('.shell'))sfSetProjectDirty(true,'change');});
+  window.addEventListener('beforeunload',function(e){
+    if(!SF_DIRTY)return;
+    e.preventDefault();
+    e.returnValue='';
+  });
+  setInterval(sfUpdateProjectStatus,1000);
   setInterval(sfLoadRenderQueue,8000);
 });
 </script>
