@@ -1812,9 +1812,10 @@ html,body{
 }
 .mb-m{
   min-height:30px;
-  padding:0 10px;
+  padding:0 6px;
+  font-size:11px;
   color:#d7dce6;
-  border-radius:8px;
+  border-radius:7px;
 }
 .mb-m:hover,.mb-m.open{
   background:rgba(255,255,255,.10);
@@ -2152,7 +2153,7 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
         <div class="prefs-panel" data-pref-panel="lights">
           <h3>Lights</h3>
           <div class="prefs-grid">
-            <div class="prefs-field"><div class="prefs-lbl">Color Space</div><select class="prefs-inp" id="set-color-space"><option>ACEScg</option><option>Linear</option><option>sRGB</option></select></div>
+            <div class="prefs-field"><div class="prefs-lbl">Color Space</div><select class="prefs-inp" id="set-color-space"><option>ACEScg</option><option>ACEScct</option><option>Linear</option><option>sRGB</option><option>Display P3</option><option>Rec.709</option><option>Rec.2020</option></select></div>
             <div class="prefs-field"><div class="prefs-lbl">Default Sun Temp</div><input class="prefs-inp" type="number" value="5200" step="50"></div>
             <label class="prefs-check">Use physically based units <input type="checkbox" checked></label>
             <label class="prefs-check">Clamp HDR highlights <input type="checkbox"></label>
@@ -2532,15 +2533,40 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
 
     <div class="mb-m" onclick="toggleMenu(this)">Color
       <div class="mb-dd">
-        <div class="dd-item acc">ACEScg Working Space</div>
-        <div class="dd-item">Filmic / AgX Preview</div>
-        <div class="dd-item">Kodak 2383</div>
-        <div class="dd-item">Fuji 3513</div>
-        <div class="dd-item">Arri Alexa Look</div>
+        <div class="dd-item acc" onclick="sfSetWorkingSpace('ACEScg')">ACEScg Working Space</div>
+        <div class="dd-item" onclick="sfSetNamedLook('AgX Filmic')">Filmic / AgX Preview</div>
+        <div class="dd-item" onclick="sfSetNamedLook('Kodak 2383')">Kodak 2383</div>
+        <div class="dd-item" onclick="sfSetNamedLook('Fuji 3513')">Fuji 3513</div>
+        <div class="dd-item" onclick="sfSetNamedLook('Arri Alexa')">Arri Alexa Look</div>
         <div class="dd-sep"></div>
-        <div class="dd-item">LUT Browser…</div>
-        <div class="dd-item">Highlight Rolloff</div>
-        <div class="dd-item">Split Toning</div>
+        <div class="dd-item" onclick="sfOpenSpaceColorConsole()">LUT Browser…</div>
+        <div class="dd-item" onclick="sfSpaceColorAdjust('roll',8)">Highlight Rolloff</div>
+        <div class="dd-item" onclick="sfSpaceColorApplyPreset('cinemaPrint')">Split Toning</div>
+      </div>
+    </div>
+
+    <div class="mb-m" onclick="toggleMenu(this)">Space Color
+      <div class="mb-dd">
+        <div class="dd-item acc" onclick="sfOpenSpaceColorConsole()">Final Color Console</div>
+        <div class="dd-item" onclick="sfApplySpaceColorGrade()">Apply Final Grade</div>
+        <div class="dd-item" onclick="sfSpaceColorAudit()">Color Pipeline Audit</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfSpaceColorSetWorking('ACEScg','Scene Linear')">ACEScg Scene Linear</div>
+        <div class="dd-item" onclick="sfSpaceColorSetWorking('ACEScct','Grading')">ACEScct Grading</div>
+        <div class="dd-item" onclick="sfSpaceColorSetWorking('Display P3','Wide Gamut Review')">Display P3 Review</div>
+        <div class="dd-item" onclick="sfSpaceColorSetWorking('Rec.709','SDR Master')">Rec.709 SDR Master</div>
+        <div class="dd-item" onclick="sfSpaceColorSetWorking('Rec.2020','HDR Master')">Rec.2020 HDR Master</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfSpaceColorApplyPreset('cinemaPrint')">Cinema Print Master</div>
+        <div class="dd-item" onclick="sfSpaceColorApplyPreset('hdrMaster')">HDR Highlight Master</div>
+        <div class="dd-item" onclick="sfSpaceColorApplyPreset('sdrBroadcast')">SDR Broadcast Pass</div>
+        <div class="dd-item" onclick="sfSpaceColorApplyPreset('neutralQc')">Neutral QC Pass</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfSpaceColorProtectHighlights()">Protect Highlights</div>
+        <div class="dd-item" onclick="sfSpaceColorAdjust('contrast',5)">Contrast +5</div>
+        <div class="dd-item" onclick="sfSpaceColorAdjust('sat',-5)">Saturation -5</div>
+        <div class="dd-item" onclick="sfSpaceColorToggleGamutWarning()">Gamut Warning Overlay</div>
+        <div class="dd-item" onclick="sfExportSpaceColorLut()">Export LUT .cube</div>
       </div>
     </div>
 
@@ -5382,7 +5408,8 @@ async function sfLoadSettings(){
     var settings=await sfRequest('/settings');
     SF_SETTINGS=settings||{};
     sfSetValue('set-default-resolution',settings.defaultResolution);
-    sfSetValue('set-color-space',settings.colorSpace);
+    if(typeof sfSetWorkingSpace==='function')sfSetWorkingSpace(settings.colorSpace||'ACEScg',true);
+    else sfSetValue('set-color-space',settings.colorSpace||'ACEScg');
     sfSetValue('set-render-device',settings.renderDevice);
     sfSetValue('set-autosave',settings.autosaveInterval);
     sfSetValue('set-blender-path',settings.blenderPath);
@@ -5834,7 +5861,9 @@ function sfSelectMarketplace(label){
   if(card && card.scrollIntoView)card.scrollIntoView({block:'nearest'});
   triToast('Marketplace: '+label);
 }
-function sfSetWorkingSpace(name){
+var SF_SPACE_COLOR=window.SF_SPACE_COLOR||{workingSpace:'ACEScg',displayTransform:'Scene Linear',preset:'Neutral QC',gamutWarning:false};
+window.SF_SPACE_COLOR=SF_SPACE_COLOR;
+function sfSetWorkingSpace(name,silent){
   var label=String(name||'ACES').replace(/\s+working space/i,'').trim()||'ACES';
   var select=document.getElementById('set-color-space');
   if(select){
@@ -5842,11 +5871,23 @@ function sfSetWorkingSpace(name){
       var text=o.textContent.toLowerCase();
       return text.includes(label.toLowerCase()) || label.toLowerCase().includes(text);
     });
-    if(opt)select.value=opt.value||opt.textContent;
+    if(!opt){
+      opt=document.createElement('option');
+      opt.value=label;
+      opt.textContent=label;
+      select.appendChild(opt);
+    }
+    label=opt.value||opt.textContent||label;
+    select.value=label;
   }
+  SF_SPACE_COLOR.workingSpace=label;
+  Array.from(document.querySelectorAll('.sf-look-row')).forEach(function(row){
+    var span=row.querySelector('span'),value=row.querySelector('b');
+    if(span&&value&&/color pipeline/i.test(span.textContent||''))value.textContent=label;
+  });
   var pill=document.querySelectorAll('.mb-r .mb-pill')[2];
   if(pill)pill.textContent=label;
-  if(typeof triToast==='function')triToast('Color space: '+label);
+  if(!silent&&typeof triToast==='function')triToast('Color space: '+label);
 }
 function sfSetLookSlider(label,value){
   var section=document.getElementById('sec-look-development');if(!section)return false;
@@ -5858,6 +5899,167 @@ function sfSetLookSlider(label,value){
   input.value=value;
   input.dispatchEvent(new Event('input',{bubbles:true}));
   return true;
+}
+function sfSpaceColorClamp(value,min,max){
+  value=Number(value);
+  if(!Number.isFinite(value))value=min;
+  return Math.max(min,Math.min(max,value));
+}
+function sfSpaceColorSlider(kind){
+  var key=String(kind||'').toLowerCase();
+  var id=key.includes('sat')?'v-sat':key.includes('roll')||key.includes('highlight')?'v-roll':'v-contrast';
+  var value=document.getElementById(id);
+  var wrap=value&&value.closest?value.closest('.sl-wrap'):null;
+  return wrap?wrap.querySelector('input[type=range]'):null;
+}
+function sfSpaceColorSetSlider(kind,value){
+  var input=sfSpaceColorSlider(kind);
+  if(!input)return false;
+  input.value=sfSpaceColorClamp(value,Number(input.min)||0,Number(input.max)||100);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  return true;
+}
+function sfSpaceColorCurrent(){
+  var select=document.getElementById('set-color-space');
+  var look=document.querySelector('#sec-look-development .tri-look.on b')?.textContent?.trim()||'Kodak 2383';
+  var state=window.SF_SPACE_COLOR||SF_SPACE_COLOR;
+  return {
+    workingSpace:select&&select.value?select.value:(state.workingSpace||'ACEScg'),
+    displayTransform:state.displayTransform||'Scene Linear',
+    preset:state.preset||'Neutral QC',
+    look:look,
+    contrast:sfNumericText('v-contrast',.22),
+    saturation:sfNumericText('v-sat',.68),
+    highlightRolloff:sfNumericText('v-roll',.74),
+    gamutWarning:!!state.gamutWarning
+  };
+}
+function sfSpaceColorSyncBadges(){
+  var c=sfSpaceColorCurrent();
+  SF_SPACE_COLOR.workingSpace=c.workingSpace;
+  var hud=document.querySelector('.sphere-hud');
+  if(hud)hud.textContent='EV 14.2 · '+c.workingSpace;
+  Array.from(document.querySelectorAll('.sf-look-row')).forEach(function(row){
+    var label=row.querySelector('span')?.textContent||'';
+    var value=row.querySelector('b');
+    if(!value)return;
+    if(/color pipeline/i.test(label))value.textContent=c.workingSpace;
+    if(/^lut$/i.test(label))value.textContent=c.look;
+  });
+  var vp=document.getElementById('vp');
+  if(vp)vp.classList.toggle('sf-gamut-warning',!!c.gamutWarning);
+}
+function sfOpenSpaceColorConsole(){
+  var sec=document.getElementById('sec-look-development');
+  if(sec){
+    sec.classList.remove('closed');
+    if(sec.scrollIntoView)sec.scrollIntoView({block:'start'});
+  }
+  if(typeof sfSetLeftTabLabel==='function')sfSetLeftTabLabel('Assets');
+  sfSpaceColorSyncBadges();
+  if(typeof triToast==='function')triToast('Space Color console ready');
+}
+function sfSpaceColorSetWorking(space,transform){
+  SF_SPACE_COLOR.displayTransform=transform||'Scene Linear';
+  sfSetWorkingSpace(space,true);
+  sfSpaceColorSyncBadges();
+  if(typeof drawSky==='function')drawSky();
+  if(typeof triToast==='function')triToast('Space Color: '+SF_SPACE_COLOR.workingSpace+' · '+SF_SPACE_COLOR.displayTransform);
+}
+function sfSpaceColorApplyPreset(name){
+  var presets={
+    cinemaPrint:{label:'Cinema Print Master',space:'ACEScg',transform:'Film Print 2383',look:'Kodak 2383',contrast:32,saturation:72,rolloff:86},
+    hdrMaster:{label:'HDR Highlight Master',space:'Rec.2020',transform:'PQ HDR 1000 nits',look:'AgX Filmic',contrast:28,saturation:70,rolloff:94},
+    sdrBroadcast:{label:'SDR Broadcast Pass',space:'Rec.709',transform:'Gamma 2.4 SDR',look:'Fuji 3513',contrast:24,saturation:62,rolloff:82},
+    neutralQc:{label:'Neutral QC Pass',space:'ACEScg',transform:'Scene Linear QC',look:'AgX Filmic',contrast:16,saturation:58,rolloff:74}
+  };
+  var p=presets[name]||presets.neutralQc;
+  SF_SPACE_COLOR.preset=p.label;
+  sfSpaceColorSetWorking(p.space,p.transform);
+  sfSetNamedLook(p.look);
+  sfSpaceColorSetSlider('contrast',p.contrast);
+  sfSpaceColorSetSlider('sat',p.saturation);
+  sfSpaceColorSetSlider('roll',p.rolloff);
+  sfSpaceColorSyncBadges();
+  if(typeof drawSky==='function')drawSky();
+  if(typeof triToast==='function')triToast('Space Color preset: '+p.label);
+}
+function sfSpaceColorAdjust(kind,delta){
+  var input=sfSpaceColorSlider(kind);
+  if(!input)return false;
+  var next=sfSpaceColorClamp((Number(input.value)||0)+(Number(delta)||0),Number(input.min)||0,Number(input.max)||100);
+  input.value=next;
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  sfSpaceColorSyncBadges();
+  if(typeof drawSky==='function')drawSky();
+  if(typeof triToast==='function')triToast('Space Color adjusted');
+  return true;
+}
+function sfSpaceColorProtectHighlights(){
+  var roll=sfSpaceColorSlider('roll'),contrast=sfSpaceColorSlider('contrast');
+  if(roll)sfSpaceColorSetSlider('roll',Math.max(Number(roll.value)||0,88));
+  if(contrast&&Number(contrast.value)>36)sfSpaceColorSetSlider('contrast',34);
+  SF_SPACE_COLOR.displayTransform='Protected Highlight Rolloff';
+  sfSpaceColorSyncBadges();
+  if(typeof drawSky==='function')drawSky();
+  if(typeof triToast==='function')triToast('Highlights protected');
+}
+function sfEnsureSpaceColorStyle(){
+  if(document.getElementById('sf-space-color-style'))return;
+  var style=document.createElement('style');
+  style.id='sf-space-color-style';
+  style.textContent='#vp.sf-gamut-warning:after{content:"GAMUT WARNING";position:absolute;right:14px;top:48px;z-index:28;padding:5px 8px;border-radius:6px;background:rgba(255,69,58,.16);border:1px solid rgba(255,69,58,.55);color:#ffd1ce;font:700 10px var(--fd);pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,.35)}#vp.sf-gamut-warning #vp-canvas{filter:saturate(1.12) contrast(1.04)}';
+  document.head.appendChild(style);
+}
+function sfSpaceColorToggleGamutWarning(){
+  sfEnsureSpaceColorStyle();
+  SF_SPACE_COLOR.gamutWarning=!SF_SPACE_COLOR.gamutWarning;
+  sfSpaceColorSyncBadges();
+  if(typeof drawSky==='function')drawSky();
+  if(typeof triToast==='function')triToast('Gamut warning '+(SF_SPACE_COLOR.gamutWarning?'enabled':'disabled'));
+}
+function sfSpaceColorAudit(){
+  var scene=typeof sfCollectScene==='function'?sfCollectScene():null;
+  var audit=typeof sfSceneAudit==='function'?sfSceneAudit(scene):{issueCount:0,issues:[],ok:true};
+  var c=sfSpaceColorCurrent();
+  window.__sfLastSpaceColorAudit={checkedAt:typeof sfNowIso==='function'?sfNowIso():new Date().toISOString(),color:c,audit:audit};
+  if(typeof triToast==='function')triToast('Space Color audit: '+c.workingSpace+' · '+audit.issueCount+' notes');
+  return window.__sfLastSpaceColorAudit;
+}
+function sfApplySpaceColorGrade(){
+  var c=sfSpaceColorCurrent();
+  var row=sfUpsertMenuObject('FX','Space Color Final Grade','Look Development','LUT',{pass:'Space Color Final Grade',workingSpace:c.workingSpace,displayTransform:c.displayTransform,preset:c.preset,look:c.look,contrast:c.contrast,saturation:c.saturation,highlightRolloff:c.highlightRolloff,gamutWarning:c.gamutWarning?'On':'Off',opacity:100,softness:18,samples:128,seed:709},{x:140,y:100,z:-150});
+  sfUpsertMenuObject('NOTE','Space Color QC Notes','Look Development','LUT',{status:'Ready',priority:1,text:'Final grade: '+c.preset+' / '+c.workingSpace+' / '+c.displayTransform+' / '+c.look},{x:205,y:92,z:-185});
+  if(row&&typeof triSelectOut==='function')triSelectOut(row);
+  SF_DIRTY=true;
+  if(typeof drawSky==='function')drawSky();
+  if(typeof triToast==='function')triToast('Space Color final grade applied');
+}
+function sfExportSpaceColorLut(){
+  var c=sfSpaceColorCurrent();
+  var size=17,lines=['TITLE "SkyForge Space Color - '+c.preset+'"','LUT_3D_SIZE '+size,'DOMAIN_MIN 0.0 0.0 0.0','DOMAIN_MAX 1.0 1.0 1.0'];
+  var contrastGain=.85+c.contrast*.9,satGain=.65+c.saturation*.72,roll=1.1+c.highlightRolloff*1.8;
+  function clamp01(v){return Math.max(0,Math.min(1,v));}
+  function tone(v){
+    var x=(v-.5)*contrastGain+.5,knee=.68;
+    if(x>knee){
+      var t=clamp01((x-knee)/(1-knee));
+      x=knee+(1-Math.exp(-t*roll))/(1-Math.exp(-roll))*(1-knee);
+    }
+    return clamp01(x);
+  }
+  for(var b=0;b<size;b++)for(var g=0;g<size;g++)for(var r=0;r<size;r++){
+    var rr=r/(size-1),gg=g/(size-1),bb=b/(size-1);
+    var luma=.2126*rr+.7152*gg+.0722*bb;
+    rr=tone(luma+(rr-luma)*satGain);
+    gg=tone(luma+(gg-luma)*satGain);
+    bb=tone(luma+(bb-luma)*satGain);
+    lines.push(rr.toFixed(6)+' '+gg.toFixed(6)+' '+bb.toFixed(6));
+  }
+  var filename=sfExportBaseName('-space-color.cube');
+  sfDownloadTextFile(filename,lines.join('\n'),'application/octet-stream');
+  if(typeof sfRecordPipelineExport==='function')sfRecordPipelineExport('space-color-lut',filename);
+  if(typeof triToast==='function')triToast('Space Color LUT exported');
 }
 function sfDownloadTextFile(filename,text,mime){
   var blob=new Blob([String(text||'')],{type:mime||'text/plain;charset=utf-8'});
