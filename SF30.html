@@ -422,19 +422,28 @@ body.sf-ab-on .ab-label{display:block}
 .sf-node-graph.panning{cursor:grabbing}
 .sf-node-links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .sf-node-layer{position:absolute;inset:0;transform-origin:0 0;will-change:transform}
-.sf-node-link{fill:none;stroke:rgba(90,159,255,.52);stroke-width:1.7;pointer-events:stroke;cursor:pointer}
+.sf-node-link{fill:none;stroke:rgba(90,159,255,.52);stroke-width:2.1;pointer-events:stroke;cursor:pointer}
 .sf-node-link:hover{stroke:rgba(232,129,42,.85);stroke-width:2.2}
 .sf-node-link.sel{stroke:var(--acc);stroke-width:2.4;filter:drop-shadow(0 0 5px rgba(232,129,42,.35))}
 .sf-node-link.temp{stroke:rgba(232,129,42,.72);stroke-width:1.8;stroke-dasharray:6 5;pointer-events:none}
-.sf-node{position:absolute;width:142px;min-height:58px;border:1px solid var(--b1);border-radius:6px;background:rgba(18,19,22,.96);box-shadow:0 10px 24px rgba(0,0,0,.28);cursor:grab;user-select:none;overflow:visible}
+.sf-node-link.off{stroke:rgba(255,255,255,.16);stroke-dasharray:8 7}
+.sf-node{position:absolute;width:170px;min-height:82px;border:1px solid var(--b1);border-radius:6px;background:rgba(18,19,22,.96);box-shadow:0 10px 24px rgba(0,0,0,.28);cursor:grab;user-select:none;overflow:visible}
 .sf-node:active{cursor:grabbing}
 .sf-node.sel{border-color:var(--acc);box-shadow:0 0 0 1px rgba(232,129,42,.18),0 12px 28px rgba(0,0,0,.38)}
+.sf-node.off{opacity:.56}
 .sf-node-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 7px;border-bottom:1px solid var(--b0);font-size:9px;font-family:var(--fd);font-weight:700;color:var(--t0);letter-spacing:.04em}
 .sf-node-type{font-size:8px;font-family:var(--fm);color:var(--bl);font-weight:400}
-.sf-node-body{padding:6px 7px;font-size:9.5px;line-height:1.35;color:var(--t2)}
-.sf-node-socket{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--bl);border:1px solid rgba(255,255,255,.55);top:26px;z-index:3;cursor:crosshair;box-shadow:0 0 0 2px rgba(0,0,0,.35)}
-.sf-node-socket.in{left:-4px;background:var(--gn)}.sf-node-socket.out{right:-4px;background:var(--acc)}
-.sf-node-socket:hover{transform:scale(1.35);box-shadow:0 0 0 3px rgba(232,129,42,.18),0 0 10px rgba(232,129,42,.5)}
+.sf-node-state{font-size:7.5px;color:var(--gn);font-family:var(--fm);border:1px solid rgba(62,207,126,.25);border-radius:3px;padding:1px 4px}
+.sf-node.off .sf-node-state{color:var(--rd);border-color:rgba(239,85,85,.3)}
+.sf-node-body{padding:6px 7px 7px;font-size:9.5px;line-height:1.35;color:var(--t2)}
+.sf-node-summary{margin-bottom:6px;color:var(--t2)}
+.sf-node-ports{display:grid;gap:3px}
+.sf-node-port{height:18px;display:flex;align-items:center;gap:5px;position:relative;color:var(--t3);font:8.5px var(--fm)}
+.sf-node-port.out{justify-content:flex-end;text-align:right}
+.sf-node-socket{width:14px;height:14px;border-radius:50%;background:var(--bl);border:1px solid rgba(255,255,255,.65);z-index:3;cursor:crosshair;box-shadow:0 0 0 2px rgba(0,0,0,.35);flex:0 0 14px}
+.sf-node-socket.in{background:var(--gn);margin-left:-14px}.sf-node-socket.out{background:var(--acc);margin-right:-14px}
+.sf-node-socket:hover{transform:scale(1.24);box-shadow:0 0 0 4px rgba(232,129,42,.18),0 0 12px rgba(232,129,42,.55)}
+.sf-node-socket.hot{box-shadow:0 0 0 4px rgba(232,129,42,.20),0 0 15px rgba(232,129,42,.62)}
 .sf-node-inspector{display:flex;flex-direction:column;gap:6px}
 .sf-node-row{display:grid;grid-template-columns:72px 1fr;gap:6px;align-items:center;font-size:10px;color:var(--t2);font-family:var(--fm)}
 .sf-node-row input,.sf-node-row select{min-width:0;background:var(--bg4);border:1px solid var(--b1);border-radius:3px;color:var(--t0);font-family:var(--fm);font-size:10px;padding:4px 5px;outline:none}
@@ -3334,6 +3343,12 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
         <button class="sf-mini-btn" onclick="sfCreateNode('LIGHT')">Light</button>
         <button class="sf-mini-btn" onclick="sfCreateNode('VOL')">Volume</button>
         <button class="sf-mini-btn" onclick="sfCreateNode('FX')">FX</button>
+        <button class="sf-mini-btn" onclick="sfCreateNode('TIME')">Time</button>
+        <button class="sf-mini-btn" onclick="sfCreateNode('WIND')">Wind</button>
+        <button class="sf-mini-btn" onclick="sfCreateNode('GRADE')">Grade</button>
+        <button class="sf-mini-btn" onclick="sfCreateNode('MATH')">Math</button>
+        <button class="sf-mini-btn" onclick="sfCreateNode('MIX')">Mix</button>
+        <button class="sf-mini-btn" onclick="sfApplyNodeGraphToScene()">Apply Graph</button>
         <button class="sf-mini-btn" onclick="sfAutoLayoutNodes()">Layout</button>
         <button class="sf-mini-btn" onclick="sfFrameNodeGraph()">Frame</button>
         <button class="sf-mini-btn" onclick="sfResetNodeGraphView()">Reset</button>
@@ -3352,6 +3367,8 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
       </div>
       <div class="sf-mini-actions">
         <button class="sf-mini-btn" onclick="sfConnectSelectedNodeToOutput()">Connect Output</button>
+        <button class="sf-mini-btn" onclick="sfToggleSelectedNode()">Enable</button>
+        <button class="sf-mini-btn" onclick="sfToggleSelectedNodeLink()">Toggle Link</button>
         <button class="sf-mini-btn" onclick="sfDeleteSelectedNodeLink()">Delete Link</button>
         <button class="sf-mini-btn" onclick="sfClearSelectedNodeLinks()">Clear Links</button>
         <button class="sf-mini-btn" onclick="sfApplySelectedNodeToScene()">Apply</button>
@@ -9854,6 +9871,25 @@ var SF_NODE_DRAG=null;
 var SF_NODE_PAN=null;
 var SF_NODE_LINK_DRAG=null;
 var SF_NODE_LINK_SELECTED=-1;
+var SF_NODE_W=170;
+var SF_NODE_PORT_Y0=58;
+var SF_NODE_PORT_GAP=18;
+var SF_NODE_SCENE_TYPES=['SKY','LIGHT','CLOUD','VOL','FX','CAM','HDRI','NOTE','ITEM'];
+var SF_NODE_TYPES=SF_NODE_SCENE_TYPES.concat(['TIME','WIND','GRADE','MATH','MIX']);
+
+function sfNormalizeNodeType(type){
+  type=String(type||'ITEM').trim().toUpperCase();
+  var aliases={OUTPUT:'HDRI',SUN:'LIGHT',VOLUME:'VOL',COLOR:'GRADE',COLORGRADE:'GRADE',RANDOMIZE:'MATH'};
+  type=aliases[type]||type;
+  return SF_NODE_TYPES.includes(type)?type:'ITEM';
+}
+function sfIsSceneNodeType(type){
+  return SF_NODE_SCENE_TYPES.includes(sfNormalizeNodeType(type));
+}
+function sfNodeSceneType(node){
+  var type=sfNormalizeNodeType(node&&node.type);
+  return sfIsSceneNodeType(type)?type:'';
+}
 
 function sfRightPanelKeyFromLabel(label){
   label=String(label||'hierarchy').toLowerCase().replace(/x$/,'').trim();
@@ -9909,8 +9945,61 @@ function sfSelectRightPanelTab(key){
   }
 }
 
+function sfNodeHelperSchemas(){
+  return {
+    TIME:[
+      {key:'hour',label:'Hour',kind:'range',min:0,max:24,step:.25,default:18},
+      {key:'elevation',label:'Sun Elev',kind:'range',min:-18,max:90,step:.1,default:7},
+      {key:'azimuth',label:'Azimuth',kind:'range',min:0,max:360,step:1,default:215},
+      {key:'temperature',label:'Temp K',kind:'number',min:1500,max:12000,step:50,default:5200}
+    ],
+    WIND:[
+      {key:'wind',label:'Speed',kind:'range',min:0,max:80,step:1,default:18},
+      {key:'direction',label:'Direction',kind:'range',min:0,max:360,step:1,default:270},
+      {key:'turbulence',label:'Turbulence',kind:'range',min:0,max:1,step:.01,default:.3},
+      {key:'spread',label:'Cloud Spread',kind:'range',min:0,max:800,step:10,default:220}
+    ],
+    GRADE:[
+      {key:'look',label:'Look',kind:'select',options:['Kodak 2383','Fuji 3513','Arri Alexa','AgX Filmic','Neutral ACES'],default:'Kodak 2383'},
+      {key:'contrast',label:'Contrast',kind:'range',min:0,max:1,step:.01,default:.22},
+      {key:'saturation',label:'Saturation',kind:'range',min:0,max:1.5,step:.01,default:.68},
+      {key:'highlightRolloff',label:'Rolloff',kind:'range',min:0,max:1,step:.01,default:.74},
+      {key:'opacity',label:'Opacity',kind:'range',min:0,max:100,step:1,default:65}
+    ],
+    MATH:[
+      {key:'property',label:'Property',kind:'select',options:['intensity','density','coverage','exposure','opacity','temperature','wind','haze'],default:'intensity'},
+      {key:'multiply',label:'Multiply',kind:'number',min:-10,max:10,step:.01,default:1},
+      {key:'add',label:'Add',kind:'number',min:-10000,max:10000,step:.01,default:0},
+      {key:'clampMin',label:'Clamp Min',kind:'number',min:-10000,max:10000,step:.01,default:0},
+      {key:'clampMax',label:'Clamp Max',kind:'number',min:-10000,max:12000,step:.01,default:10}
+    ],
+    MIX:[
+      {key:'amount',label:'Amount',kind:'range',min:0,max:1,step:.01,default:.5},
+      {key:'mode',label:'Mode',kind:'select',options:['Blend','Add','Multiply'],default:'Blend'}
+    ]
+  };
+}
+function sfNodePropertySchema(type){
+  type=sfNormalizeNodeType(type);
+  return sfNodeHelperSchemas()[type]||sfPropertySchemaForType(type);
+}
+function sfDefaultNodeProps(type){
+  var props={};
+  sfNodePropertySchema(type).forEach(function(field){props[field.key]=field.default;});
+  return props;
+}
+function sfSanitizeNodeProps(type,props){
+  type=sfNormalizeNodeType(type);
+  if(sfIsSceneNodeType(type))return Object.assign({},props||{},sfSanitizePropsForType(type,props||{}));
+  props=props&&typeof props==='object'?props:{};
+  var next={};
+  sfNodePropertySchema(type).forEach(function(field){
+    next[field.key]=sfNormalizePropValue(field,props[field.key]!==undefined?props[field.key]:field.default);
+  });
+  return next;
+}
 function sfNodeTypeMeta(type){
-  type=sfNormalizeObjectType(type||'ITEM');
+  type=sfNormalizeNodeType(type||'ITEM');
   return {
     SKY:{label:'Sky Model',color:'#5a9fff'},
     LIGHT:{label:'Light Driver',color:'#e8812a'},
@@ -9920,25 +10009,30 @@ function sfNodeTypeMeta(type){
     CAM:{label:'Camera',color:'#f5c842'},
     HDRI:{label:'HDRI Probe',color:'#5a9fff'},
     NOTE:{label:'Note',color:'#aeaeb8'},
+    TIME:{label:'Time Driver',color:'#f5c842'},
+    WIND:{label:'Wind Field',color:'#64d2ff'},
+    GRADE:{label:'Color Grade',color:'#ff7ab6'},
+    MATH:{label:'Math Modifier',color:'#bf5af2'},
+    MIX:{label:'Mix / Blend',color:'#30d158'},
     ITEM:{label:'Object',color:'#e8e8ea'}
   }[type]||{label:'Object',color:'#e8e8ea'};
 }
 function sfCreateNodeData(type,name,x,y,props,key){
-  type=sfNormalizeObjectType(type||'ITEM');
+  type=sfNormalizeNodeType(type||'ITEM');
   return {
     id:'node-'+Date.now()+'-'+Math.floor(Math.random()*9999),
     key:key||'',
     type:type,
-    name:name||sfObjectMeta(type)[1],
+    name:name||(sfIsSceneNodeType(type)?sfObjectMeta(type)[1]:sfNodeTypeMeta(type).label),
     x:Number.isFinite(Number(x))?Number(x):40,
     y:Number.isFinite(Number(y))?Number(y):40,
-    props:props||{}
+    props:sfSanitizeNodeProps(type,props||{})
   };
 }
 function sfDefaultNodeGraph(){
   return {
     nodes:[
-      {id:'node-output',type:'HDRI',name:'HDRI Output',x:260,y:120,props:{format:'EXR 32-bit'}}
+      {id:'node-output',type:'HDRI',name:'HDRI Output',x:300,y:120,props:{format:'EXR 32-bit'}}
     ],
     links:[],
     view:{x:0,y:0,zoom:1}
@@ -9965,13 +10059,24 @@ function sfNodeViewportCenter(){
 function sfEnsureNodeGraph(){
   if(!SF_NODE_GRAPH||!Array.isArray(SF_NODE_GRAPH.nodes)||!SF_NODE_GRAPH.nodes.length)SF_NODE_GRAPH=sfDefaultNodeGraph();
   if(!Array.isArray(SF_NODE_GRAPH.links))SF_NODE_GRAPH.links=[];
+  SF_NODE_GRAPH.nodes.forEach(function(node){
+    node.type=sfNormalizeNodeType(node.type);
+    node.props=sfSanitizeNodeProps(node.type,node.props||{});
+    if(node.enabled===undefined)node.enabled=true;
+  });
+  SF_NODE_GRAPH.links=SF_NODE_GRAPH.links.map(function(link){return Object.assign({fromSocket:'out',toSocket:'in',enabled:true},link);});
   sfEnsureNodeView();
 }
 function sfRestoreNodeGraph(graph){
   if(!graph||!Array.isArray(graph.nodes)){SF_NODE_GRAPH=sfDefaultNodeGraph();return;}
   SF_NODE_GRAPH={
-    nodes:graph.nodes.map(function(n){return Object.assign({id:'node-'+Date.now(),type:'ITEM',name:'Node',x:40,y:40,props:{}},n);}),
-    links:Array.isArray(graph.links)?graph.links.slice():[],
+    nodes:graph.nodes.map(function(n){
+      var node=Object.assign({id:'node-'+Date.now(),type:'ITEM',name:'Node',x:40,y:40,props:{},enabled:true},n);
+      node.type=sfNormalizeNodeType(node.type);
+      node.props=sfSanitizeNodeProps(node.type,node.props||{});
+      return node;
+    }),
+    links:Array.isArray(graph.links)?graph.links.map(function(link){return Object.assign({fromSocket:'out',toSocket:'in',enabled:true},link);}):[],
     view:Object.assign({x:0,y:0,zoom:1},graph.view||{})
   };
   sfEnsureNodeView();
@@ -9981,14 +10086,14 @@ function sfRestoreNodeGraph(graph){
 function sfBuildNodeGraphFromScene(){
   sfHistoryCapture('Build node graph');
   var view=Object.assign({x:0,y:0,zoom:1},SF_NODE_GRAPH?.view||{});
-  var output={id:'node-output',type:'HDRI',name:'HDRI Output',x:410,y:150,props:{format:sfActiveText('.fmt-b.active','EXR 32-bit'),resolution:sfActiveText('.res-b.active','4K')}};
+  var output={id:'node-output',type:'HDRI',name:'HDRI Output',x:455,y:150,props:{format:sfActiveText('.fmt-b.active','EXR 32-bit'),resolution:sfActiveText('.res-b.active','4K')}};
   var rows=Array.from(document.querySelectorAll('#outliner-list .tri-out-extra'));
   var typeOrder={SKY:0,LIGHT:1,CLOUD:2,VOL:3,FX:4,HDRI:5,CAM:6,NOTE:7,ITEM:8};
   rows.sort(function(a,b){return (typeOrder[a.children[2]?.textContent?.trim()]||9)-(typeOrder[b.children[2]?.textContent?.trim()]||9);});
   var nodes=rows.slice(0,18).map(function(row,i){
     var type=sfNormalizeObjectType(row.children[2]?.textContent?.trim()||'ITEM');
     var col=i%2,rowIndex=Math.floor(i/2);
-    return sfCreateNodeData(type,row.children[1]?.textContent?.trim()||sfObjectMeta(type)[1],34+col*175,28+rowIndex*82,sfGetRowProps(row),row.dataset.sfKey||'');
+    return sfCreateNodeData(type,row.children[1]?.textContent?.trim()||sfObjectMeta(type)[1],34+col*208,28+rowIndex*112,sfGetRowProps(row),row.dataset.sfKey||'');
   });
   nodes.push(output);
   SF_NODE_GRAPH={nodes:nodes,links:nodes.filter(function(n){return n.id!==output.id && ['SKY','LIGHT','CLOUD','VOL','FX','HDRI','ITEM'].includes(n.type);}).map(function(n){return {from:n.id,to:output.id};}),view:view};
@@ -9998,8 +10103,34 @@ function sfBuildNodeGraphFromScene(){
   triToast('Node graph rebuilt from scene');
 }
 function sfNodeById(id){return (SF_NODE_GRAPH.nodes||[]).find(function(n){return n.id===id;});}
-function sfNodeCenter(node,side){
-  return {x:Number(node.x)+(side==='out'?142:0),y:Number(node.y)+29};
+function sfNodeSocketDefinitions(type,side){
+  type=sfNormalizeNodeType(type||'ITEM');
+  var defs={
+    SKY:{in:[['driver','Driver'],['grade','Grade']],out:[['sky','Sky']]},
+    LIGHT:{in:[['time','Time'],['math','Math']],out:[['light','Light']]},
+    CLOUD:{in:[['wind','Wind'],['math','Math']],out:[['cloud','Cloud']]},
+    VOL:{in:[['sky','Sky'],['wind','Wind']],out:[['volume','Volume']]},
+    FX:{in:[['grade','Grade'],['source','Source']],out:[['fx','FX']]},
+    CAM:{in:[['rig','Rig']],out:[['camera','Camera']]},
+    HDRI:{in:[['sky','Sky'],['light','Light'],['cloud','Cloud'],['fx','FX']],out:[['output','Output']]},
+    NOTE:{in:[['ref','Ref']],out:[['note','Note']]},
+    ITEM:{in:[['input','Input']],out:[['object','Object']]},
+    TIME:{in:[],out:[['time','Time'],['light','Sun']]},
+    WIND:{in:[],out:[['wind','Wind']]},
+    GRADE:{in:[['source','Source']],out:[['grade','Grade']]},
+    MATH:{in:[['value','Value']],out:[['math','Math']]},
+    MIX:{in:[['a','A'],['b','B']],out:[['mix','Mix']]}
+  }[type]||{in:[['input','Input']],out:[['output','Output']]};
+  return (defs[side]||[]).map(function(item){return {key:item[0],label:item[1]};});
+}
+function sfNodeSocketIndex(node,side,key){
+  var defs=sfNodeSocketDefinitions(node&&node.type,side);
+  var idx=defs.findIndex(function(d){return d.key===(key||'');});
+  return idx>=0?idx:0;
+}
+function sfNodeCenter(node,side,socketKey){
+  var idx=sfNodeSocketIndex(node,side,socketKey);
+  return {x:Number(node.x)+(side==='out'?SF_NODE_W:0),y:Number(node.y)+SF_NODE_PORT_Y0+idx*SF_NODE_PORT_GAP+7};
 }
 function sfNodeLinkPath(p1,p2){
   return 'M '+p1.x+' '+p1.y+' C '+(p1.x+70)+' '+p1.y+' '+(p2.x-70)+' '+p2.y+' '+p2.x+' '+p2.y;
@@ -10007,6 +10138,17 @@ function sfNodeLinkPath(p1,p2){
 function sfNodeLinkTitle(link){
   var a=sfNodeById(link.from),b=sfNodeById(link.to);
   return (a?.name||'Node')+' -> '+(b?.name||'Node');
+}
+function sfNodePortHtml(node,side){
+  var ports=sfNodeSocketDefinitions(node.type,side);
+  if(!ports.length)return '';
+  return '<div class="sf-node-ports '+side+'">'+ports.map(function(port){
+    return '<div class="sf-node-port '+side+'">'+
+      (side==='in'?'<span class="sf-node-socket in" data-side="in" data-socket="'+sfEscape(port.key)+'" title="Input: '+sfEscape(port.label)+'"></span>':'')+
+      '<span>'+sfEscape(port.label)+'</span>'+
+      (side==='out'?'<span class="sf-node-socket out" data-side="out" data-socket="'+sfEscape(port.key)+'" title="Output: '+sfEscape(port.label)+'"></span>':'')+
+    '</div>';
+  }).join('')+'</div>';
 }
 function sfRenderNodeGraph(){
   sfEnsureNodeGraph();
@@ -10025,9 +10167,9 @@ function sfRenderNodeGraph(){
   svg.appendChild(linkLayer);
   SF_NODE_GRAPH.links.forEach(function(link,index){
     var a=sfNodeById(link.from),b=sfNodeById(link.to);if(!a||!b)return;
-    var p1=sfNodeCenter(a,'out'),p2=sfNodeCenter(b,'in');
+    var p1=sfNodeCenter(a,'out',link.fromSocket),p2=sfNodeCenter(b,'in',link.toSocket);
     var path=document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('class','sf-node-link'+(index===SF_NODE_LINK_SELECTED?' sel':''));
+    path.setAttribute('class','sf-node-link'+(link.enabled===false?' off':'')+(index===SF_NODE_LINK_SELECTED?' sel':''));
     path.setAttribute('d',sfNodeLinkPath(p1,p2));
     path.dataset.linkIndex=index;
     var title=document.createElementNS('http://www.w3.org/2000/svg','title');
@@ -10048,8 +10190,8 @@ function sfRenderNodeGraph(){
   if(SF_NODE_LINK_DRAG){
     var drag=SF_NODE_LINK_DRAG,node=sfNodeById(drag.nodeId),pointer={x:drag.x,y:drag.y};
     if(node){
-      var p1=drag.side==='out'?sfNodeCenter(node,'out'):pointer;
-      var p2=drag.side==='out'?pointer:sfNodeCenter(node,'in');
+      var p1=drag.side==='out'?sfNodeCenter(node,'out',drag.socket):pointer;
+      var p2=drag.side==='out'?pointer:sfNodeCenter(node,'in',drag.socket);
       var temp=document.createElementNS('http://www.w3.org/2000/svg','path');
       temp.setAttribute('class','sf-node-link temp');
       temp.setAttribute('d',sfNodeLinkPath(p1,p2));
@@ -10057,17 +10199,20 @@ function sfRenderNodeGraph(){
     }
   }
   SF_NODE_GRAPH.nodes.forEach(function(node){
+    node.type=sfNormalizeNodeType(node.type);
+    node.props=sfSanitizeNodeProps(node.type,node.props||{});
     var meta=sfNodeTypeMeta(node.type);
     var el=document.createElement('div');
-    el.className='sf-node'+(node.id===SF_NODE_SELECTED?' sel':'');
+    el.className='sf-node'+(node.id===SF_NODE_SELECTED?' sel':'')+(node.enabled===false?' off':'');
     el.style.left=Math.round(node.x)+'px';
     el.style.top=Math.round(node.y)+'px';
     el.dataset.nodeId=node.id;
-    el.innerHTML='<span class="sf-node-socket in"></span><span class="sf-node-socket out"></span>'+
-      '<div class="sf-node-head"><span>'+sfEscape(node.name)+'</span><span class="sf-node-type">'+sfEscape(node.type)+'</span></div>'+
-      '<div class="sf-node-body">'+sfEscape(meta.label)+'<br>'+sfEscape(sfNodeSummary(node))+'</div>';
-    el.querySelector('.sf-node-socket.in').onpointerdown=function(e){sfStartNodeLinkDrag(e,node.id,'in');};
-    el.querySelector('.sf-node-socket.out').onpointerdown=function(e){sfStartNodeLinkDrag(e,node.id,'out');};
+    el.innerHTML=
+      '<div class="sf-node-head"><span>'+sfEscape(node.name)+'</span><span class="sf-node-type">'+sfEscape(node.type)+'</span><span class="sf-node-state">'+(node.enabled===false?'OFF':'ON')+'</span></div>'+
+      '<div class="sf-node-body"><div class="sf-node-summary">'+sfEscape(meta.label)+' / '+sfEscape(sfNodeSummary(node))+'</div>'+sfNodePortHtml(node,'in')+sfNodePortHtml(node,'out')+'</div>';
+    el.querySelectorAll('.sf-node-socket').forEach(function(socket){
+      socket.onpointerdown=function(e){sfStartNodeLinkDrag(e,node.id,socket.dataset.side,socket.dataset.socket);};
+    });
     el.onpointerdown=function(e){sfNodePointerDown(e,node.id);};
     el.onclick=function(e){e.stopPropagation();sfSelectNode(node.id);};
     layer.appendChild(el);
@@ -10082,6 +10227,11 @@ function sfNodeSummary(node){
   if(node.type==='SKY')return p.model||'sky model';
   if(node.type==='FX')return p.pass||'effect pass';
   if(node.type==='HDRI')return p.format||p.exposure||'output';
+  if(node.type==='TIME')return 'hour '+(p.hour??18)+', sun '+(p.elevation??7)+' deg';
+  if(node.type==='WIND')return 'wind '+(p.wind??18)+', dir '+(p.direction??270)+' deg';
+  if(node.type==='GRADE')return (p.look||'grade')+', sat '+(p.saturation??.68);
+  if(node.type==='MATH')return (p.property||'value')+' * '+(p.multiply??1)+' + '+(p.add??0);
+  if(node.type==='MIX')return (p.mode||'Blend')+' '+(p.amount??.5);
   return p.mode||'scene node';
 }
 function sfRenderSelectedLinkInspector(){
@@ -10093,7 +10243,8 @@ function sfRenderSelectedLinkInspector(){
     '<div class="sf-inspector-readout">Selected Link</div>'+
     '<label class="sf-node-row"><span>From</span><input readonly value="'+sfEscape(a?.name||link.from)+'"></label>'+
     '<label class="sf-node-row"><span>To</span><input readonly value="'+sfEscape(b?.name||link.to)+'"></label>'+
-    '<div class="sf-inspector-readout">Use Delete Link, Cut Link, double-click the cable, or press Delete.</div>';
+    '<label class="sf-node-row"><span>Status</span><select onchange="sfToggleSelectedNodeLink()"><option '+(link.enabled!==false?'selected':'')+'>On</option><option '+(link.enabled===false?'selected':'')+'>Off</option></select></label>'+
+    '<div class="sf-inspector-readout">'+sfEscape((link.fromSocket||'out')+' -> '+(link.toSocket||'in'))+' / Toggle Link or double-click the cable to disconnect.</div>';
   return true;
 }
 function sfSelectNode(id){
@@ -10122,29 +10273,39 @@ function sfSelectNodeLink(index){
   sfRenderNodeGraph();
   triToast('Link selected: '+sfNodeLinkTitle(SF_NODE_GRAPH.links[index]));
 }
-function sfStartNodeLinkDrag(e,nodeId,side){
+function sfStartNodeLinkDrag(e,nodeId,side,socket){
   if(e.button!==0)return;
   var node=sfNodeById(nodeId);if(!node)return;
   var p=sfNodeScreenToWorld(e.clientX,e.clientY);
   SF_NODE_LINK_SELECTED=-1;
   SF_NODE_SELECTED=nodeId;
-  SF_NODE_LINK_DRAG={nodeId:nodeId,side:side,x:p.x,y:p.y};
+  SF_NODE_LINK_DRAG={nodeId:nodeId,side:side,socket:socket||'',x:p.x,y:p.y};
   e.stopPropagation();
   e.preventDefault();
   sfRenderNodeGraph();
 }
-function sfCreateNodeLink(from,to){
+function sfCreateNodeLink(from,to,fromSocket,toSocket){
   sfEnsureNodeGraph();
   if(!from||!to||from===to){triToast('Choose two different nodes');return false;}
   if(!sfNodeById(from)||!sfNodeById(to)){triToast('Node not found');return false;}
-  var existing=SF_NODE_GRAPH.links.findIndex(function(link){return link.from===from&&link.to===to;});
-  if(existing>=0){SF_NODE_LINK_SELECTED=existing;sfRenderNodeGraph();triToast('Link already exists');return false;}
+  var existing=SF_NODE_GRAPH.links.findIndex(function(link){return link.from===from&&link.to===to&&(link.fromSocket||'')===(fromSocket||'')&&(link.toSocket||'')===(toSocket||'');});
+  if(existing>=0){
+    SF_NODE_GRAPH.links[existing].enabled=SF_NODE_GRAPH.links[existing].enabled===false?true:false;
+    SF_NODE_LINK_SELECTED=existing;
+    sfHistoryCapture('Toggle node link');
+    SF_DIRTY=true;
+    sfRenderNodeGraph();
+    sfApplyNodeGraphToScene({silent:true});
+    triToast((SF_NODE_GRAPH.links[existing].enabled===false?'Disabled: ':'Enabled: ')+sfNodeLinkTitle(SF_NODE_GRAPH.links[existing]));
+    return false;
+  }
   sfHistoryCapture('Connect nodes');
-  SF_NODE_GRAPH.links.push({from:from,to:to});
+  SF_NODE_GRAPH.links.push({from:from,to:to,fromSocket:fromSocket||'out',toSocket:toSocket||'in',enabled:true});
   SF_NODE_LINK_SELECTED=SF_NODE_GRAPH.links.length-1;
   SF_NODE_SELECTED='';
   SF_DIRTY=true;
   sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
   triToast('Connected: '+sfNodeLinkTitle(SF_NODE_GRAPH.links[SF_NODE_LINK_SELECTED]));
   return true;
 }
@@ -10157,8 +10318,9 @@ function sfFinishNodeLinkDrag(e){
   if(socket&&nodeEl){
     var targetId=nodeEl.dataset.nodeId;
     var targetSide=socket.classList.contains('out')?'out':'in';
-    if(drag.side==='out'&&targetSide==='in')sfCreateNodeLink(drag.nodeId,targetId);
-    else if(drag.side==='in'&&targetSide==='out')sfCreateNodeLink(targetId,drag.nodeId);
+    var targetSocket=socket.dataset.socket||'';
+    if(drag.side==='out'&&targetSide==='in')sfCreateNodeLink(drag.nodeId,targetId,drag.socket,targetSocket);
+    else if(drag.side==='in'&&targetSide==='out')sfCreateNodeLink(targetId,drag.nodeId,targetSocket,drag.socket);
     else{sfRenderNodeGraph();triToast('Connect output to input');}
   }else sfRenderNodeGraph();
 }
@@ -10172,7 +10334,19 @@ function sfDeleteSelectedNodeLink(index){
   SF_NODE_LINK_SELECTED=-1;
   SF_DIRTY=true;
   sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
   triToast('Disconnected: '+label);
+}
+function sfToggleSelectedNodeLink(){
+  sfEnsureNodeGraph();
+  var link=SF_NODE_GRAPH.links&&SF_NODE_GRAPH.links[SF_NODE_LINK_SELECTED];
+  if(!link){triToast('Select a node link first');return;}
+  sfHistoryCapture('Toggle node link');
+  link.enabled=link.enabled===false?true:false;
+  SF_DIRTY=true;
+  sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
+  triToast((link.enabled===false?'Link disabled: ':'Link enabled: ')+sfNodeLinkTitle(link));
 }
 function sfClearSelectedNodeLinks(){
   sfEnsureNodeGraph();
@@ -10185,6 +10359,7 @@ function sfClearSelectedNodeLinks(){
   SF_NODE_LINK_SELECTED=-1;
   SF_DIRTY=true;
   sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
   triToast(removed?'Cleared '+removed+' link(s)':'No links on selected node');
 }
 document.addEventListener('pointermove',function(e){
@@ -10275,7 +10450,7 @@ function sfFrameNodeGraph(){
   SF_NODE_GRAPH.nodes.forEach(function(n){
     minX=Math.min(minX,Number(n.x)||0);
     minY=Math.min(minY,Number(n.y)||0);
-    maxX=Math.max(maxX,(Number(n.x)||0)+142);
+    maxX=Math.max(maxX,(Number(n.x)||0)+SF_NODE_W);
     maxY=Math.max(maxY,(Number(n.y)||0)+72);
   });
   var bw=Math.max(1,maxX-minX),bh=Math.max(1,maxY-minY);
@@ -10296,9 +10471,10 @@ function sfResetNodeGraphView(){
 function sfCreateNode(type){
   sfEnsureNodeGraph();
   sfHistoryCapture('Create node');
+  type=sfNormalizeNodeType(type||'ITEM');
   var count=SF_NODE_GRAPH.nodes.length;
   var center=sfNodeViewportCenter();
-  var node=sfCreateNodeData(type,sfObjectMeta(type)[1]+' Node',center.x-70+(count%3)*28,center.y-30+(count%3)*24,sfSanitizePropsForType(type,{}));
+  var node=sfCreateNodeData(type,(sfIsSceneNodeType(type)?sfObjectMeta(type)[1]:sfNodeTypeMeta(type).label)+' Node',center.x-70+(count%3)*28,center.y-30+(count%3)*24,sfDefaultNodeProps(type));
   SF_NODE_GRAPH.nodes.push(node);
   SF_NODE_SELECTED=node.id;
   SF_DIRTY=true;
@@ -10310,34 +10486,79 @@ function sfAutoLayoutNodes(){
   var output=SF_NODE_GRAPH.nodes.find(function(n){return n.name.toLowerCase().includes('output');});
   SF_NODE_GRAPH.nodes.forEach(function(node,i){
     if(node===output){node.x=410;node.y=140;return;}
-    node.x=28+(i%2)*176;
-    node.y=28+Math.floor(i/2)*82;
+    node.x=28+(i%2)*208;
+    node.y=28+Math.floor(i/2)*112;
   });
   SF_DIRTY=true;
   sfRenderNodeGraph();
+}
+function sfNodePropInputHtml(node,field){
+  var value=(node.props||{})[field.key];
+  if(value===undefined)value=field.default;
+  var common=' onchange="sfUpdateNodeProp(\''+sfEscape(field.key)+'\',this.value)"';
+  if(field.kind==='select'){
+    return '<select'+common+'>'+((field.options||[]).map(function(option){return '<option value="'+sfEscape(option)+'" '+(String(value)===String(option)?'selected':'')+'>'+sfEscape(option)+'</option>';}).join(''))+'</select>';
+  }
+  if(field.kind==='color')return '<input type="color" value="'+sfEscape(value||field.default||'#ffffff')+'"'+common+'>';
+  if(field.kind==='textarea')return '<input value="'+sfEscape(value||'')+'"'+common+'>';
+  if(field.kind==='range'||field.kind==='number'){
+    return '<input type="number" value="'+sfEscape(value)+'" min="'+sfEscape(field.min??'')+'" max="'+sfEscape(field.max??'')+'" step="'+sfEscape(field.step??.01)+'"'+common+'>';
+  }
+  return '<input value="'+sfEscape(value||'')+'"'+common+'>';
+}
+function sfNodePropsHtml(node){
+  return sfNodePropertySchema(node.type).map(function(field){
+    return '<label class="sf-node-row"><span>'+sfEscape(field.label||field.key)+'</span>'+sfNodePropInputHtml(node,field)+'</label>';
+  }).join('');
 }
 function sfRenderNodeInspector(){
   var box=document.getElementById('sf-node-inspector');if(!box)return;
   if(sfRenderSelectedLinkInspector())return;
   var node=sfNodeById(SF_NODE_SELECTED);
   if(!node){box.innerHTML='<div class="sf-inspector-readout">Select or create a node.</div>';return;}
+  node.type=sfNormalizeNodeType(node.type);
+  node.props=sfSanitizeNodeProps(node.type,node.props||{});
   box.innerHTML=
     '<label class="sf-node-row"><span>Name</span><input value="'+sfEscape(node.name)+'" onchange="sfUpdateNodeField(\'name\',this.value)"></label>'+
     '<label class="sf-node-row"><span>Type</span><select onchange="sfUpdateNodeField(\'type\',this.value)">'+
-      ['SKY','LIGHT','CLOUD','VOL','FX','CAM','HDRI','NOTE','ITEM'].map(function(t){return '<option '+(node.type===t?'selected':'')+'>'+t+'</option>';}).join('')+
+      SF_NODE_TYPES.map(function(t){return '<option '+(node.type===t?'selected':'')+'>'+t+'</option>';}).join('')+
     '</select></label>'+
+    '<label class="sf-node-row"><span>Enabled</span><select onchange="sfUpdateNodeField(\'enabled\',this.value)"><option value="1" '+(node.enabled!==false?'selected':'')+'>On</option><option value="0" '+(node.enabled===false?'selected':'')+'>Off</option></select></label>'+
     '<label class="sf-node-row"><span>X</span><input type="number" value="'+Math.round(node.x)+'" onchange="sfUpdateNodeField(\'x\',this.value)"></label>'+
     '<label class="sf-node-row"><span>Y</span><input type="number" value="'+Math.round(node.y)+'" onchange="sfUpdateNodeField(\'y\',this.value)"></label>'+
+    sfNodePropsHtml(node)+
     '<div class="sf-inspector-readout">'+sfEscape(sfNodeSummary(node))+'</div>';
 }
 function sfUpdateNodeField(field,value){
   var node=sfNodeById(SF_NODE_SELECTED);if(!node)return;
   sfHistoryCapture('Edit node','node-field:'+field);
-  if(field==='type'){node.type=sfNormalizeObjectType(value);node.props=sfSanitizePropsForType(node.type,node.props||{});}
+  if(field==='type'){node.type=sfNormalizeNodeType(value);node.props=sfSanitizeNodeProps(node.type,node.props||{});}
+  else if(field==='enabled')node.enabled=String(value)!=='0';
   else if(field==='x'||field==='y')node[field]=Number(value)||0;
   else node[field]=String(value||'');
   SF_DIRTY=true;
   sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
+}
+function sfUpdateNodeProp(key,value){
+  var node=sfNodeById(SF_NODE_SELECTED);if(!node)return;
+  sfHistoryCapture('Edit node property','node-prop:'+key);
+  node.props=node.props||{};
+  node.props[key]=value;
+  node.props=sfSanitizeNodeProps(node.type,node.props);
+  SF_DIRTY=true;
+  sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
+}
+function sfToggleSelectedNode(){
+  var node=sfNodeById(SF_NODE_SELECTED);
+  if(!node){triToast('Select a node first');return;}
+  sfHistoryCapture('Toggle node');
+  node.enabled=node.enabled===false?true:false;
+  SF_DIRTY=true;
+  sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
+  triToast((node.enabled===false?'Node disabled: ':'Node enabled: ')+node.name);
 }
 function sfConnectSelectedNodeToOutput(){
   sfEnsureNodeGraph();
@@ -10355,23 +10576,161 @@ function sfDeleteSelectedNode(){
   SF_NODE_LINK_SELECTED=-1;
   SF_DIRTY=true;
   sfRenderNodeGraph();
+  sfApplyNodeGraphToScene({silent:true});
 }
-function sfApplySelectedNodeToScene(){
-  var node=sfNodeById(SF_NODE_SELECTED);if(!node)return;
-  sfHistoryCapture('Apply node to scene');
+function sfNodeSchemaField(type,key){
+  return sfNodePropertySchema(type).find(function(field){return field.key===key;});
+}
+function sfNormalizeNodeTargetValue(type,key,value){
+  var field=sfNodeSchemaField(type,key);
+  return field?sfNormalizePropValue(field,value):value;
+}
+function sfNodeBaseProps(node){
+  node.type=sfNormalizeNodeType(node.type);
+  node.props=sfSanitizeNodeProps(node.type,node.props||{});
+  return Object.assign({},node.props);
+}
+function sfNodeOutputProps(node,props){
+  props=Object.assign({},props||{});
+  var type=sfNormalizeNodeType(node.type);
+  if(type==='TIME')return {hour:props.hour,elevation:props.elevation,azimuth:props.azimuth,temperature:props.temperature};
+  if(type==='WIND')return {wind:props.wind,direction:props.direction,turbulence:props.turbulence,clusterSpread:props.spread,positionRandom:props.spread};
+  if(type==='GRADE')return {pass:'Color Grade',look:props.look,contrast:props.contrast,saturation:props.saturation,highlightRolloff:props.highlightRolloff,opacity:props.opacity};
+  if(type==='MATH')return {_math:{property:props.property,multiply:Number(props.multiply),add:Number(props.add),clampMin:Number(props.clampMin),clampMax:Number(props.clampMax)}};
+  if(type==='MIX')return Object.assign({_mix:{amount:Number(props.amount),mode:String(props.mode||'Blend')}},props);
+  return props;
+}
+function sfApplyMathToProps(targetType,targetProps,math){
+  var key=String(math.property||'').trim();
+  var schema=sfNodePropertySchema(targetType).filter(function(field){return field.kind==='range'||field.kind==='number';});
+  var keys=key==='all'?schema.map(function(field){return field.key;}):[key];
+  keys.forEach(function(prop){
+    if(targetProps[prop]===undefined)return;
+    var n=Number(targetProps[prop]);
+    if(!Number.isFinite(n))return;
+    n=n*(Number.isFinite(math.multiply)?math.multiply:1)+(Number.isFinite(math.add)?math.add:0);
+    if(Number.isFinite(math.clampMin))n=Math.max(math.clampMin,n);
+    if(Number.isFinite(math.clampMax))n=Math.min(math.clampMax,n);
+    targetProps[prop]=sfNormalizeNodeTargetValue(targetType,prop,n);
+  });
+}
+function sfMixNodeProps(targetType,targetProps,out){
+  var mix=out._mix||{},amount=sfClamp(Number(mix.amount),0,1),mode=String(mix.mode||'Blend');
+  Object.keys(out).forEach(function(key){
+    if(key.charAt(0)==='_'||targetProps[key]===undefined)return;
+    var a=Number(targetProps[key]),b=Number(out[key]);
+    if(!Number.isFinite(a)||!Number.isFinite(b))return;
+    var next=mode==='Add'?a+b*amount:(mode==='Multiply'?a*(1+(b-1)*amount):(a+(b-a)*amount));
+    targetProps[key]=sfNormalizeNodeTargetValue(targetType,key,next);
+  });
+}
+function sfMergeNodeProps(source,target,targetProps,out,link){
+  var sourceType=sfNormalizeNodeType(source.type),targetType=sfNormalizeNodeType(target.type);
+  targetProps=targetProps||{};
+  out=out||{};
+  if(out._math){sfApplyMathToProps(targetType,targetProps,out._math);return targetProps;}
+  if(out._mix){sfMixNodeProps(targetType,targetProps,out);return targetProps;}
+  if(sourceType==='TIME'){
+    if(targetType==='LIGHT'){
+      ['elevation','azimuth','temperature'].forEach(function(key){if(out[key]!==undefined)targetProps[key]=sfNormalizeNodeTargetValue(targetType,key,out[key]);});
+    }else if(targetType==='HDRI'){
+      if(out.azimuth!==undefined)targetProps.rotation=sfNormalizeNodeTargetValue(targetType,'rotation',out.azimuth);
+      if(out.temperature!==undefined)targetProps.temperature=sfNormalizeNodeTargetValue(targetType,'temperature',out.temperature);
+    }else if(targetType==='SKY'){
+      var hour=Number(out.hour);
+      if(Number.isFinite(hour))targetProps.horizonGlow=sfNormalizeNodeTargetValue(targetType,'horizonGlow',hour<6||hour>19?18:48);
+    }
+  }else if(sourceType==='WIND'){
+    if(targetType==='CLOUD'){
+      if(out.wind!==undefined)targetProps.wind=sfNormalizeNodeTargetValue(targetType,'wind',out.wind);
+      if(out.clusterSpread!==undefined)targetProps.clusterSpread=sfNormalizeNodeTargetValue(targetType,'clusterSpread',out.clusterSpread);
+      if(out.positionRandom!==undefined)targetProps.positionRandom=sfNormalizeNodeTargetValue(targetType,'positionRandom',out.positionRandom);
+      if(out.turbulence!==undefined)targetProps.scaleVariation=sfNormalizeNodeTargetValue(targetType,'scaleVariation',Number(out.turbulence)*100);
+    }else if(targetType==='VOL'&&out.turbulence!==undefined){
+      targetProps.density=sfNormalizeNodeTargetValue(targetType,'density',.12+Number(out.turbulence)*.42);
+    }
+  }else if(sourceType==='GRADE'){
+    if(targetType==='FX'){
+      ['pass','look','contrast','saturation','highlightRolloff','opacity'].forEach(function(key){if(out[key]!==undefined)targetProps[key]=sfNormalizeNodeTargetValue(targetType,key,out[key]);});
+    }else if(targetType==='HDRI'&&out.opacity!==undefined){
+      targetProps.exposure=sfNormalizeNodeTargetValue(targetType,'exposure',(Number(out.opacity)-50)/25);
+    }
+  }else if(sourceType==='LIGHT'&&targetType==='HDRI'){
+    if(out.intensity!==undefined)targetProps.strength=sfNormalizeNodeTargetValue(targetType,'strength',out.intensity);
+    if(out.azimuth!==undefined)targetProps.rotation=sfNormalizeNodeTargetValue(targetType,'rotation',out.azimuth);
+    if(out.temperature!==undefined)targetProps.temperature=sfNormalizeNodeTargetValue(targetType,'temperature',out.temperature);
+  }else{
+    Object.keys(out).forEach(function(key){
+      if(key.charAt(0)==='_'||targetProps[key]===undefined)return;
+      targetProps[key]=sfNormalizeNodeTargetValue(targetType,key,out[key]);
+    });
+  }
+  return targetProps;
+}
+function sfEvaluateNodeGraph(){
+  sfEnsureNodeGraph();
+  var base={},computed={};
+  SF_NODE_GRAPH.nodes.forEach(function(node){base[node.id]=sfNodeBaseProps(node);computed[node.id]=Object.assign({},base[node.id]);});
+  for(var pass=0;pass<Math.max(1,SF_NODE_GRAPH.nodes.length);pass++){
+    var next={};
+    SF_NODE_GRAPH.nodes.forEach(function(node){next[node.id]=Object.assign({},base[node.id]);});
+    SF_NODE_GRAPH.links.forEach(function(link){
+      if(link.enabled===false)return;
+      var source=sfNodeById(link.from),target=sfNodeById(link.to);
+      if(!source||!target||source.enabled===false||target.enabled===false)return;
+      next[target.id]=sfMergeNodeProps(source,target,next[target.id]||{},sfNodeOutputProps(source,computed[source.id]||{}),link);
+    });
+    computed=next;
+  }
+  return computed;
+}
+function sfApplyNodeToScene(node,props,options){
+  options=options||{};
+  var type=sfNodeSceneType(node);
+  if(!type||node.enabled===false)return null;
+  props=sfSanitizePropsForType(type,props||node.props||{});
   var row=null;
   if(node.key)row=Array.from(document.querySelectorAll('#outliner-list .tri-out-extra')).find(function(r){return r.dataset.sfKey===node.key;});
   if(!row)row=Array.from(document.querySelectorAll('#outliner-list .tri-out-extra')).find(function(r){return r.children[1]?.textContent?.trim()===node.name;});
   if(row){
-    sfSetOutlinerRowType(row,node.type);
-    sfSetRowProps(row,node.props||{});
+    sfSetOutlinerRowType(row,type);
+    sfSetRowProps(row,props);
     if(row.children[1])row.children[1].textContent=node.name;
-    triSelectOut(row);
   }else{
-    row=sfAddSceneObject(node.type,node.name,{props:node.props||{}});
-    node.key=row.dataset.sfKey||'';
+    row=sfAddSceneObject(type,node.name,{props:props,skipHistory:!!options.skipHistory});
+    if(row)node.key=row.dataset.sfKey||'';
   }
+  return row;
+}
+function sfApplyNodeGraphToScene(options){
+  options=options||{};
+  sfEnsureNodeGraph();
+  var computed=sfEvaluateNodeGraph(),count=0,lastRow=null;
+  SF_NODE_GRAPH.nodes.forEach(function(node){
+    if(!sfNodeSceneType(node)||node.enabled===false)return;
+    var row=sfApplyNodeToScene(node,computed[node.id],{skipHistory:!!options.silent});
+    if(row){count++;lastRow=row;}
+  });
+  if(lastRow&&typeof triSelectOut==='function'&&!options.silent)triSelectOut(lastRow);
   SF_DIRTY=true;
+  if(typeof sfRefreshOutlinerInspector==='function')sfRefreshOutlinerInspector(lastRow||undefined);
+  if(typeof drawSky==='function')drawSky();
+  sfRenderNodeGraph();
+  if(!options.silent&&typeof triToast==='function')triToast(count?'Applied node graph: '+count+' scene node(s)':'No scene nodes to apply');
+  return {count:count,computed:computed};
+}
+function sfApplySelectedNodeToScene(){
+  var node=sfNodeById(SF_NODE_SELECTED);if(!node)return;
+  sfHistoryCapture('Apply node to scene');
+  var computed=sfEvaluateNodeGraph();
+  if(!sfNodeSceneType(node)){
+    sfApplyNodeGraphToScene();
+    return;
+  }
+  var row=sfApplyNodeToScene(node,computed[node.id]||node.props||{});
+  if(row&&typeof triSelectOut==='function')triSelectOut(row);
+  SF_DIRTY=true;
+  if(typeof drawSky==='function')drawSky();
   sfRenderNodeGraph();
   triToast('Node applied to scene');
 }
