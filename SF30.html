@@ -2439,7 +2439,7 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
     <div class="mb-m active" onclick="toggleMenu(this)">Scene
       <div class="mb-dd">
         <div class="dd-item acc" onclick="openModal('city-ov');sfRenderCityBrowser()">Choose City / Coordinates</div>
-        <div class="dd-item" onclick="sfSyncWeatherForSelection()">Sync Date & Time</div>
+        <div class="dd-item" onclick="sfLocationClockUseCityTime()">Sync Date & Time</div>
         <div class="dd-item" onclick="syncLocationLook()">Use Real Weather</div>
         <div class="dd-item" onclick="sfToggleViewportOption('horizon',true);sfSetViewportView('top')">Solar Path Preview</div>
         <div class="dd-sep"></div>
@@ -2499,7 +2499,7 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
       <div class="mb-dd">
         <div class="dd-item acc" onclick="sfScrollSidebarTo('sec-scene-location','Location')">Location Simulator</div>
         <div class="dd-item" onclick="openModal('city-ov');sfRenderCityBrowser()">Choose City / Coordinates</div>
-        <div class="dd-item" onclick="sfSyncWeatherForSelection()">Sync Date & Time</div>
+        <div class="dd-item" onclick="sfLocationClockUseCityTime()">Sync Date & Time</div>
         <div class="dd-item" onclick="syncLocationLook()">Use Real Weather</div>
         <div class="dd-sep"></div>
         <div class="dd-item" onclick="sfSetInput('#scene-time','06:30',true);sfApplySceneTimeRealtime(true)">Sunrise</div>
@@ -2759,14 +2759,17 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
           <button class="sf-chip" onclick="quickCity('luanda',this)">Luanda</button>
           <button class="sf-chip" onclick="quickCity('saopaulo',this)">São Paulo</button>
         </div>
-        <div class="s-row"><span class="s-lbl">Date</span><input class="s-inp" id="scene-date" type="date" onchange="sfSyncWeatherForSelection()"></div>
-        <div class="s-row"><span class="s-lbl">Local time</span><input class="s-inp" id="scene-time" type="time" value="18:27" oninput="sfApplySceneTimeRealtime()" onchange="sfApplySceneTimeRealtime()"></div>
+        <div class="s-row"><span class="s-lbl">Date</span><input class="s-inp" id="scene-date" type="date" onchange="sfSyncCityTelemetry(null,{syncClock:false,force:true})"></div>
+        <div class="s-row"><span class="s-lbl">Local time</span><input class="s-inp" id="scene-time" type="time" value="18:27" oninput="sfLocationManualTimeEdit();sfApplySceneTimeRealtime()" onchange="sfLocationManualTimeEdit();sfApplySceneTimeRealtime()"></div>
+        <div class="s-row"><span class="s-lbl">City clock</span><span class="s-val" id="city-local-clock">--:--</span></div>
         <div class="s-row"><span class="s-lbl">Latitude</span><input class="s-inp" id="city-lat"></div>
         <div class="s-row"><span class="s-lbl">Longitude</span><input class="s-inp" id="city-lon"></div>
         <div class="s-row"><span class="s-lbl">Timezone</span><span class="s-val" id="city-tz">-</span></div>
         <div class="s-row"><span class="s-lbl">Weather</span><span class="s-val" id="city-weather">No weather loaded</span></div>
+        <div class="s-row"><span class="s-lbl">Temperature</span><span class="s-val" id="city-temp">-- Â°C</span></div>
         <div class="sf-weather-status" id="weather-status">Choose a city/date, then fetch weather.</div>
         <div class="s-btn-row">
+          <button class="s-btn" onclick="sfLocationClockUseCityTime()">Sync city time</button>
           <button class="s-btn" onclick="openModal('city-ov');sfRenderCityBrowser()">Browse by continent</button>
           <button class="s-btn" onclick="syncLocationLook()">Fetch weather + emulate</button>
         </div>
@@ -11904,6 +11907,133 @@ function sfTodayLocalIso(){
   var local=new Date(now.getTime()-now.getTimezoneOffset()*60000);
   return local.toISOString().slice(0,10);
 }
+var SF_LOCATION_CLOCK_MODE='auto';
+var SF_LOCATION_TELEMETRY_TOKEN=0;
+function sfLocationManualTimeEdit(){
+  SF_LOCATION_CLOCK_MODE='manual';
+}
+function sfLocationSelectedKey(){
+  return document.getElementById('city-select')?.value||'';
+}
+function sfLocationCityRecord(key){
+  key=key||sfLocationSelectedKey();
+  return {key:key,city:TRI_CITIES[key]||null,record:SF_CITY_BY_KEY[key]||null};
+}
+function sfLocationTzOffsetMinutes(tz){
+  var m=String(tz||'').trim().match(/^(?:UTC|GMT)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i);
+  if(!m)return null;
+  var mins=(Number(m[2])||0)*60+(Number(m[3])||0);
+  return (m[1]==='-'?-1:1)*mins;
+}
+function sfResolveLocationTimezone(city,record){
+  var tz=(record&&record.timezone)||(city&&city.tz)||'';
+  if(!tz||String(tz).toLowerCase()==='auto')tz=sfCityApproxTz(city&&city.lon);
+  return tz||'UTC+00';
+}
+function sfCityLocalNow(tz,lon){
+  var zone=String(tz||'').trim();
+  var now=new Date();
+  try{
+    if(zone && !/^(UTC|GMT)/i.test(zone)){
+      var parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(now).reduce(function(out,p){out[p.type]=p.value;return out;},{});
+      return {date:parts.year+'-'+parts.month+'-'+parts.day,time:parts.hour+':'+parts.minute,label:parts.hour+':'+parts.minute,timezone:zone,exact:true};
+    }
+  }catch(_){}
+  var offset=sfLocationTzOffsetMinutes(zone);
+  if(offset===null)offset=sfLocationTzOffsetMinutes(sfCityApproxTz(lon))||0;
+  var local=new Date(now.getTime()+offset*60000);
+  var iso=local.toISOString();
+  var sign=offset>=0?'+':'-',abs=Math.abs(offset),hh=String(Math.floor(abs/60)).padStart(2,'0'),mm=abs%60;
+  return {date:iso.slice(0,10),time:iso.slice(11,16),label:iso.slice(11,16),timezone:'UTC'+sign+hh+(mm?':'+String(mm).padStart(2,'0'):''),exact:false};
+}
+function sfUpdateSelectedCityClock(key,options){
+  options=options||{};
+  var info=sfLocationCityRecord(key),city=info.city,record=info.record;
+  if(!city)return null;
+  var tz=sfResolveLocationTimezone(city,record);
+  var clock=sfCityLocalNow(tz,city.lon);
+  if(options.force || SF_LOCATION_CLOCK_MODE==='auto'){
+    var date=document.getElementById('scene-date'),time=document.getElementById('scene-time');
+    if(date)date.value=clock.date;
+    if(time)time.value=clock.time;
+    try{if(typeof sfApplySceneTimeRealtime==='function')sfApplySceneTimeRealtime(true);}catch(_){}
+  }
+  triText('city-local-clock',clock.label+' local');
+  triText('city-tz',clock.timezone+(clock.exact?'':' approx'));
+  return clock;
+}
+function sfLocationClockUseCityTime(){
+  var key=sfLocationSelectedKey();
+  if(!key){sfSetWeatherStatus('Choose a city first.','warn');if(typeof triToast==='function')triToast('Choose a city first');return;}
+  SF_LOCATION_CLOCK_MODE='auto';
+  sfUpdateSelectedCityClock(key,{force:true});
+  sfSyncCityTelemetry(key,{syncClock:false});
+  if(typeof triToast==='function')triToast('City local time synced');
+}
+function sfApplyLocationTelemetry(data,cityName,city,record){
+  data=data||{};city=city||{};record=record||{};
+  if(data.timezone){
+    city.tz=data.timezone;
+    record.timezone=data.timezone;
+  }
+  var temp=Number(data.temperature),tempText=Number.isFinite(temp)?temp.toFixed(1)+' Â°C':'-- Â°C';
+  var weather=data.weather||city.weather||'Weather';
+  var wind=Number(data.windSpeed),cloud=Number(data.cloudCover);
+  var label=weather+' | '+tempText;
+  if(Number.isFinite(cloud))label+=' | clouds '+Math.round(cloud)+'%';
+  if(Number.isFinite(wind))label+=' | wind '+wind.toFixed(1)+' km/h';
+  triText('city-weather',label);
+  triText('city-temp',tempText);
+  if(data.localTime&&String(data.localTime).includes('T')){
+    var d=String(data.localTime).slice(0,10),t=String(data.localTime).slice(11,16);
+    triText('city-local-clock',t+' local');
+    if(data.timezone)triText('city-tz',data.timezone+(data.timezoneAbbreviation?' Â· '+data.timezoneAbbreviation:''));
+    if(SF_LOCATION_CLOCK_MODE==='auto'){
+      var date=document.getElementById('scene-date'),time=document.getElementById('scene-time');
+      if(date)date.value=d;
+      if(time)time.value=t;
+      try{if(typeof sfApplySceneTimeRealtime==='function')sfApplySceneTimeRealtime(true);}catch(_){}
+    }
+  }
+  if(cityName)triText('tri-state-city',cityName);
+  if(data.source)triText('tri-risk',data.source);
+  return {label:label,tempText:tempText};
+}
+async function sfSyncCityTelemetry(key,options){
+  options=options||{};sfBuildCityCatalog();
+  if(typeof key==='object'&&!Array.isArray(key)){options=key;key='';}
+  key=key||sfLocationSelectedKey();
+  if(!key){sfSetWeatherStatus('Choose a city first. The viewport stays empty until then.','warn');return null;}
+  var info=sfLocationCityRecord(key),city=info.city,record=info.record;
+  if(!city){sfSetWeatherStatus('City not found. Choose a city from the browser.','bad');return null;}
+  var token=++SF_LOCATION_TELEMETRY_TOKEN;
+  var clock=options.syncClock===false?null:sfUpdateSelectedCityClock(key,{force:true});
+  var date=document.getElementById('scene-date')?.value||(clock&&clock.date)||sfTodayLocalIso();
+  var data=null;
+  try{
+    if(record&&!options.skipResolve)await sfResolveCityRecord(record);
+    city=TRI_CITIES[key]||city;
+    var lat=Number(city.lat||document.getElementById('city-lat')?.value),lon=Number(city.lon||document.getElementById('city-lon')?.value);
+    if(!Number.isFinite(lat)||!Number.isFinite(lon))throw new Error('Missing city coordinates');
+    sfSetWeatherStatus('Updating local time and temperature for '+city.name+'...','');
+    data=await sfRequest('/weather?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon)+'&date='+encodeURIComponent(date));
+  }catch(err){
+    data=sfLocalWeatherFallback(city,date,err);
+    data.timezone=sfResolveLocationTimezone(city,record);
+    var fallbackClock=sfCityLocalNow(data.timezone,city.lon);
+    data.localTime=fallbackClock.date+'T'+fallbackClock.time;
+    sfSetWeatherStatus('Live weather unavailable; showing local simulator temperature.','warn');
+  }
+  if(token!==SF_LOCATION_TELEMETRY_TOKEN)return null;
+  sfApplyLocationTelemetry(data,city.name,city,record);
+  sfSetWeatherStatus('City telemetry updated: '+city.name+' Â· '+(Number.isFinite(Number(data.temperature))?Number(data.temperature).toFixed(1)+' Â°C':'temperature unavailable')+'.',data.source&&String(data.source).includes('fallback')?'warn':'ok');
+  return data;
+}
+setInterval(function(){
+  if(SF_LOCATION_CLOCK_MODE!=='auto')return;
+  var key=sfLocationSelectedKey();
+  if(key)sfUpdateSelectedCityClock(key,{force:true,silent:true});
+},60000);
 function sfPopulateCitySelect(){
   sfBuildCityCatalog();
   var sel=document.getElementById('city-select');if(!sel)return;
@@ -11969,10 +12099,10 @@ async function sfResolveCityRecord(record){
 async function sfSelectCityRecord(record){
   sfBuildCityCatalog();
   var key=sfRegisterCityRecord(record);triSetCity(key);closeModal('city-ov');
-  try{sfSetWeatherStatus('Resolving '+record.city+' coordinates...','');await sfResolveCityRecord(record);triSetCity(key);await sfSyncWeatherForSelection({skipResolve:true});}
+  try{sfSetWeatherStatus('Resolving '+record.city+' coordinates...','');await sfResolveCityRecord(record);triSetCity(key);await sfSyncCityTelemetry(key,{skipResolve:true});}
   catch(err){sfSetWeatherStatus('Could not resolve city: '+err.message,'bad');}
 }
-function sfSelectCityKey(key){sfBuildCityCatalog();var record=SF_CITY_BY_KEY[key];if(record){sfSelectCityRecord(record);return;}triSetCity(key);sfSyncWeatherForSelection();}
+function sfSelectCityKey(key){sfBuildCityCatalog();var record=SF_CITY_BY_KEY[key];if(record){sfSelectCityRecord(record);return;}triSetCity(key);sfSyncCityTelemetry(key);}
 function sfLocalWeatherFallback(city,date,error){
   city=city||{};
   var text=String(city.weather||city.risk||city.name||'clear').toLowerCase();
@@ -13396,7 +13526,8 @@ function sfSetStartupLocationEmpty(){
   var sel=document.getElementById('city-select');if(sel)sel.value='';
   document.querySelectorAll('.sf-chip,.tri-chip').forEach(function(chip){chip.classList.remove('on');});
   var date=document.getElementById('scene-date');if(date && !date.value)date.value=sfTodayLocalIso();
-  triText('city-lat','-');triText('city-lon','-');triText('city-tz','-');triText('city-weather','No weather loaded');
+  SF_LOCATION_CLOCK_MODE='auto';
+  triText('city-lat','-');triText('city-lon','-');triText('city-tz','-');triText('city-local-clock','--:--');triText('city-weather','No weather loaded');triText('city-temp','-- Â°C');
   var lat=document.getElementById('city-lat');if(lat)lat.value='';
   var lon=document.getElementById('city-lon');if(lon)lon.value='';
   sfUpdateLocationMap(null);
@@ -13425,10 +13556,14 @@ async function sfSyncWeatherForSelection(options){
     data=await sfRequest('/weather?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon)+'&date='+encodeURIComponent(date));
   }catch(err){
     data=sfLocalWeatherFallback(city,date,err);
+    data.timezone=sfResolveLocationTimezone(city,record);
+    var fallbackClock=sfCityLocalNow(data.timezone,city.lon);
+    data.localTime=fallbackClock.date+'T'+fallbackClock.time;
     sfSetWeatherStatus('Live weather unavailable; using local simulator fallback.','warn');
     triToast('Using local weather simulation');
   }
   if(!data)return;
+  sfApplyLocationTelemetry(data,city.name,city,record);
   var prevAllowSilentCreate=window.SF_ALLOW_SILENT_SCENE_CREATE;
   window.SF_ALLOW_SILENT_SCENE_CREATE=true;
   try{
@@ -13466,6 +13601,7 @@ function sfSetCustomMapLocation(lat,lon){
   document.querySelectorAll('.sf-chip,.tri-chip').forEach(function(chip){chip.classList.remove('on');});
   triSetCity(key);
   sfSetWeatherStatus('Custom world-map coordinates ready. Fetch weather + emulate to generate the scene.','warn');
+  sfSyncCityTelemetry(key,{skipResolve:true});
   if(typeof triToast==='function')triToast('Custom map coordinates set');
 }
 function sfPickMapCoordinates(event){
@@ -13476,17 +13612,19 @@ function sfPickMapCoordinates(event){
 function triSetCity(key){
   if(!key){sfSetStartupLocationEmpty();return;}
   const c=TRI_CITIES[key] || TRI_CITIES.paris;
-  triText('city-lat',c.lat); triText('city-lon',c.lon); triText('city-tz',c.tz); triText('city-weather',c.weather);
+  triText('city-lat',c.lat); triText('city-lon',c.lon); triText('city-tz',c.tz); triText('city-weather',c.weather); triText('city-temp',c.airTemp||'-- Â°C');
   const lat=document.getElementById('city-lat'); if(lat) lat.value=c.lat;
   const lon=document.getElementById('city-lon'); if(lon) lon.value=c.lon;
   const sel=document.getElementById('city-select'); if(sel) sel.value=key;
+  SF_LOCATION_CLOCK_MODE='auto';
+  sfUpdateSelectedCityClock(key,{force:true,silent:true});
   triText('tri-state-city',c.name); triText('tri-hud-city',c.name+' · '+c.hdri); triText('tri-hud-sun','Sun '+c.sun); triText('tri-hud-temp',c.temp);
   triText('ai-sun',c.sun); triText('ai-intensity',c.intensity); triText('ai-hdri',c.hdri); triText('ai-exposure',c.exposure); triText('ai-temp',c.temp);
   triText('rp-sun',c.sun); triText('rp-exposure',c.exposure); triText('rp-hdri',c.hdri); triText('rp-temp',c.temp); triText('tri-risk',c.risk);
   sfUpdateLocationMap(c);
 }
 function setCity(key){triSetCity(key)}
-function quickCity(key,el){document.querySelectorAll('.sf-chip,.tri-chip').forEach(x=>x.classList.remove('on')); if(el)el.classList.add('on'); triSetCity(key); triToast('Location changed: '+(TRI_CITIES[key]?.name||key)); sfSyncWeatherForSelection();}
+function quickCity(key,el){document.querySelectorAll('.sf-chip,.tri-chip').forEach(x=>x.classList.remove('on')); if(el)el.classList.add('on'); triSetCity(key); triToast('Location changed: '+(TRI_CITIES[key]?.name||key)); sfSyncCityTelemetry(key);}
 function syncLocationLook(){const sel=document.getElementById('city-select'); triSetCity(sel?sel.value:''); sfSyncWeatherForSelection();}
 function sfInitCleanStartupScene(){
   var list=document.getElementById('outliner-list');

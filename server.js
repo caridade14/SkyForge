@@ -569,6 +569,7 @@ function dateDiffDays(date) {
 function summarizeWeatherPayload(data, requestedDate, source) {
   const hourly = data.hourly || {};
   const daily = data.daily || {};
+  const current = data.current || {};
   const dailyIndex = Array.isArray(daily.time) ? daily.time.indexOf(requestedDate) : -1;
   const indexes = Array.isArray(hourly.time)
     ? hourly.time.reduce((out, time, index) => {
@@ -580,19 +581,24 @@ function summarizeWeatherPayload(data, requestedDate, source) {
   const pickHourly = (name) => Array.isArray(hourly[name]) ? hourly[name][noonIndex] : null;
   const pickDaily = (name) => dailyIndex >= 0 && Array.isArray(daily[name]) ? daily[name][dailyIndex] : null;
   const sliceHourly = (name) => Array.isArray(hourly[name]) ? indexes.map((index) => hourly[name][index]) : [];
+  const currentDate = String(current.time || "").slice(0, 10);
+  const useCurrent = currentDate === requestedDate && Number.isFinite(Number(current.temperature_2m));
 
-  const weatherCode = pickDaily("weather_code") ?? pickHourly("weather_code") ?? 0;
-  const temperature = pickHourly("temperature_2m") ?? average(sliceHourly("temperature_2m"));
-  const humidity = pickHourly("relative_humidity_2m") ?? average(sliceHourly("relative_humidity_2m"));
-  const cloudCover = average(sliceHourly("cloud_cover")) ?? pickHourly("cloud_cover") ?? 0;
-  const precipitation = pickDaily("precipitation_sum") ?? sum(sliceHourly("precipitation")) ?? sum(sliceHourly("rain"));
-  const windSpeed = pickDaily("wind_speed_10m_max") ?? pickHourly("wind_speed_10m") ?? average(sliceHourly("wind_speed_10m")) ?? 0;
-  const windDirection = pickDaily("wind_direction_10m_dominant") ?? pickHourly("wind_direction_10m") ?? 270;
+  const weatherCode = (useCurrent ? current.weather_code : null) ?? pickDaily("weather_code") ?? pickHourly("weather_code") ?? 0;
+  const temperature = (useCurrent ? current.temperature_2m : null) ?? pickHourly("temperature_2m") ?? average(sliceHourly("temperature_2m"));
+  const humidity = (useCurrent ? current.relative_humidity_2m : null) ?? pickHourly("relative_humidity_2m") ?? average(sliceHourly("relative_humidity_2m"));
+  const cloudCover = (useCurrent ? current.cloud_cover : null) ?? average(sliceHourly("cloud_cover")) ?? pickHourly("cloud_cover") ?? 0;
+  const precipitation = (useCurrent ? current.precipitation : null) ?? pickDaily("precipitation_sum") ?? sum(sliceHourly("precipitation")) ?? sum(sliceHourly("rain"));
+  const windSpeed = (useCurrent ? current.wind_speed_10m : null) ?? pickDaily("wind_speed_10m_max") ?? pickHourly("wind_speed_10m") ?? average(sliceHourly("wind_speed_10m")) ?? 0;
+  const windDirection = (useCurrent ? current.wind_direction_10m : null) ?? pickDaily("wind_direction_10m_dominant") ?? pickHourly("wind_direction_10m") ?? 270;
 
   return {
     date: requestedDate,
     source,
     timezone: data.timezone || "auto",
+    timezoneAbbreviation: data.timezone_abbreviation || "",
+    utcOffsetSeconds: Number(data.utc_offset_seconds) || 0,
+    localTime: useCurrent ? current.time : (Array.isArray(hourly.time) ? hourly.time[noonIndex] : `${requestedDate}T12:00`),
     weatherCode: Number(weatherCode) || 0,
     weather: weatherCodeLabel(weatherCode),
     temperature: round(temperature, 1),
@@ -663,6 +669,17 @@ async function getWeather(url) {
     endpoint.searchParams.set("end_date", date);
   }
   endpoint.searchParams.set("timezone", "auto");
+  if (!useArchive) {
+    endpoint.searchParams.set("current", [
+      "temperature_2m",
+      "relative_humidity_2m",
+      "weather_code",
+      "cloud_cover",
+      "precipitation",
+      "wind_speed_10m",
+      "wind_direction_10m"
+    ].join(","));
+  }
   endpoint.searchParams.set("hourly", [
     "temperature_2m",
     "relative_humidity_2m",
