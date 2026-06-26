@@ -2996,9 +2996,9 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
           <div class="sf-look-row"><span>Film emulation</span><b>Fuji 3513</b></div>
           <div class="sf-look-row"><span>Camera response</span><b>ARRI Alexa</b></div>
         </div>
-        <div class="sl-wrap"><div class="sl-top"><span class="sl-name">Contrast</span><span class="sl-val" id="v-contrast">0.22</span></div><input type="range" class="sl acc" min="0" max="100" value="22" oninput="sv('v-contrast',(this.value/100).toFixed(2))"></div>
-        <div class="sl-wrap"><div class="sl-top"><span class="sl-name">Saturation</span><span class="sl-val" id="v-sat">0.68</span></div><input type="range" class="sl bl" min="0" max="100" value="68" oninput="sv('v-sat',(this.value/100).toFixed(2))"></div>
-        <div class="sl-wrap"><div class="sl-top"><span class="sl-name">Highlight rolloff</span><span class="sl-val" id="v-roll">0.74</span></div><input type="range" class="sl gn" min="0" max="100" value="74" oninput="sv('v-roll',(this.value/100).toFixed(2))"></div>
+        <div class="sl-wrap"><div class="sl-top"><span class="sl-name">Contrast</span><span class="sl-val" id="v-contrast">0.22</span></div><input type="range" class="sl acc" min="0" max="100" value="22" oninput="sv('v-contrast',(this.value/100).toFixed(2));sfSpaceColorLiveUpdate()"></div>
+        <div class="sl-wrap"><div class="sl-top"><span class="sl-name">Saturation</span><span class="sl-val" id="v-sat">0.68</span></div><input type="range" class="sl bl" min="0" max="100" value="68" oninput="sv('v-sat',(this.value/100).toFixed(2));sfSpaceColorLiveUpdate()"></div>
+        <div class="sl-wrap"><div class="sl-top"><span class="sl-name">Highlight rolloff</span><span class="sl-val" id="v-roll">0.74</span></div><input type="range" class="sl gn" min="0" max="100" value="74" oninput="sv('v-roll',(this.value/100).toFixed(2));sfSpaceColorLiveUpdate()"></div>
         <div class="s-btn-row"><button class="s-btn" onclick="sfApplyLookDevelopmentMenu()">Apply Look Development</button></div>
       </div>
     </div>
@@ -3680,6 +3680,7 @@ function sfSceneDefaults(){
     sun:{elevation:'',azimuth:'',intensity:'',turbidity:''},
     clouds:{type:'',coverage:'',altitude:'',density:''},
     output:{format:'EXR 32-bit',resolution:'4K'},
+    spaceColor:typeof sfDefaultSpaceColorState==='function'?sfDefaultSpaceColorState():{workingSpace:'ACEScg',displayTransform:'Scene Linear',preset:'Neutral QC',look:'Kodak 2383',contrast:.22,saturation:.68,highlightRolloff:.74,gamutWarning:false,enabled:true,intensity:1},
     groups:[],
     objects:[],
     timeline:{framePercent:0,duration:300,fps:24,zoom:1,keyframes:[]},
@@ -3703,6 +3704,9 @@ function sfNormalizeSkyForgeScene(scene){
   normalized.sun=Object.assign({},base.sun,scene.sun||{});
   normalized.clouds=Object.assign({},base.clouds,scene.clouds||{});
   normalized.output=Object.assign({},base.output,scene.output||{});
+  normalized.spaceColor=Object.assign({},base.spaceColor,scene.spaceColor||{});
+  normalized.spaceColor.workingSpace=sfNormalizeColorSpace(normalized.spaceColor.workingSpace||normalized.metadata.colorSpace||base.metadata.colorSpace);
+  normalized.metadata.colorSpace=sfNormalizeColorSpace((scene.metadata&&scene.metadata.colorSpace)||normalized.spaceColor.workingSpace||base.metadata.colorSpace);
   normalized.timeline=Object.assign({},base.timeline,scene.timeline||{});
   normalized.timeline.keyframes=Array.isArray(normalized.timeline.keyframes)?normalized.timeline.keyframes:[];
   normalized.groups=Array.isArray(scene.groups)?scene.groups:[];
@@ -5043,6 +5047,7 @@ function sfCollectScene(){
       format:sfActiveText('.fmt-b.active','EXR 32-bit'),
       resolution:sfActiveText('.res-b.active','4K')
     },
+    spaceColor:typeof sfCollectSpaceColorState==='function'?sfCollectSpaceColorState():null,
     groups:sfCollectOutlinerGroups(),
     objects:sfCollectOutlinerObjects(),
     timeline:{
@@ -5087,6 +5092,7 @@ function sfCreateEmptyScene(){
       format:sfActiveText('.fmt-b.active','EXR 32-bit'),
       resolution:sfActiveText('.res-b.active','4K')
     },
+    spaceColor:typeof sfDefaultSpaceColorState==='function'?sfDefaultSpaceColorState():null,
     groups:[],
     objects:[],
     timeline:{
@@ -5817,6 +5823,8 @@ function sfApplyScene(scene){
   if(scene.curves && typeof sfApplyCurveState==='function')sfApplyCurveState(scene.curves);
   if(scene.nodeGraph && typeof sfRestoreNodeGraph==='function')sfRestoreNodeGraph(scene.nodeGraph);
   if(scene.layout && typeof sfApplySavedLayout==='function')sfApplySavedLayout(scene.layout);
+  if(typeof sfApplySpaceColorState==='function')sfApplySpaceColorState(scene.spaceColor||{workingSpace:scene.metadata&&scene.metadata.colorSpace},true);
+  else if(typeof sfSetWorkingSpace==='function')sfSetWorkingSpace(scene.metadata&&scene.metadata.colorSpace||'ACEScg',true);
   if(scene.view && typeof SF_VIEW==='object'){
     SF_VIEW.panX=Number(scene.view.panX)||0;
     SF_VIEW.panY=Number(scene.view.panY)||0;
@@ -5871,9 +5879,9 @@ function sfMenuLabel(item){
   var first=Array.from(item.childNodes).find(function(n){return n.nodeType===3 && n.textContent.trim();});
   return (first?first.textContent:item.textContent).replace(/\s+/g,' ').replace(/[.…].*$/,'').trim();
 }
-function sfSetNamedLook(name){
+function sfSetNamedLook(name,silent){
   var card=Array.from(document.querySelectorAll('.tri-look')).find(function(el){return (el.querySelector('b')?.textContent||'').toLowerCase()===String(name).toLowerCase();});
-  if(typeof triSetLook==='function')triSetLook(card,name);
+  if(typeof triSetLook==='function')triSetLook(card,name,silent);
 }
 function sfSelectMarketplace(label){
   if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('library');
@@ -5881,7 +5889,10 @@ function sfSelectMarketplace(label){
   if(card && card.scrollIntoView)card.scrollIntoView({block:'nearest'});
   triToast('Marketplace: '+label);
 }
-var SF_SPACE_COLOR=window.SF_SPACE_COLOR||{workingSpace:'ACEScg',displayTransform:'Scene Linear',preset:'Neutral QC',gamutWarning:false};
+function sfDefaultSpaceColorState(){
+  return {workingSpace:'ACEScg',displayTransform:'Scene Linear',preset:'Neutral QC',look:'Kodak 2383',contrast:.22,saturation:.68,highlightRolloff:.74,gamutWarning:false,enabled:true,intensity:1};
+}
+var SF_SPACE_COLOR=Object.assign(sfDefaultSpaceColorState(),window.SF_SPACE_COLOR||{});
 window.SF_SPACE_COLOR=SF_SPACE_COLOR;
 function sfSetWorkingSpace(name,silent){
   var label=String(name||'ACES').replace(/\s+working space/i,'').trim()||'ACES';
@@ -5907,6 +5918,7 @@ function sfSetWorkingSpace(name,silent){
   });
   var pill=document.querySelectorAll('.mb-r .mb-pill')[2];
   if(pill)pill.textContent=label;
+  if(!silent&&typeof sfSpaceColorLiveUpdate==='function')sfSpaceColorLiveUpdate();
   if(!silent&&typeof triToast==='function')triToast('Color space: '+label);
 }
 function sfSetLookSlider(label,value){
@@ -5932,11 +5944,31 @@ function sfSpaceColorSlider(kind){
   var wrap=value&&value.closest?value.closest('.sl-wrap'):null;
   return wrap?wrap.querySelector('input[type=range]'):null;
 }
-function sfSpaceColorSetSlider(kind,value){
+function sfSpaceColorReadoutId(kind){
+  var key=String(kind||'').toLowerCase();
+  return key.includes('sat')?'v-sat':key.includes('roll')||key.includes('highlight')?'v-roll':'v-contrast';
+}
+function sfSpaceColorRawSliderValue(value){
+  var n=Number(value);
+  if(!Number.isFinite(n))n=0;
+  return n<=1?n*100:n;
+}
+function sfSpaceColorUnitValue(value,fallback,max){
+  var n=Number(value);
+  if(!Number.isFinite(n))n=fallback;
+  if(n>1&&n<=100)n/=100;
+  return sfSpaceColorClamp(n,0,max||1);
+}
+function sfSpaceColorIntensityValue(value){
+  var n=Number(value);
+  return sfSpaceColorClamp(Number.isFinite(n)?n:1,0,1);
+}
+function sfSpaceColorSetSlider(kind,value,silent){
   var input=sfSpaceColorSlider(kind);
   if(!input)return false;
-  input.value=sfSpaceColorClamp(value,Number(input.min)||0,Number(input.max)||100);
-  input.dispatchEvent(new Event('input',{bubbles:true}));
+  input.value=sfSpaceColorClamp(sfSpaceColorRawSliderValue(value),Number(input.min)||0,Number(input.max)||100);
+  sv(sfSpaceColorReadoutId(kind),(Number(input.value)/100).toFixed(2));
+  if(!silent)input.dispatchEvent(new Event('input',{bubbles:true}));
   return true;
 }
 function sfSpaceColorCurrent(){
@@ -5944,19 +5976,74 @@ function sfSpaceColorCurrent(){
   var look=document.querySelector('#sec-look-development .tri-look.on b')?.textContent?.trim()||'Kodak 2383';
   var state=window.SF_SPACE_COLOR||SF_SPACE_COLOR;
   return {
-    workingSpace:select&&select.value?select.value:(state.workingSpace||'ACEScg'),
+    workingSpace:sfNormalizeColorSpace(select&&select.value?select.value:(state.workingSpace||'ACEScg')),
     displayTransform:state.displayTransform||'Scene Linear',
     preset:state.preset||'Neutral QC',
     look:look,
     contrast:sfNumericText('v-contrast',.22),
     saturation:sfNumericText('v-sat',.68),
     highlightRolloff:sfNumericText('v-roll',.74),
-    gamutWarning:!!state.gamutWarning
+    gamutWarning:!!state.gamutWarning,
+    enabled:state.enabled!==false,
+    intensity:sfSpaceColorIntensityValue(state.intensity)
   };
+}
+function sfCollectSpaceColorState(){
+  var c=sfSpaceColorCurrent();
+  return {
+    workingSpace:c.workingSpace,
+    displayTransform:c.displayTransform,
+    preset:c.preset,
+    look:c.look,
+    contrast:Number(Number(c.contrast).toFixed(3)),
+    saturation:Number(Number(c.saturation).toFixed(3)),
+    highlightRolloff:Number(Number(c.highlightRolloff).toFixed(3)),
+    gamutWarning:!!c.gamutWarning,
+    enabled:c.enabled!==false,
+    intensity:sfSpaceColorIntensityValue(c.intensity)
+  };
+}
+function sfSpaceColorSelectLook(name){
+  var label=String(name||'Kodak 2383');
+  var card=Array.from(document.querySelectorAll('#sec-look-development .tri-look')).find(function(el){return (el.querySelector('b')?.textContent||'').toLowerCase()===label.toLowerCase();});
+  document.querySelectorAll('#sec-look-development .tri-look').forEach(function(el){el.classList.remove('on');});
+  if(card)card.classList.add('on');
+  if(typeof triText==='function')triText('tri-state-look',label);
+  Array.from(document.querySelectorAll('.sf-look-row')).forEach(function(row){
+    var rowLabel=row.querySelector('span')?.textContent||'',value=row.querySelector('b');
+    if(value&&/^lut$/i.test(rowLabel))value.textContent=label;
+  });
+}
+function sfApplySpaceColorState(state,silent){
+  var next=Object.assign(sfDefaultSpaceColorState(),state||{});
+  next.workingSpace=sfNormalizeColorSpace(next.workingSpace||next.colorSpace||'ACEScg');
+  next.contrast=sfSpaceColorUnitValue(next.contrast,.22,1);
+  next.saturation=sfSpaceColorUnitValue(next.saturation,.68,1.5);
+  next.highlightRolloff=sfSpaceColorUnitValue(next.highlightRolloff,.74,1);
+  next.intensity=sfSpaceColorIntensityValue(next.intensity);
+  Object.assign(SF_SPACE_COLOR,next);
+  window.SF_SPACE_COLOR=SF_SPACE_COLOR;
+  sfSetWorkingSpace(next.workingSpace,true);
+  sfSpaceColorSelectLook(next.look);
+  sfSpaceColorSetSlider('contrast',next.contrast,true);
+  sfSpaceColorSetSlider('sat',next.saturation,true);
+  sfSpaceColorSetSlider('roll',next.highlightRolloff,true);
+  sfSpaceColorSyncBadges();
+  if(!silent&&typeof drawSky==='function')drawSky();
+  return SF_SPACE_COLOR;
+}
+function sfSpaceColorLiveUpdate(silent){
+  Object.assign(SF_SPACE_COLOR,sfSpaceColorCurrent());
+  window.SF_SPACE_COLOR=SF_SPACE_COLOR;
+  sfSpaceColorSyncBadges();
+  SF_DIRTY=true;
+  if(!silent&&typeof drawSky==='function')drawSky();
+  return SF_SPACE_COLOR;
 }
 function sfSpaceColorSyncBadges(){
   var c=sfSpaceColorCurrent();
-  SF_SPACE_COLOR.workingSpace=c.workingSpace;
+  Object.assign(SF_SPACE_COLOR,c);
+  window.SF_SPACE_COLOR=SF_SPACE_COLOR;
   var hud=document.querySelector('.sphere-hud');
   if(hud)hud.textContent='EV 14.2 · '+c.workingSpace;
   Array.from(document.querySelectorAll('.sf-look-row')).forEach(function(row){
@@ -5984,8 +6071,7 @@ function sfOpenSpaceColorConsole(){
 function sfSpaceColorSetWorking(space,transform){
   SF_SPACE_COLOR.displayTransform=transform||'Scene Linear';
   sfSetWorkingSpace(space,true);
-  sfSpaceColorSyncBadges();
-  if(typeof drawSky==='function')drawSky();
+  sfSpaceColorLiveUpdate();
   if(typeof triToast==='function')triToast('Space Color: '+SF_SPACE_COLOR.workingSpace+' · '+SF_SPACE_COLOR.displayTransform);
 }
 function sfSpaceColorApplyPreset(name){
@@ -5997,33 +6083,30 @@ function sfSpaceColorApplyPreset(name){
   };
   var p=presets[name]||presets.neutralQc;
   SF_SPACE_COLOR.preset=p.label;
-  sfSpaceColorSetWorking(p.space,p.transform);
-  sfSetNamedLook(p.look);
-  sfSpaceColorSetSlider('contrast',p.contrast);
-  sfSpaceColorSetSlider('sat',p.saturation);
-  sfSpaceColorSetSlider('roll',p.rolloff);
-  sfSpaceColorSyncBadges();
-  if(typeof drawSky==='function')drawSky();
+  SF_SPACE_COLOR.displayTransform=p.transform;
+  sfSetWorkingSpace(p.space,true);
+  sfSetNamedLook(p.look,true);
+  sfSpaceColorSetSlider('contrast',p.contrast,true);
+  sfSpaceColorSetSlider('sat',p.saturation,true);
+  sfSpaceColorSetSlider('roll',p.rolloff,true);
+  sfSpaceColorLiveUpdate();
   if(typeof triToast==='function')triToast('Space Color preset: '+p.label);
 }
 function sfSpaceColorAdjust(kind,delta){
   var input=sfSpaceColorSlider(kind);
   if(!input)return false;
   var next=sfSpaceColorClamp((Number(input.value)||0)+(Number(delta)||0),Number(input.min)||0,Number(input.max)||100);
-  input.value=next;
-  input.dispatchEvent(new Event('input',{bubbles:true}));
-  sfSpaceColorSyncBadges();
-  if(typeof drawSky==='function')drawSky();
+  sfSpaceColorSetSlider(kind,next,true);
+  sfSpaceColorLiveUpdate();
   if(typeof triToast==='function')triToast('Space Color adjusted');
   return true;
 }
 function sfSpaceColorProtectHighlights(){
   var roll=sfSpaceColorSlider('roll'),contrast=sfSpaceColorSlider('contrast');
-  if(roll)sfSpaceColorSetSlider('roll',Math.max(Number(roll.value)||0,88));
-  if(contrast&&Number(contrast.value)>36)sfSpaceColorSetSlider('contrast',34);
+  if(roll)sfSpaceColorSetSlider('roll',Math.max(Number(roll.value)||0,88),true);
+  if(contrast&&Number(contrast.value)>36)sfSpaceColorSetSlider('contrast',34,true);
   SF_SPACE_COLOR.displayTransform='Protected Highlight Rolloff';
-  sfSpaceColorSyncBadges();
-  if(typeof drawSky==='function')drawSky();
+  sfSpaceColorLiveUpdate();
   if(typeof triToast==='function')triToast('Highlights protected');
 }
 function sfEnsureSpaceColorStyle(){
@@ -6052,8 +6135,8 @@ function sfInjectSpaceColorConsole(){
   Array.from(body.querySelectorAll('input[type=range]')).forEach(function(input){
     if(input.dataset.spaceColorScope==='1')return;
     input.dataset.spaceColorScope='1';
-    input.addEventListener('input',function(){sfSpaceColorSyncBadges();});
-    input.addEventListener('change',function(){sfSpaceColorSyncBadges();});
+    input.addEventListener('input',function(){sfSpaceColorLiveUpdate(true);});
+    input.addEventListener('change',function(){sfSpaceColorLiveUpdate();});
   });
   sfDrawSpaceColorConsole();
 }
@@ -6192,8 +6275,7 @@ else setTimeout(sfInjectSpaceColorConsole,0);
 function sfSpaceColorToggleGamutWarning(){
   sfEnsureSpaceColorStyle();
   SF_SPACE_COLOR.gamutWarning=!SF_SPACE_COLOR.gamutWarning;
-  sfSpaceColorSyncBadges();
-  if(typeof drawSky==='function')drawSky();
+  sfSpaceColorLiveUpdate();
   if(typeof triToast==='function')triToast('Gamut warning '+(SF_SPACE_COLOR.gamutWarning?'enabled':'disabled'));
 }
 function sfSpaceColorAudit(){
@@ -11139,6 +11221,94 @@ function sfDrawCameraPostEffects(w,h,cam){
   sfDrawChromaticAberration(w,h,props);
   sfDrawCameraVignette(w,h,props);
 }
+function sfSpaceColorSceneOverride(sceneObjects){
+  var row=(sceneObjects||[]).find(function(o){
+    return o.type==='FX'&&/space color/i.test(String((o.props&&o.props.pass)||o.name||''));
+  });
+  if(!row)return null;
+  var p=row.props||{},out={};
+  ['workingSpace','displayTransform','preset','look'].forEach(function(key){if(p[key]!=null)out[key]=p[key];});
+  ['contrast','saturation','highlightRolloff','intensity'].forEach(function(key){if(p[key]!=null)out[key]=Number(p[key]);});
+  if(p.opacity!=null&&out.intensity==null)out.intensity=Number(p.opacity)/100;
+  if(p.gamutWarning!=null)out.gamutWarning=/^(on|true|1|yes)$/i.test(String(p.gamutWarning));
+  return out;
+}
+function sfSpaceColorViewportState(sceneObjects){
+  var live=typeof sfCollectSpaceColorState==='function'?sfCollectSpaceColorState():Object.assign(sfDefaultSpaceColorState(),SF_SPACE_COLOR||{});
+  var c=Object.assign(sfDefaultSpaceColorState(),live,sfSpaceColorSceneOverride(sceneObjects)||{});
+  c.workingSpace=sfNormalizeColorSpace(c.workingSpace||'ACEScg');
+  c.contrast=sfSpaceColorUnitValue(c.contrast,.22,1);
+  c.saturation=sfSpaceColorUnitValue(c.saturation,.68,1.5);
+  c.highlightRolloff=sfSpaceColorUnitValue(c.highlightRolloff,.74,1);
+  c.intensity=sfSpaceColorIntensityValue(c.intensity);
+  return c;
+}
+function sfSpaceColorLookParams(c){
+  var space=String(c.workingSpace||'').toLowerCase();
+  var look=String(c.look||'').toLowerCase();
+  var transform=String(c.displayTransform||'').toLowerCase();
+  var p={contrastBias:0,satBias:0,brightness:1,hue:0,tint:'#f2d0a8',tintAlpha:.045,highlight:.032,shadow:.045};
+  if(space.includes('rec.709')){p.contrastBias+=.025;p.satBias-=.06;p.tint='#ffd4a8';p.tintAlpha+=.012;}
+  if(space.includes('rec.2020')){p.contrastBias-=.012;p.satBias+=.15;p.tint='#cfe6ff';p.tintAlpha+=.015;p.hue-=2;}
+  if(space.includes('display p3')){p.satBias+=.09;p.tint='#ffd2bd';p.hue+=1.5;}
+  if(space.includes('acescct')){p.contrastBias-=.018;p.brightness-=.012;p.tint='#f4dcc8';}
+  if(space.includes('linear')||space.includes('srgb')){p.contrastBias+=.015;p.satBias-=.025;}
+  if(look.includes('fuji')){p.tint='#d9f1dc';p.tintAlpha+=.018;p.hue-=3;p.contrastBias-=.018;}
+  else if(look.includes('arri')){p.tint='#d4e6ff';p.tintAlpha+=.012;p.hue-=5;p.satBias-=.015;}
+  else if(look.includes('agx')){p.tint='#f6efe1';p.tintAlpha-=.01;p.contrastBias-=.022;p.highlight+=.028;}
+  else if(look.includes('kodak')){p.tint='#ffd0a0';p.tintAlpha+=.024;p.contrastBias+=.018;p.hue+=2;}
+  if(transform.includes('hdr')||transform.includes('pq')){p.brightness+=.035;p.satBias+=.035;p.highlight+=.055;p.contrastBias-=.012;}
+  if(transform.includes('gamma')||transform.includes('sdr')){p.contrastBias+=.025;p.shadow+=.03;}
+  if(transform.includes('print')){p.contrastBias+=.035;p.satBias+=.02;p.shadow+=.038;}
+  if(transform.includes('protected')){p.highlight+=.075;p.contrastBias-=.018;}
+  return p;
+}
+function sfApplySpaceColorViewportGrade(w,h,sceneObjects){
+  if(!vpC||!vpX||!w||!h)return;
+  var c=sfSpaceColorViewportState(sceneObjects);
+  if(c.enabled===false)return;
+  var p=sfSpaceColorLookParams(c);
+  if(!SF_POST_BUFFER)SF_POST_BUFFER=document.createElement('canvas');
+  SF_POST_BUFFER.width=vpC.width;SF_POST_BUFFER.height=vpC.height;
+  var b=SF_POST_BUFFER.getContext('2d');
+  b.setTransform(1,0,0,1,0,0);
+  b.clearRect(0,0,SF_POST_BUFFER.width,SF_POST_BUFFER.height);
+  b.drawImage(vpC,0,0,w,h);
+  var intensity=sfSpaceColorIntensityValue(c.intensity);
+  var contrast=sfSpaceColorClamp(1+c.contrast*.52+p.contrastBias,.72,1.72);
+  var saturation=sfSpaceColorClamp(.72+c.saturation*.78+p.satBias,.25,1.92);
+  var brightness=sfSpaceColorClamp(p.brightness+(c.highlightRolloff-.74)*.035,.84,1.16);
+  var hue=sfSpaceColorClamp(p.hue,-18,18);
+  vpX.save();
+  vpX.globalAlpha=intensity;
+  vpX.filter='contrast('+contrast.toFixed(3)+') saturate('+saturation.toFixed(3)+') brightness('+brightness.toFixed(3)+') hue-rotate('+hue.toFixed(2)+'deg)';
+  vpX.drawImage(SF_POST_BUFFER,0,0,w,h);
+  vpX.filter='none';
+  vpX.globalCompositeOperation='soft-light';
+  vpX.globalAlpha=sfSpaceColorClamp((p.tintAlpha+c.saturation*.018)*intensity,0,.16);
+  vpX.fillStyle=p.tint;
+  vpX.fillRect(0,0,w,h);
+  vpX.globalCompositeOperation='source-over';
+  var shoulder=vpX.createLinearGradient(0,0,0,h);
+  shoulder.addColorStop(0,'rgba(255,245,220,'+sfSpaceColorClamp((p.highlight+c.highlightRolloff*.04)*intensity,0,.16).toFixed(3)+')');
+  shoulder.addColorStop(.38,'rgba(255,255,255,0)');
+  shoulder.addColorStop(1,'rgba(0,0,0,'+sfSpaceColorClamp((p.shadow+c.contrast*.055)*intensity,0,.18).toFixed(3)+')');
+  vpX.fillStyle=shoulder;
+  vpX.fillRect(0,0,w,h);
+  if(c.gamutWarning){
+    vpX.globalCompositeOperation='screen';
+    vpX.globalAlpha=.18*intensity;
+    vpX.strokeStyle='#ff2fd8';
+    vpX.lineWidth=1;
+    var step=Math.max(12,Math.round(w/44));
+    for(var x=-h;x<w;x+=step){vpX.beginPath();vpX.moveTo(x,0);vpX.lineTo(x+h,h);vpX.stroke();}
+    vpX.globalAlpha=.14*intensity;
+    vpX.strokeStyle='#30d158';
+    for(var x2=0;x2<w+h;x2+=step*2){vpX.beginPath();vpX.moveTo(x2,0);vpX.lineTo(x2-h,h);vpX.stroke();}
+  }
+  vpX.restore();
+  window.__sfLastSpaceColorViewport={workingSpace:c.workingSpace,displayTransform:c.displayTransform,look:c.look,contrast:contrast,saturation:saturation,brightness:brightness,hue:hue,gamutWarning:!!c.gamutWarning};
+}
 function sfDrawLookDevelopmentGrade(w,h,sceneObjects){
   var row=(sceneObjects||[]).find(function(o){return o.type==='FX'&&/color grade|look development/i.test(String((o.props&&o.props.pass)||o.name||''));});
   if(!row||!vpC||!vpX)return;
@@ -11222,6 +11392,7 @@ function drawSky(){
     if(SF_MEASURE_MODE)sfDrawMeasureOverlay(w,h);
     sfDrawLookDevelopmentGrade(w,h,sceneObjects);
     sfDrawCameraPostEffects(w,h,cam);
+    sfApplySpaceColorViewportGrade(w,h,sceneObjects);
     var yawDeg=sfSignedAngleDeg(SF_VIEW.yaw);
     var pitchDeg=sfSignedAngleDeg(SF_VIEW.pitch);
     vpX.fillStyle='rgba(255,255,255,.38)';
@@ -11231,6 +11402,8 @@ function drawSky(){
     if(hud)hud.textContent=(SF_VIEWPORT_MODE==='top'?'TOP':(SF_VIEWPORT_MODE==='equirect'?'EQR':'3D'))+' '+yawDeg+' / '+pitchDeg;
     if(typeof sfEnsureOrientationGizmo==='function')sfEnsureOrientationGizmo();
     if(typeof sfRedrawGizmoFromViewport==='function')sfRedrawGizmoFromViewport();
+  }else{
+    sfApplySpaceColorViewportGrade(w,h,sceneObjects);
   }
   if(typeof sfRenderABCompareOverlay==='function')sfRenderABCompareOverlay();
 }
@@ -14114,11 +14287,13 @@ async function applySkyIntelligence(){
     triToast('Intelligent look applied locally');
   }
 }
-function triSetLook(el,name){
+function triSetLook(el,name,silent){
   document.querySelectorAll('.tri-look').forEach(c=>c.classList.remove('on'));
   if(el)el.classList.add('on');
   triText('tri-state-look',name);
-  triToast('Look applied: '+name);
+  if(typeof sfSpaceColorLiveUpdate==='function')sfSpaceColorLiveUpdate(!!silent);
+  else if(!silent&&typeof drawSky==='function')drawSky();
+  if(!silent)triToast('Look applied: '+name);
 }
 function sfClearSceneSelection(){
   document.querySelectorAll('#outliner-list .tri-out-extra,#outliner-list .tri-out-group,.out-row').forEach(x=>x.classList.remove('sel'));
