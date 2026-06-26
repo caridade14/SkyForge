@@ -603,6 +603,38 @@ body.sf-ab-on .ab-label{display:block}
 .project-mini-btn:hover{color:var(--t0);border-color:var(--b3)}
 .project-mini-btn.danger:hover{color:var(--rd);border-color:rgba(239,85,85,.35);background:var(--rdd)}
 .project-empty{font-size:10px;color:var(--t3);font-family:var(--fm);padding:14px;text-align:center}
+/* STARTUP SPLASH */
+#sf-startup-ov{z-index:720;background:rgba(7,8,10,.72);backdrop-filter:blur(18px) saturate(1.08)}
+.sf-startup-shell{width:min(1060px,92vw);height:min(610px,86vh);display:grid;grid-template-columns:minmax(0,1.24fr) minmax(320px,.76fr);overflow:hidden;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:#15171d;box-shadow:0 34px 90px rgba(0,0,0,.68),0 1px 0 rgba(255,255,255,.08) inset}
+.sf-startup-media{position:relative;min-width:0;background:#0b0c10;overflow:hidden}
+.sf-startup-media img{width:100%;height:100%;object-fit:cover;display:block;filter:saturate(1.03) contrast(1.02)}
+.sf-startup-media:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(6,7,10,.04) 0%,rgba(6,7,10,.10) 58%,rgba(21,23,29,.84) 100%),linear-gradient(0deg,rgba(0,0,0,.34),transparent 42%)}
+.sf-startup-badge{position:absolute;left:18px;bottom:18px;z-index:2;padding:7px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.18);background:rgba(9,10,13,.42);color:rgba(255,255,255,.86);font:700 10px var(--fd);letter-spacing:.02em;backdrop-filter:blur(10px)}
+.sf-startup-panel{position:relative;min-width:0;padding:24px 24px 20px;background:linear-gradient(180deg,#1c1f27,#15171d);display:flex;flex-direction:column;gap:16px}
+.sf-startup-close{position:absolute;right:14px;top:12px;width:28px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.045);color:rgba(245,245,247,.74);font:700 16px var(--fd);line-height:1;cursor:pointer}
+.sf-startup-close:hover{color:#fff;border-color:rgba(232,129,42,.48);background:rgba(232,129,42,.12)}
+.sf-startup-kicker{font:800 10px var(--fd);letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin-top:4px}
+.sf-startup-title{font:800 clamp(30px,4vw,52px)/.92 var(--fd);letter-spacing:0;color:#f5f5f7;margin:0}
+.sf-startup-version{display:inline-flex;align-items:center;gap:6px;width:max-content;padding:5px 8px;border-radius:6px;background:rgba(232,129,42,.12);border:1px solid rgba(232,129,42,.26);font:700 10px var(--fm);color:#ffb454}
+.sf-startup-copy{font:12px/1.58 var(--fb);color:rgba(235,236,241,.76);max-width:34em}
+.sf-startup-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sf-startup-chip{min-width:0;border:1px solid rgba(255,255,255,.10);border-radius:7px;background:rgba(255,255,255,.045);padding:9px}
+.sf-startup-chip span{display:block;font:800 8px var(--fd);letter-spacing:.08em;text-transform:uppercase;color:rgba(235,236,241,.46)}
+.sf-startup-chip b{display:block;margin-top:4px;font:700 11px var(--fm);color:#f5f5f7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sf-startup-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto}
+.sf-startup-btn{height:36px;border-radius:7px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#f5f5f7;font:800 11px var(--fd);cursor:pointer}
+.sf-startup-btn:hover{border-color:rgba(232,129,42,.44);background:rgba(232,129,42,.13)}
+.sf-startup-btn.primary{grid-column:1/-1;background:linear-gradient(180deg,#f39a3d,#d87420);border-color:rgba(255,188,110,.55);color:#130b05;box-shadow:0 14px 34px rgba(232,129,42,.22)}
+.sf-startup-btn.primary:hover{background:linear-gradient(180deg,#ffad55,#e8812a)}
+.sf-startup-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px;font:10px var(--fm);color:rgba(235,236,241,.52)}
+.sf-startup-foot label{display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap}
+.sf-startup-foot input{accent-color:#e8812a}
+@media(max-width:820px){
+  .sf-startup-shell{grid-template-columns:1fr;height:min(720px,90vh)}
+  .sf-startup-media{height:260px}
+  .sf-startup-panel{padding:18px}
+  .sf-startup-title{font-size:32px}
+}
 .version-list,.log-list{overflow:auto;border:1px solid var(--b1);border-radius:5px;background:var(--bg2);max-height:430px}
 .version-row,.log-row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px;border-bottom:1px solid var(--b1);align-items:center}
 .version-row:last-child,.log-row:last-child{border-bottom:none}
@@ -2275,6 +2307,36 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
     </div>
     <div class="modal-footer">
       <button class="modal-btn cancel" onclick="closeModal('project-ov')">Close</button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="sf-startup-ov" role="dialog" aria-modal="true" aria-labelledby="sf-startup-title">
+  <div class="sf-startup-shell">
+    <div class="sf-startup-media">
+      <img src="assets/startup-skyforge-splash.png" alt="Golden cloud study">
+      <div class="sf-startup-badge">Procedural sky reference · warm cloud light</div>
+    </div>
+    <div class="sf-startup-panel">
+      <button class="sf-startup-close" onclick="sfCloseStartupSplash()" aria-label="Close startup screen">×</button>
+      <div class="sf-startup-kicker">SkyForge Studio</div>
+      <h1 class="sf-startup-title" id="sf-startup-title">SkyForge</h1>
+      <div class="sf-startup-version" id="sf-startup-version">v10 · ACEScg pipeline</div>
+      <p class="sf-startup-copy">Cinematic sky, HDRI and atmosphere workstation for building production-ready lighting scenes with sun position, clouds, location data, node graph and final color space control.</p>
+      <div class="sf-startup-grid">
+        <div class="sf-startup-chip"><span>Viewport</span><b>Empty until you add scene elements</b></div>
+        <div class="sf-startup-chip"><span>Pipeline</span><b>ACEScg / Space Color</b></div>
+        <div class="sf-startup-chip"><span>Lighting</span><b>Sun, clouds, HDRI, weather</b></div>
+        <div class="sf-startup-chip"><span>Output</span><b>EXR, HDR, PNG, TIFF</b></div>
+      </div>
+      <div class="sf-startup-actions">
+        <button class="sf-startup-btn primary" onclick="sfStartupNewScene()">New Empty Scene</button>
+        <button class="sf-startup-btn" onclick="sfStartupOpenProject()">Open Project</button>
+        <button class="sf-startup-btn" onclick="sfCloseStartupSplash()">Continue</button>
+      </div>
+      <div class="sf-startup-foot">
+        <span id="sf-startup-status">Ready for lookdev</span>
+        <label><input type="checkbox" id="sf-startup-show" checked> Show at startup</label>
+      </div>
     </div>
   </div>
 </div>
@@ -6522,6 +6584,56 @@ function sfInstallMenuActions(){
 /* ── MODALS ── */
 function openModal(id){document.getElementById(id).classList.add('show');}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
+var SF_STARTUP_SPLASH_KEY='skyforge.startupSplash.hidden.v1';
+function sfStartupSplashVisible(){
+  var ov=document.getElementById('sf-startup-ov');
+  return !!(ov&&ov.classList.contains('show'));
+}
+function sfCloseStartupSplash(){
+  var ov=document.getElementById('sf-startup-ov');
+  var show=document.getElementById('sf-startup-show');
+  try{
+    if(show&&!show.checked)localStorage.setItem(SF_STARTUP_SPLASH_KEY,'1');
+    else localStorage.removeItem(SF_STARTUP_SPLASH_KEY);
+  }catch(_){}
+  if(ov)ov.classList.remove('show');
+}
+function sfShowStartupSplash(force){
+  var ov=document.getElementById('sf-startup-ov');
+  if(!ov)return;
+  try{if(!force&&localStorage.getItem(SF_STARTUP_SPLASH_KEY)==='1')return;}catch(_){}
+  var version=document.getElementById('sf-startup-version');
+  if(version)version.textContent=(SF_APP_VERSION||'v10')+' · ACEScg pipeline';
+  var status=document.getElementById('sf-startup-status');
+  if(status)status.textContent='Ready for cinematic sky lookdev';
+  ov.classList.add('show');
+  var primary=ov.querySelector('.sf-startup-btn.primary');
+  if(primary&&primary.focus)setTimeout(function(){primary.focus({preventScroll:true});},80);
+}
+function sfStartupNewScene(){
+  sfCloseStartupSplash();
+  if(typeof sfApplyScene==='function'&&typeof sfCreateEmptyScene==='function')sfApplyScene(sfCreateEmptyScene());
+  if(typeof sfClearSceneSelection==='function')sfClearSceneSelection();
+  if(typeof sfToast==='function')sfToast('New empty SkyForge scene ready');
+}
+function sfStartupOpenProject(){
+  sfCloseStartupSplash();
+  if(typeof sfOpenProjectBrowser==='function')sfOpenProjectBrowser();
+}
+function sfInstallStartupSplash(){
+  var ov=document.getElementById('sf-startup-ov');
+  if(!ov)return;
+  ov.addEventListener('click',function(e){if(e.target===ov)sfCloseStartupSplash();});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&sfStartupSplashVisible()){
+      e.preventDefault();
+      sfCloseStartupSplash();
+    }
+  });
+  setTimeout(function(){sfShowStartupSplash(false);},320);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sfInstallStartupSplash);
+else sfInstallStartupSplash();
 function sfSetPreferenceSection(section,button){
   var key=section||'interface';
   document.querySelectorAll('.prefs-nav').forEach(function(nav){nav.classList.toggle('active',nav.dataset.prefTab===key);});
