@@ -3968,6 +3968,13 @@ function sfTextValue(id,fallback){
   return el?el.textContent.replace(/[^\d.+-]/g,'') || fallback:fallback;
 }
 
+function sfNumericText(id,fallback){
+  var el=document.getElementById(id);
+  var text=el?el.textContent:'';
+  var n=Number(String(text).replace(/[^\d.+-]/g,''));
+  return Number.isFinite(n)?n:fallback;
+}
+
 function sfActiveText(selector,fallback){
   var el=document.querySelector(selector);
   return (el&&el.textContent||fallback||'').replace(/\s+/g,' ').trim();
@@ -16052,6 +16059,837 @@ window.sfInitGlobe=sfInitGlobe;
   else install();
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',runQuerySelfTest);
   else runQuerySelfTest();
+})();
+(function(){
+  'use strict';
+  var SF_RECOVERY_KEY='skyforge.localRecovery.v1';
+  var SF_RECOVERY_DISMISSED_KEY='skyforge.localRecovery.dismissed.v1';
+  var SF_SHORTCUT_KEY='skyforge.shortcutEditor.v1';
+  var SF_TEMPLATE_LAST_KEY='skyforge.template.last.v1';
+  var SF_PROP_CLIPBOARD_KEY='skyforge.propClipboard.v1';
+  var SF_ACTIVE_EXPORT_PROFILE='blender';
+  var SF_TUTORIAL_STEP=0;
+  var SF_LAYER_SOLO_KEY='';
+  var SF_PRESET_FILTER={category:'all',query:''};
+
+  function sfProReady(fn){
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fn);
+    else fn();
+  }
+  function sfProNotify(message){
+    if(typeof triToast==='function')triToast(message);
+    else if(typeof sfToast==='function')sfToast(message);
+    else console.log(message);
+  }
+  function sfProEsc(value){
+    var map={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+    return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return map[ch]||ch;});
+  }
+  function sfProNum(value,fallback){
+    value=Number(value);
+    return Number.isFinite(value)?value:(fallback||0);
+  }
+  function sfProScene(){
+    try{return typeof sfCollectScene==='function'?sfCollectScene():{};}
+    catch(_){return {};}
+  }
+  function sfProMarkDirty(reason){
+    if(typeof sfSetProjectDirty==='function')sfSetProjectDirty(true,reason||'production-suite');
+    else window.SF_DIRTY=true;
+  }
+  function sfProDraw(){
+    try{if(typeof drawSky==='function')drawSky();}catch(_){}
+    try{if(typeof sfDrawHdrPreview==='function')sfDrawHdrPreview();}catch(_){}
+  }
+  function sfProSelectPanel(key){
+    try{if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab(key);}catch(_){}
+  }
+  function sfProActiveText(selector,fallback){
+    var el=document.querySelector(selector);
+    return (el&&el.textContent?el.textContent.trim():fallback)||'';
+  }
+  function sfProSetActiveText(selector,text){
+    var target=Array.from(document.querySelectorAll(selector)).find(function(el){
+      return (el.textContent||'').toLowerCase().indexOf(String(text||'').toLowerCase())>=0;
+    });
+    if(!target)return false;
+    if(selector.indexOf('.fmt-b')>=0 && typeof setFmt==='function')setFmt(target);
+    else if(selector.indexOf('.res-b')>=0 && typeof setRes==='function')setRes(target);
+    else{
+      target.parentElement.querySelectorAll(selector).forEach(function(el){el.classList.remove('active');});
+      target.classList.add('active');
+    }
+    return true;
+  }
+  function sfProSelectedRow(){
+    try{if(typeof sfGetSelectedOutlinerRow==='function')return sfGetSelectedOutlinerRow();}
+    catch(_){}
+    return document.querySelector('#outliner-list .tri-out-extra.sel');
+  }
+  function sfProRowsInGroup(group){
+    if(typeof sfRowsInGroup==='function')return sfRowsInGroup(group);
+    var rows=[],node=group&&group.nextElementSibling;
+    while(node&&!node.matches('.tri-out-group')){
+      if(node.matches('.tri-out-extra'))rows.push(node);
+      node=node.nextElementSibling;
+    }
+    return rows;
+  }
+  function sfProGroupKey(group){
+    try{if(typeof sfEnsureGroupKey==='function')return sfEnsureGroupKey(group);}
+    catch(_){}
+    return group&&group.dataset?group.dataset.sfGroupKey||'':'';
+  }
+  function sfProDefaultGroups(){
+    return [
+      {key:'tpl-world',name:'World Environment',type:'ROOT',collapsed:false},
+      {key:'tpl-atmosphere',name:'Atmosphere',type:'VOL',collapsed:false},
+      {key:'tpl-clouds',name:'Cloud System',type:'CLOUDS',collapsed:false},
+      {key:'tpl-cameras',name:'Cameras / Probes',type:'CAM',collapsed:false}
+    ];
+  }
+  function sfProObj(type,name,group,props,pos,extra){
+    var meta=typeof sfObjectMeta==='function'?sfObjectMeta(type):['O',type];
+    pos=pos||{};
+    return Object.assign({
+      icon:meta[0]||'O',
+      key:'tpl-'+String(type||'item').toLowerCase()+'-'+String(name||'object').toLowerCase().replace(/[^a-z0-9]+/g,'-')+'-'+Math.floor(Math.random()*99999),
+      name:name||meta[1]||'Object',
+      type:String(type||'ITEM').toUpperCase(),
+      visible:true,
+      locked:false,
+      added:true,
+      group:group||'',
+      props:props||{},
+      x:sfProNum(pos.x,0),
+      y:sfProNum(pos.y,80),
+      z:sfProNum(pos.z,0),
+      rot:sfProNum(pos.rot,0),
+      scale:sfProNum(pos.scale,1)
+    },extra||{});
+  }
+  function sfProTemplateBase(){
+    var scene=typeof sfCreateEmptyScene==='function'?sfCreateEmptyScene():{};
+    scene.groups=sfProDefaultGroups();
+    scene.objects=[];
+    scene.time='18:20';
+    scene.output=Object.assign({},scene.output||{},{format:'EXR 32-bit',resolution:'4K'});
+    scene.metadata=Object.assign({},scene.metadata||{},{colorSpace:'ACEScg'});
+    if(typeof sfDefaultSpaceColorState==='function')scene.spaceColor=sfDefaultSpaceColorState();
+    return scene;
+  }
+  function sfProBuildTemplate(key){
+    key=String(key||'empty').toLowerCase();
+    if(key==='empty')return typeof sfCreateEmptyScene==='function'?sfCreateEmptyScene():{objects:[],groups:[]};
+    var scene=sfProTemplateBase();
+    if(key==='golden-hour'){
+      scene.city='Luanda, Angola';
+      scene.latitude='-8.8390';
+      scene.longitude='13.2894';
+      scene.weather='Warm haze, 27 C';
+      scene.time='18:15';
+      scene.sun={elevation:'7',azimuth:'250',intensity:'1.8',turbidity:'2.6'};
+      scene.clouds={type:'Cumulus',coverage:'46',altitude:'2200',density:'0.46'};
+      scene.objects=[
+        sfProObj('LIGHT','Golden Sun Rig','tpl-atmosphere',{intensity:1.8,temperature:4700,softness:72,color:'#ffb35f'},{x:-220,y:360,z:-120}),
+        sfProObj('CLOUD','Hero Cumulus Bank','tpl-clouds',{coverage:46,density:.46,altitude:2200,softness:74,color:'#ffd19b',seed:1842},{x:0,y:120,z:0,scale:1.18}),
+        sfProObj('CAM','Wide Establishing Camera','tpl-cameras',{lens:'24 mm',fov:72,exposure:.2,aperture:5.6},{x:0,y:120,z:520,rot:0})
+      ];
+    }else if(key==='storm'){
+      scene.city='Cape Town, South Africa';
+      scene.latitude='-33.9249';
+      scene.longitude='18.4241';
+      scene.weather='Storm cells, 18 C';
+      scene.time='16:40';
+      scene.sun={elevation:'12',azimuth:'280',intensity:'1.1',turbidity:'5.2'};
+      scene.clouds={type:'Cumulonimbus',coverage:'82',altitude:'1800',density:'0.78'};
+      scene.objects=[
+        sfProObj('CLOUD','Anvil Storm Stack','tpl-clouds',{coverage:82,density:.78,altitude:1800,softness:51,color:'#7c8791',seed:2901},{x:-40,y:130,z:0,scale:1.35}),
+        sfProObj('VOL','Rain Haze Volume','tpl-atmosphere',{density:.34,height:780,falloff:68,anisotropy:.22,color:'#9aa6ac'},{x:0,y:80,z:0,scale:1.1}),
+        sfProObj('FX','Lightning Pass','tpl-atmosphere',{pass:'Lightning',opacity:74,softness:40,samples:160,seed:733},{x:120,y:220,z:-80}),
+        sfProObj('CAM','Storm Plate Camera','tpl-cameras',{lens:'35 mm',fov:58,exposure:-.15,aperture:8},{x:0,y:130,z:520})
+      ];
+    }else if(key==='night-sky'){
+      scene.city='Reykjavik, Iceland';
+      scene.latitude='64.1466';
+      scene.longitude='-21.9426';
+      scene.weather='Cold clear night, 4 C';
+      scene.time='23:15';
+      scene.sun={elevation:'-14',azimuth:'22',intensity:'0.25',turbidity:'1.5'};
+      scene.clouds={type:'Cirrus',coverage:'16',altitude:'6200',density:'0.18'};
+      scene.spaceColor=Object.assign({},scene.spaceColor||{},{look:'AgX Filmic',contrast:.28,saturation:.74,highlightRolloff:.88});
+      scene.objects=[
+        sfProObj('FX','Aurora Curtain','tpl-atmosphere',{pass:'Aurora',opacity:66,intensity:.62,waveSpeed:.38,altitude:110,color:'#00e87a',colorMode:'Multi-color',palette:'#00e87a,#00c8ff,#9b6bff,#ff6baa',softness:76,samples:128,seed:4242},{x:0,y:190,z:-120,scale:1.25}),
+        sfProObj('LIGHT','Moon Rim Light','tpl-atmosphere',{intensity:.55,temperature:7600,softness:82,color:'#bfd8ff'},{x:260,y:310,z:-260}),
+        sfProObj('CAM','Night Sky Camera','tpl-cameras',{lens:'20 mm',fov:82,exposure:.65,aperture:2.8},{x:0,y:120,z:540})
+      ];
+    }else if(key==='product-hdri'){
+      scene.city='Studio';
+      scene.weather='Controlled studio reference';
+      scene.time='12:00';
+      scene.sun={elevation:'42',azimuth:'210',intensity:'1.35',turbidity:'2.1'};
+      scene.clouds={type:'Softbox',coverage:'20',altitude:'3600',density:'0.16'};
+      scene.objects=[
+        sfProObj('HDRI','Clean Studio HDRI','tpl-world',{mode:'Studio',resolution:'4K',exposure:0,color:'#f1e4d1'},{x:0,y:120,z:0,scale:1.1}),
+        sfProObj('LIGHT','Warm Key Softbox','tpl-atmosphere',{intensity:1.4,temperature:5200,softness:92,color:'#ffd3a0'},{x:-180,y:260,z:180}),
+        sfProObj('ITEM','Chrome Reference Ball','tpl-world',{mode:'Reference',size:90,opacity:100,color:'#c8d0d8'},{x:-90,y:75,z:110,scale:.72}),
+        sfProObj('CAM','Product Turntable Camera','tpl-cameras',{lens:'50 mm',fov:38,exposure:0,aperture:5.6},{x:0,y:145,z:500})
+      ];
+    }
+    return typeof sfNormalizeSkyForgeScene==='function'?sfNormalizeSkyForgeScene(scene):scene;
+  }
+  var SF_PROJECT_TEMPLATES=[
+    {key:'empty',label:'Empty Scene',desc:'Viewport limpo, so grelha e eixos para comecar do zero.'},
+    {key:'golden-hour',label:'Golden Hour',desc:'Sol baixo, nuvens quentes e camera pronta para lookdev.'},
+    {key:'storm',label:'Storm System',desc:'Nuvens densas, volume de chuva e passe de relampago.'},
+    {key:'night-sky',label:'Night / Aurora',desc:'Noite cinematica com lua, aurora e grade frio.'},
+    {key:'product-hdri',label:'Product HDRI',desc:'Setup controlado para reflexoes, referencia e export.'}
+  ];
+  function sfApplyProjectTemplate(key){
+    var tpl=SF_PROJECT_TEMPLATES.find(function(item){return item.key===key;})||SF_PROJECT_TEMPLATES[0];
+    var scene=sfProBuildTemplate(tpl.key);
+    if(typeof sfCloseStartupSplash==='function')sfCloseStartupSplash();
+    try{localStorage.setItem(SF_TEMPLATE_LAST_KEY,tpl.key);}catch(_){}
+    try{
+      if(typeof sfApplyScene==='function')sfApplyScene(scene);
+      if(tpl.key!=='empty'&&typeof sfApplySceneTimeRealtime==='function')sfApplySceneTimeRealtime(true);
+      if(tpl.key==='night-sky'&&typeof sfApplyNightModeMenu==='function')sfApplyNightModeMenu(true);
+      if(tpl.key==='golden-hour'&&typeof sfApplySunPreset==='function')sfApplySunPreset('golden');
+    }catch(err){
+      console.warn('SkyForge template failed',err);
+    }
+    sfProMarkDirty('template-'+tpl.key);
+    sfProDraw();
+    sfProSelectPanel(tpl.key==='empty'?'hierarchy':'review');
+    sfRunSceneDoctor(true);
+    sfProNotify(tpl.label+' template applied');
+  }
+  function sfRenderStartupTemplates(){
+    var panel=document.querySelector('.sf-startup-panel');
+    if(!panel||document.getElementById('sf-template-strip'))return;
+    var actions=panel.querySelector('.sf-startup-actions');
+    var wrap=document.createElement('div');
+    wrap.id='sf-template-strip';
+    wrap.className='sf-template-strip';
+    wrap.innerHTML='<div class="sf-template-head"><span>Project templates</span><button type="button" onclick="sfOpenPresetBrowser()">Open browser</button></div><div class="sf-template-grid">'+
+      SF_PROJECT_TEMPLATES.map(function(tpl){
+        return '<button type="button" class="sf-template-card" onclick="sfApplyProjectTemplate(\''+tpl.key+'\')"><b>'+sfProEsc(tpl.label)+'</b><span>'+sfProEsc(tpl.desc)+'</span></button>';
+      }).join('')+'</div>';
+    if(actions)panel.insertBefore(wrap,actions);
+    else panel.appendChild(wrap);
+  }
+
+  var SF_PRO_PRESETS=[
+    {key:'hdri-golden',cat:'Lighting',label:'Golden HDRI Rig',desc:'Warm sun, clear export-ready HDRI.',run:function(){if(typeof sfApplyAssetPreset==='function')sfApplyAssetPreset('hdri');if(typeof sfSetInput==='function')sfSetInput('#scene-time','18:20',true);if(typeof sfApplySceneTimeRealtime==='function')sfApplySceneTimeRealtime(true);}},
+    {key:'cloud-cumulus',cat:'Clouds',label:'Soft Cumulus Bank',desc:'Readable clouds with gentle contrast.',run:function(){if(typeof sfApplyAssetPreset==='function')sfApplyAssetPreset('cloud');}},
+    {key:'cloud-storm',cat:'Clouds',label:'Storm Cloud Stack',desc:'Heavy density plus lightning FX.',run:function(){if(typeof sfAddSceneObject==='function'){sfAddSceneObject('CLOUD','Storm Cloud Stack',{props:{coverage:86,density:.82,altitude:1900,softness:46,color:'#7f8990'}});sfAddSceneObject('FX','Storm Lightning',{props:{pass:'Lightning',opacity:78,softness:44,samples:160,seed:991}});}}},
+    {key:'grade-print',cat:'Color',label:'Cinema Print Grade',desc:'Kodak-style contrast and warm highlights.',run:function(){if(typeof sfSpaceColorApplyPreset==='function')sfSpaceColorApplyPreset('cinemaPrint');else if(typeof sfSetNamedLook==='function')sfSetNamedLook('Kodak 2383');}},
+    {key:'grade-hdr',cat:'Color',label:'HDR Highlight Master',desc:'Protects rolloff for bright skies.',run:function(){if(typeof sfSpaceColorApplyPreset==='function')sfSpaceColorApplyPreset('hdrMaster');if(typeof sfSpaceColorProtectHighlights==='function')sfSpaceColorProtectHighlights();}},
+    {key:'node-weather',cat:'Nodes',label:'Weather Control Nodes',desc:'TIME, WIND and GRADE helpers connected to output.',run:function(){if(typeof sfCreateNode==='function'){sfCreateNode('TIME');sfCreateNode('WIND');sfCreateNode('GRADE');}if(typeof sfConnectSelectedNodeToOutput==='function')sfConnectSelectedNodeToOutput();if(typeof sfApplyNodeGraphToScene==='function')sfApplyNodeGraphToScene();}},
+    {key:'camera-cinema',cat:'Camera',label:'Cinema Camera',desc:'Adds a plate camera with practical lens props.',run:function(){if(typeof sfCreateCinemaCamera==='function')sfCreateCinemaCamera();else if(typeof sfAddSceneObject==='function')sfAddSceneObject('CAM','Cinema Camera',{props:{lens:'35 mm',fov:58,exposure:0,aperture:5.6}});}},
+    {key:'reference-kit',cat:'Production',label:'Reference Kit',desc:'Chrome ball, grey card and note object.',run:function(){if(typeof sfAddSceneObject==='function'){sfAddSceneObject('ITEM','Chrome Reference Ball',{props:{mode:'Reference',size:90,opacity:100,color:'#c8d0d8'},position:{x:-80,y:70,z:120}});sfAddSceneObject('ITEM','Grey Card',{props:{mode:'Reference',size:130,opacity:92,color:'#8a8d8f'},position:{x:80,y:70,z:120}});sfAddSceneObject('NOTE','Lighting Notes',{props:{status:'TODO',priority:2,text:'Record exposure, weather, reference and export target.'}});}}}
+  ];
+  function sfPresetCategories(){
+    var set={all:true};
+    SF_PRO_PRESETS.forEach(function(p){set[p.cat]=true;});
+    return Object.keys(set);
+  }
+  function sfRenderPresetBrowser(){
+    var root=document.getElementById('sf-pro-preset-browser');
+    if(!root)return;
+    var q=String(SF_PRESET_FILTER.query||'').toLowerCase();
+    var cat=SF_PRESET_FILTER.category||'all';
+    var items=SF_PRO_PRESETS.filter(function(p){
+      var hay=(p.label+' '+p.desc+' '+p.cat).toLowerCase();
+      return (cat==='all'||p.cat===cat)&&(!q||hay.indexOf(q)>=0);
+    });
+    root.innerHTML='<div class="sf-pro-head"><div><b>Preset Browser</b><span>Reusable lighting, color, node and production setups</span></div><button class="sf-pro-mini" onclick="sfApplyProPreset(\'reference-kit\')">Reference kit</button></div>'+
+      '<div class="sf-pro-filter"><input value="'+sfProEsc(SF_PRESET_FILTER.query)+'" placeholder="Search presets" oninput="sfSetPresetSearch(this.value)">'+
+      sfPresetCategories().map(function(c){return '<button class="'+(c===cat?'on':'')+'" onclick="sfSetPresetCategory(\''+c+'\')">'+sfProEsc(c)+'</button>';}).join('')+'</div>'+
+      '<div class="sf-pro-preset-grid">'+items.map(function(p){
+        return '<button class="sf-pro-preset" onclick="sfApplyProPreset(\''+p.key+'\')"><span>'+sfProEsc(p.cat)+'</span><b>'+sfProEsc(p.label)+'</b><em>'+sfProEsc(p.desc)+'</em></button>';
+      }).join('')+'</div>';
+  }
+  function sfSetPresetSearch(value){
+    SF_PRESET_FILTER.query=value||'';
+    sfRenderPresetBrowser();
+  }
+  function sfSetPresetCategory(category){
+    SF_PRESET_FILTER.category=category||'all';
+    sfRenderPresetBrowser();
+  }
+  function sfOpenPresetBrowser(){
+    sfProSelectPanel('library');
+    setTimeout(function(){
+      var root=document.getElementById('sf-pro-preset-browser');
+      if(root&&root.scrollIntoView)root.scrollIntoView({block:'nearest'});
+    },30);
+  }
+  function sfApplyProPreset(key){
+    var preset=SF_PRO_PRESETS.find(function(p){return p.key===key;});
+    if(!preset)return;
+    try{preset.run();}catch(err){console.warn('SkyForge preset failed',err);}
+    sfProMarkDirty('preset-'+key);
+    sfProDraw();
+    sfRunSceneDoctor(true);
+    sfProNotify('Preset applied: '+preset.label);
+  }
+
+  function sfSceneDoctorReport(){
+    var scene=sfProScene();
+    var audit=typeof sfSceneAudit==='function'?sfSceneAudit(scene):{issues:[],ok:true,issueCount:0};
+    var issues=(audit.issues||[]).map(function(issue,index){
+      return {key:'audit-'+index,level:issue.level||'info',title:issue.message||'Scene note',detail:'Base scene audit',fix:''};
+    });
+    var objects=Array.isArray(scene.objects)?scene.objects:[];
+    var groups=Array.isArray(scene.groups)?scene.groups:[];
+    var cameras=objects.filter(function(o){return String(o.type).toUpperCase()==='CAM';});
+    var lights=objects.filter(function(o){return ['LIGHT','HDRI'].includes(String(o.type).toUpperCase());});
+    var hidden=objects.filter(function(o){return o.visible===false;});
+    var keyframes=(scene.timeline&&Array.isArray(scene.timeline.keyframes))?scene.timeline.keyframes:[];
+    var resolution=scene.output&&scene.output.resolution||sfProActiveText('.res-b.active','4K');
+    if(!cameras.length)issues.push({key:'add-camera',level:'warn',title:'No production camera',detail:'Add a camera so exports and review snapshots have a clear point of view.',fix:'Add camera'});
+    if(!lights.length)issues.push({key:'add-light',level:'warn',title:'No light or HDRI rig',detail:'A lighting object makes the viewport and export package more predictable.',fix:'Add rig'});
+    if(objects.length>36)issues.push({key:'optimize-scene',level:'info',title:'Scene is getting dense',detail:objects.length+' objects detected. Run optimizer before final export.',fix:'Optimize'});
+    if(hidden.length)issues.push({key:'restore-hidden',level:'info',title:hidden.length+' hidden object(s)',detail:'Hidden elements may be skipped visually during review.',fix:'Show all'});
+    if(groups.length && objects.length && groups.filter(function(g){return !objects.some(function(o){return o.group===g.key;});}).length)issues.push({key:'clean-empty-groups',level:'info',title:'Empty collections found',detail:'Cleaning unused groups keeps the outliner readable.',fix:'Clean'});
+    if(String(resolution).toUpperCase()==='16K'&&objects.length>24)issues.push({key:'output-8k',level:'warn',title:'16K plus dense scene',detail:'Switch to 8K for iteration, then return to 16K only for final.',fix:'Set 8K'});
+    if(keyframes.length>18)issues.push({key:'timeline-slim',level:'info',title:'Timeline has many keyframes',detail:keyframes.length+' keyframes can make review harder; optimize animation data if it feels heavy.',fix:'Optimize animation'});
+    var color=(scene.spaceColor||{});
+    if(color.enabled===false||!color.workingSpace)issues.push({key:'fix-color',level:'warn',title:'Color pipeline incomplete',detail:'Apply a neutral ACEScg pass before publishing.',fix:'Fix color'});
+    var warnCount=issues.filter(function(i){return i.level==='warn';}).length;
+    return {scene:scene,issues:issues,warnCount:warnCount,ok:warnCount===0,checkedAt:new Date().toISOString()};
+  }
+  function sfRunSceneDoctor(silent){
+    var report=sfSceneDoctorReport();
+    window.__sfProSceneDoctor=report;
+    sfRenderSceneDoctor(report);
+    sfRenderQualityAdvisor();
+    if(!silent){
+      sfProSelectPanel('review');
+      sfProNotify(report.ok?'Scene Doctor: all clear':'Scene Doctor found '+report.issues.length+' note(s)');
+    }
+    return report;
+  }
+  function sfRenderSceneDoctor(report){
+    report=report||window.__sfProSceneDoctor||sfSceneDoctorReport();
+    var root=document.getElementById('sf-scene-doctor-panel');
+    if(!root)return;
+    var issues=report.issues||[];
+    root.innerHTML='<div class="sf-pro-head"><div><b>Scene Doctor</b><span>'+(report.ok?'Ready for publish':'Checks, fixes and production warnings')+'</span></div><button class="sf-pro-mini" onclick="sfRunSceneDoctor()">Run check</button></div>'+
+      '<div class="sf-doctor-score '+(report.ok?'ok':'warn')+'"><b>'+(report.ok?'PASS':'REVIEW')+'</b><span>'+issues.length+' note(s) / '+report.warnCount+' warning(s)</span></div>'+
+      '<div class="sf-doctor-list">'+(issues.length?issues.map(function(issue){
+        return '<div class="sf-doctor-item '+sfProEsc(issue.level)+'"><div><b>'+sfProEsc(issue.title)+'</b><span>'+sfProEsc(issue.detail)+'</span></div>'+(issue.fix?'<button onclick="sfFixSceneDoctorIssue(\''+issue.key+'\')">'+sfProEsc(issue.fix)+'</button>':'')+'</div>';
+      }).join(''):'<div class="sf-pro-empty">No blocking issues. The scene is clean.</div>')+'</div>';
+  }
+  function sfFixSceneDoctorIssue(key){
+    key=String(key||'');
+    try{
+      if(key==='add-camera'){
+        if(typeof sfCreateCinemaCamera==='function')sfCreateCinemaCamera();
+        else if(typeof sfAddSceneObject==='function')sfAddSceneObject('CAM','Production Camera',{props:{lens:'35 mm',fov:58,exposure:0,aperture:5.6}});
+      }else if(key==='add-light'){
+        if(typeof sfAddSceneObject==='function')sfAddSceneObject('LIGHT','Production Sun Rig',{props:{intensity:1.45,temperature:5200,softness:76,color:'#ffb36b'}});
+      }else if(key==='optimize-scene'&&typeof sfOptimizeScene==='function'){
+        sfOptimizeScene('scene');
+      }else if(key==='clean-empty-groups'&&typeof sfDeleteEmptyGroups==='function'){
+        sfDeleteEmptyGroups();
+      }else if(key==='restore-hidden'){
+        document.querySelectorAll('#outliner-list .tri-out-extra').forEach(function(row){if(typeof sfSetRowVisible==='function')sfSetRowVisible(row,true);});
+      }else if(key==='output-8k'){
+        sfProSetActiveText('.res-b','8K');
+      }else if(key==='timeline-slim'&&typeof sfOptimizeScene==='function'){
+        sfOptimizeScene('animation');
+      }else if(key==='fix-color'){
+        if(typeof sfSpaceColorApplyPreset==='function')sfSpaceColorApplyPreset('neutralQc');
+        if(typeof sfSetWorkingSpace==='function')sfSetWorkingSpace('ACEScg',true);
+      }
+    }catch(err){console.warn('Scene Doctor fix failed',err);}
+    sfProMarkDirty('scene-doctor-fix');
+    sfProDraw();
+    sfRunSceneDoctor(true);
+    sfProNotify('Scene Doctor fix applied');
+  }
+
+  var SF_EXPORT_PROFILES=[
+    {key:'blender',label:'Blender Lookdev',format:'EXR 32-bit',resolution:'4K',kind:'manifest',desc:'Balanced EXR package for Blender lighting review.'},
+    {key:'nuke',label:'Nuke Comp',format:'EXR 32-bit',resolution:'4K',kind:'nuke',desc:'Comp template with audit data and color notes.'},
+    {key:'unreal',label:'Unreal Cubemap',format:'HDR',resolution:'8K',kind:'unreal',desc:'Cubemap manifest, no mip surprises, sRGB off.'},
+    {key:'usd',label:'USD Lighting Rig',format:'EXR 32-bit',resolution:'4K',kind:'usd',desc:'Portable lighting rig for pipeline handoff.'},
+    {key:'web-preview',label:'Web Preview',format:'PNG 16-bit',resolution:'2K',kind:'manifest',desc:'Lightweight preview for approvals.'},
+    {key:'archive',label:'Final Archive',format:'EXR 32-bit',resolution:'16K',kind:'manifest',desc:'Maximum quality publish manifest.'}
+  ];
+  function sfApplyExportProfile(key){
+    var profile=SF_EXPORT_PROFILES.find(function(p){return p.key===key;})||SF_EXPORT_PROFILES[0];
+    SF_ACTIVE_EXPORT_PROFILE=profile.key;
+    sfProSetActiveText('.fmt-b',profile.format);
+    sfProSetActiveText('.res-b',profile.resolution);
+    if(typeof sfSetWorkingSpace==='function')sfSetWorkingSpace('ACEScg',true);
+    sfRenderExportProfiles();
+    sfRenderQualityAdvisor();
+    sfProMarkDirty('export-profile');
+    sfProNotify('Export profile: '+profile.label);
+  }
+  function sfExportActiveProfile(){
+    var profile=SF_EXPORT_PROFILES.find(function(p){return p.key===SF_ACTIVE_EXPORT_PROFILE;})||SF_EXPORT_PROFILES[0];
+    if(typeof sfExportPipelinePackage==='function')sfExportPipelinePackage(profile.kind);
+    else if(typeof startRender==='function')startRender();
+  }
+  function sfRenderExportProfiles(){
+    var root=document.getElementById('sf-export-profile-panel');
+    if(!root)return;
+    root.innerHTML='<div class="sf-pro-head"><div><b>Export Profiles</b><span>Choose a target before publishing</span></div><button class="sf-pro-mini" onclick="sfExportActiveProfile()">Export</button></div>'+
+      '<div class="sf-export-grid">'+SF_EXPORT_PROFILES.map(function(p){
+        return '<button class="sf-export-profile '+(p.key===SF_ACTIVE_EXPORT_PROFILE?'on':'')+'" onclick="sfApplyExportProfile(\''+p.key+'\')"><b>'+sfProEsc(p.label)+'</b><span>'+sfProEsc(p.resolution+' / '+p.format)+'</span><em>'+sfProEsc(p.desc)+'</em></button>';
+      }).join('')+'</div>';
+  }
+  function sfRenderQualityAdvisor(){
+    var root=document.getElementById('sf-render-advisor-panel');
+    if(!root)return;
+    var scene=sfProScene();
+    var objects=Array.isArray(scene.objects)?scene.objects.length:0;
+    var keyframes=scene.timeline&&Array.isArray(scene.timeline.keyframes)?scene.timeline.keyframes.length:0;
+    var res=sfProActiveText('.res-b.active','4K').toUpperCase();
+    var fmt=sfProActiveText('.fmt-b.active','EXR 32-bit');
+    var resFactor={ '2K':1,'4K':2,'8K':4,'16K':8 }[res]||2;
+    var score=Math.max(12,Math.min(100,100-(objects*1.2)-(keyframes*.3)-(resFactor*5)));
+    var estimate=Math.max(12,Math.round(resFactor*(fmt.indexOf('EXR')>=0?220:fmt.indexOf('HDR')>=0?96:48)*(1+objects*.018)));
+    var status=score>72?'Smooth':(score>46?'Heavy':'Needs optimization');
+    root.innerHTML='<div class="sf-pro-head"><div><b>Render Quality Advisor</b><span>'+sfProEsc(status)+' / estimated '+estimate+' MB</span></div><button class="sf-pro-mini" onclick="sfRunSceneDoctor()">Doctor</button></div>'+
+      '<div class="sf-advisor-meter"><i style="width:'+Math.round(score)+'%"></i></div>'+
+      '<div class="sf-advisor-grid"><div><b>'+objects+'</b><span>Objects</span></div><div><b>'+keyframes+'</b><span>Keys</span></div><div><b>'+sfProEsc(res)+'</b><span>Resolution</span></div><div><b>'+sfProEsc(fmt)+'</b><span>Format</span></div></div>'+
+      '<div class="sf-pro-actions"><button onclick="sfFixSceneDoctorIssue(\'optimize-scene\')">Optimize scene</button><button onclick="sfApplyExportProfile(\'blender\')">Iteration profile</button><button onclick="sfApplyExportProfile(\'archive\')">Final archive</button></div>';
+  }
+
+  function sfLocalAutosaveSnapshot(reason){
+    var scene=sfProScene();
+    var payload={savedAt:new Date().toISOString(),reason:reason||'auto',project:window.SF_PROJECT_NAME||'SkyForge',scene:scene};
+    try{localStorage.setItem(SF_RECOVERY_KEY,JSON.stringify(payload));}
+    catch(err){console.warn('Local recovery save failed',err);}
+    return payload;
+  }
+  function sfRecoverLocalAutosave(){
+    try{
+      var raw=localStorage.getItem(SF_RECOVERY_KEY);
+      if(!raw)return;
+      var payload=JSON.parse(raw);
+      if(payload&&payload.scene&&typeof sfApplyScene==='function'){
+        sfApplyScene(payload.scene);
+        sfProMarkDirty('recovered-autosave');
+        sfProDraw();
+        sfHideRecoveryBanner();
+        sfProNotify('Recovered local autosave');
+      }
+    }catch(err){console.warn('Recovery failed',err);}
+  }
+  function sfDismissLocalRecovery(){
+    try{
+      var raw=localStorage.getItem(SF_RECOVERY_KEY);
+      if(raw){
+        var payload=JSON.parse(raw);
+        localStorage.setItem(SF_RECOVERY_DISMISSED_KEY,payload.savedAt||raw.slice(0,64));
+      }
+    }catch(_){}
+    sfHideRecoveryBanner();
+  }
+  function sfHideRecoveryBanner(){
+    var banner=document.getElementById('sf-recovery-banner');
+    if(banner)banner.remove();
+  }
+  function sfShowRecoveryBanner(payload){
+    if(!payload||!payload.scene)return;
+    if(document.getElementById('sf-recovery-banner'))return;
+    var banner=document.createElement('div');
+    banner.id='sf-recovery-banner';
+    banner.className='sf-recovery-banner';
+    var when=payload.savedAt?new Date(payload.savedAt).toLocaleString():'recently';
+    banner.innerHTML='<div><b>Local autosave found</b><span>'+sfProEsc(payload.project||'SkyForge')+' / '+sfProEsc(when)+'</span></div><button onclick="sfRecoverLocalAutosave()">Recover</button><button onclick="sfDismissLocalRecovery()">Dismiss</button>';
+    document.body.appendChild(banner);
+  }
+  function sfCheckLocalRecovery(){
+    try{
+      var raw=localStorage.getItem(SF_RECOVERY_KEY);
+      if(!raw)return;
+      var payload=JSON.parse(raw);
+      var dismissed=localStorage.getItem(SF_RECOVERY_DISMISSED_KEY);
+      if(payload&&payload.savedAt&&dismissed!==payload.savedAt)sfShowRecoveryBanner(payload);
+    }catch(_){}
+  }
+  function sfInstallLocalAutosave(){
+    setInterval(function(){
+      try{
+        if(window.SF_DIRTY)sfLocalAutosaveSnapshot('interval');
+      }catch(_){}
+    },90000);
+    window.addEventListener('beforeunload',function(){try{if(window.SF_DIRTY)sfLocalAutosaveSnapshot('beforeunload');}catch(_){};});
+    setTimeout(sfCheckLocalRecovery,900);
+  }
+
+  function sfRenderSceneCollections(){
+    var root=document.getElementById('sf-collections-panel');
+    if(!root)return;
+    var groups=Array.from(document.querySelectorAll('#outliner-list .tri-out-group'));
+    if(!groups.length){
+      root.innerHTML='<div class="sf-pro-head"><div><b>Scene Collections</b><span>No collections yet</span></div><button class="sf-pro-mini" onclick="sfCreateOutlinerGroup()">New</button></div><div class="sf-pro-empty">Create groups to organize the scene.</div>';
+      return;
+    }
+    root.innerHTML='<div class="sf-pro-head"><div><b>Scene Collections</b><span>Layer visibility and focus</span></div><button class="sf-pro-mini" onclick="sfRestoreAllCollections()">Show all</button></div>'+
+      '<div class="sf-layer-list">'+groups.map(function(group){
+        var key=sfProGroupKey(group);
+        var name=group.children[1]?group.children[1].textContent.trim():'Collection';
+        var type=group.children[2]?group.children[2].textContent.trim():'GROUP';
+        var rows=sfProRowsInGroup(group);
+        var visible=rows.filter(function(row){return typeof sfRowVisible==='function'?sfRowVisible(row):!row.classList.contains('hidden-object');}).length;
+        return '<div class="sf-layer-row '+(SF_LAYER_SOLO_KEY===key?'solo':'')+'"><div><b>'+sfProEsc(name)+'</b><span>'+sfProEsc(type)+' / '+rows.length+' item(s), '+visible+' visible</span></div><button onclick="sfToggleCollectionOpen(\''+key+'\')">Open</button><button onclick="sfSoloCollection(\''+key+'\')">Solo</button></div>';
+      }).join('')+'</div>';
+  }
+  function sfToggleCollectionOpen(key){
+    var group=Array.from(document.querySelectorAll('#outliner-list .tri-out-group')).find(function(g){return sfProGroupKey(g)===key;});
+    if(group&&typeof sfSetGroupCollapsed==='function')sfSetGroupCollapsed(group,group.dataset.collapsed!=='1');
+    sfRenderSceneCollections();
+  }
+  function sfSoloCollection(key){
+    var groups=Array.from(document.querySelectorAll('#outliner-list .tri-out-group'));
+    if(SF_LAYER_SOLO_KEY===key){sfRestoreAllCollections();return;}
+    groups.forEach(function(group){
+      var on=sfProGroupKey(group)===key;
+      sfProRowsInGroup(group).forEach(function(row){
+        if(typeof sfSetRowVisible==='function')sfSetRowVisible(row,on);
+      });
+    });
+    SF_LAYER_SOLO_KEY=key;
+    sfProMarkDirty('collection-solo');
+    sfProDraw();
+    sfRenderSceneCollections();
+    sfProNotify('Collection isolated');
+  }
+  function sfRestoreAllCollections(){
+    document.querySelectorAll('#outliner-list .tri-out-extra').forEach(function(row){
+      if(typeof sfSetRowVisible==='function')sfSetRowVisible(row,true);
+    });
+    SF_LAYER_SOLO_KEY='';
+    sfProMarkDirty('collection-restore');
+    sfProDraw();
+    sfRenderSceneCollections();
+  }
+
+  function sfCopySelectedProps(){
+    var row=sfProSelectedRow();
+    if(!row){sfProNotify('Select an object first');return;}
+    var data=row.dataset.sfProps||'{}';
+    try{localStorage.setItem(SF_PROP_CLIPBOARD_KEY,data);}catch(_){}
+    window.SF_PROP_CLIPBOARD=data;
+    sfProNotify('Object properties copied');
+  }
+  function sfPasteSelectedProps(){
+    var row=sfProSelectedRow();
+    var data=window.SF_PROP_CLIPBOARD;
+    try{data=data||localStorage.getItem(SF_PROP_CLIPBOARD_KEY);}catch(_){}
+    if(!row||!data){sfProNotify('Select an object and copy properties first');return;}
+    try{JSON.parse(data);row.dataset.sfProps=data;}catch(_){sfProNotify('Invalid property clipboard');return;}
+    if(typeof sfRefreshOutlinerInspector==='function')sfRefreshOutlinerInspector(row);
+    sfProMarkDirty('paste-props');
+    sfProDraw();
+    sfProNotify('Object properties pasted');
+  }
+  function sfResetSelectedProps(){
+    var row=sfProSelectedRow();
+    if(!row){sfProNotify('Select an object first');return;}
+    row.dataset.sfProps='{}';
+    if(typeof sfRefreshOutlinerInspector==='function')sfRefreshOutlinerInspector(row);
+    sfProMarkDirty('reset-props');
+    sfProDraw();
+  }
+  function sfBakeSelectedToNode(){
+    if(typeof sfBuildNodeGraphFromScene==='function')sfBuildNodeGraphFromScene();
+    sfProSelectPanel('nodes');
+    setTimeout(function(){if(typeof sfApplyNodeGraphToScene==='function')sfApplyNodeGraphToScene();},60);
+    sfProNotify('Selection linked to node workflow');
+  }
+  function sfInstallInspectorExtras(){
+    var panel=document.getElementById('sf-object-props-panel');
+    if(!panel||document.getElementById('sf-pro-inspector-extra'))return;
+    var extra=document.createElement('div');
+    extra.id='sf-pro-inspector-extra';
+    extra.className='sf-pro-inspector-extra';
+    extra.innerHTML='<div class="sf-pro-head compact"><div><b>Advanced Inspector</b><span>Copy, paste, focus and node handoff</span></div></div><div class="sf-pro-actions"><button onclick="sfCopySelectedProps()">Copy props</button><button onclick="sfPasteSelectedProps()">Paste props</button><button onclick="sfResetSelectedProps()">Reset props</button><button onclick="sfFocusOutlinerRow()">Focus</button><button onclick="sfBakeSelectedToNode()">To node graph</button></div>';
+    panel.appendChild(extra);
+  }
+
+  var SF_SHORTCUT_DEFS=[
+    {id:'doctor',label:'Scene Doctor',path:'Review',combo:'Ctrl+Shift+D',run:function(){sfRunSceneDoctor();}},
+    {id:'presetBrowser',label:'Preset Browser',path:'Assets',combo:'Ctrl+Shift+P',run:function(){sfOpenPresetBrowser();}},
+    {id:'shortcutEditor',label:'Shortcut Editor',path:'Help',combo:'Ctrl+Alt+K',run:function(){sfOpenShortcutEditor();}},
+    {id:'tutorial',label:'Mini Tutorial',path:'Help',combo:'Ctrl+Alt+H',run:function(){sfStartMiniTutorial();}},
+    {id:'autosave',label:'Save Recovery Snapshot',path:'File',combo:'Ctrl+Alt+R',run:function(){sfLocalAutosaveSnapshot('manual');sfProNotify('Recovery snapshot saved');}},
+    {id:'quality',label:'Render Advisor',path:'Export',combo:'Ctrl+Shift+Q',run:function(){sfProSelectPanel('export');sfRenderQualityAdvisor();}},
+    {id:'collections',label:'Scene Collections',path:'Hierarchy',combo:'Ctrl+Alt+L',run:function(){sfProSelectPanel('hierarchy');sfRenderSceneCollections();}}
+  ];
+  function sfShortcutSettings(){
+    try{return Object.assign({},JSON.parse(localStorage.getItem(SF_SHORTCUT_KEY)||'{}'));}
+    catch(_){return {};}
+  }
+  function sfShortcutComboFor(def){
+    var saved=sfShortcutSettings();
+    return saved[def.id]||def.combo;
+  }
+  function sfEventCombo(e){
+    var parts=[];
+    if(e.ctrlKey||e.metaKey)parts.push('Ctrl');
+    if(e.altKey)parts.push('Alt');
+    if(e.shiftKey)parts.push('Shift');
+    var key=e.key||'';
+    if(key===' ')key='Space';
+    if(key.length===1)key=key.toUpperCase();
+    if(['Control','Shift','Alt','Meta'].indexOf(key)<0)parts.push(key);
+    return parts.join('+');
+  }
+  function sfInstallShortcutRuntime(){
+    document.addEventListener('keydown',function(e){
+      var target=e.target;
+      if(target&&target.closest&&target.closest('input,textarea,select,[contenteditable="true"]'))return;
+      var combo=sfEventCombo(e);
+      var def=SF_SHORTCUT_DEFS.find(function(item){return sfShortcutComboFor(item).toLowerCase()===combo.toLowerCase();});
+      if(!def)return;
+      e.preventDefault();
+      try{def.run();}catch(err){console.warn('Shortcut failed',err);}
+    },true);
+  }
+  function sfRenderShortcutEditor(){
+    var body=document.getElementById('sf-shortcut-list');
+    if(!body)return;
+    body.innerHTML=SF_SHORTCUT_DEFS.map(function(def){
+      return '<div class="sf-shortcut-row"><div><b>'+sfProEsc(def.label)+'</b><span>'+sfProEsc(def.path)+'</span></div><input value="'+sfProEsc(sfShortcutComboFor(def))+'" onchange="sfSaveShortcut(\''+def.id+'\',this.value)"></div>';
+    }).join('');
+  }
+  function sfOpenShortcutEditor(){
+    var ov=document.getElementById('sf-shortcut-ov');
+    if(!ov)return;
+    sfRenderShortcutEditor();
+    ov.classList.add('show');
+  }
+  function sfCloseShortcutEditor(){
+    var ov=document.getElementById('sf-shortcut-ov');
+    if(ov)ov.classList.remove('show');
+  }
+  function sfSaveShortcut(id,value){
+    var data=sfShortcutSettings();
+    data[id]=String(value||'').trim();
+    try{localStorage.setItem(SF_SHORTCUT_KEY,JSON.stringify(data));}catch(_){}
+    sfRenderShortcutEditor();
+  }
+  function sfResetShortcuts(){
+    try{localStorage.removeItem(SF_SHORTCUT_KEY);}catch(_){}
+    sfRenderShortcutEditor();
+  }
+
+  var SF_TUTORIAL_STEPS=[
+    {title:'Start clean or pick a template',text:'Use File > Project Templates or the startup cards. Empty Scene keeps the viewport clean until you add objects.',panel:'hierarchy',target:'#sf-template-strip'},
+    {title:'Add scene elements intentionally',text:'Use Scene, Assets or the Preset Browser to add camera, light, clouds, volume and reference objects.',panel:'library',target:'#sf-pro-preset-browser'},
+    {title:'Use Scene Doctor before export',text:'The doctor checks cameras, lighting, output, color and dense scenes, then offers one-click fixes.',panel:'review',target:'#sf-scene-doctor-panel'},
+    {title:'Finalize with Space Color',text:'Color presets and the viewport grade affect the final look before publishing.',panel:'preview',target:'#hist-c'},
+    {title:'Export with a target profile',text:'Choose Blender, Nuke, Unreal, USD, preview or archive profiles so settings match the destination.',panel:'export',target:'#sf-export-profile-panel'}
+  ];
+  function sfClearTutorialFocus(){
+    document.querySelectorAll('.sf-tutorial-focus').forEach(function(el){el.classList.remove('sf-tutorial-focus');});
+  }
+  function sfRenderTutorialStep(){
+    var ov=document.getElementById('sf-tutorial-ov');
+    if(!ov)return;
+    var step=SF_TUTORIAL_STEPS[SF_TUTORIAL_STEP]||SF_TUTORIAL_STEPS[0];
+    sfProSelectPanel(step.panel);
+    sfClearTutorialFocus();
+    setTimeout(function(){
+      var target=document.querySelector(step.target);
+      if(target){
+        target.classList.add('sf-tutorial-focus');
+        if(target.scrollIntoView)target.scrollIntoView({block:'nearest'});
+      }
+    },80);
+    var body=ov.querySelector('.sf-tutorial-body');
+    if(body)body.innerHTML='<span>Step '+(SF_TUTORIAL_STEP+1)+' / '+SF_TUTORIAL_STEPS.length+'</span><h2>'+sfProEsc(step.title)+'</h2><p>'+sfProEsc(step.text)+'</p>';
+    var prev=ov.querySelector('[data-tutorial-prev]');
+    var next=ov.querySelector('[data-tutorial-next]');
+    if(prev)prev.disabled=SF_TUTORIAL_STEP===0;
+    if(next)next.textContent=SF_TUTORIAL_STEP===SF_TUTORIAL_STEPS.length-1?'Finish':'Next';
+  }
+  function sfStartMiniTutorial(){
+    var ov=document.getElementById('sf-tutorial-ov');
+    if(!ov)return;
+    SF_TUTORIAL_STEP=0;
+    ov.classList.add('show');
+    sfRenderTutorialStep();
+  }
+  function sfTutorialNext(){
+    if(SF_TUTORIAL_STEP>=SF_TUTORIAL_STEPS.length-1){sfCloseMiniTutorial();return;}
+    SF_TUTORIAL_STEP++;
+    sfRenderTutorialStep();
+  }
+  function sfTutorialPrev(){
+    SF_TUTORIAL_STEP=Math.max(0,SF_TUTORIAL_STEP-1);
+    sfRenderTutorialStep();
+  }
+  function sfCloseMiniTutorial(){
+    var ov=document.getElementById('sf-tutorial-ov');
+    if(ov)ov.classList.remove('show');
+    sfClearTutorialFocus();
+  }
+
+  function sfAppendMenuItem(menuLabel,text,handler,kbd){
+    var menu=Array.from(document.querySelectorAll('.mb-m')).find(function(el){
+      var label=Array.from(el.childNodes).filter(function(n){return n.nodeType===3;}).map(function(n){return n.textContent;}).join('').trim().toLowerCase();
+      return label===String(menuLabel||'').toLowerCase();
+    });
+    var dd=menu&&menu.querySelector('.mb-dd');
+    if(!dd||dd.querySelector('[data-pro-menu="'+text+'"]'))return;
+    var item=document.createElement('div');
+    item.className='dd-item';
+    item.dataset.proMenu=text;
+    item.setAttribute('onclick',handler);
+    item.innerHTML=sfProEsc(text)+(kbd?'<span class="dd-kbd">'+sfProEsc(kbd)+'</span>':'');
+    var sep=document.createElement('div');
+    sep.className='dd-sep';
+    sep.dataset.proMenu='sep-'+text;
+    dd.appendChild(sep);
+    dd.appendChild(item);
+  }
+  function sfInstallTopMenuEntries(){
+    sfAppendMenuItem('File','Project Templates','sfOpenPresetBrowser()','');
+    sfAppendMenuItem('File','Save Recovery Snapshot','sfLocalAutosaveSnapshot(\'manual\');triToast(\'Recovery snapshot saved\')','Ctrl Alt R');
+    sfAppendMenuItem('Scene','Scene Doctor','sfRunSceneDoctor()','Ctrl Shift D');
+    sfAppendMenuItem('Assets','Production Preset Browser','sfOpenPresetBrowser()','Ctrl Shift P');
+    sfAppendMenuItem('Render','Render Quality Advisor','sfSelectRightPanelTab(\'export\');sfRenderQualityAdvisor()','Ctrl Shift Q');
+    sfAppendMenuItem('Pipeline','Export Profiles','sfSelectRightPanelTab(\'export\');sfRenderExportProfiles()','');
+    sfAppendMenuItem('Window','Scene Collections','sfSelectRightPanelTab(\'hierarchy\');sfRenderSceneCollections()','Ctrl Alt L');
+    sfAppendMenuItem('Help','Mini Tutorial','sfStartMiniTutorial()','Ctrl Alt H');
+    sfAppendMenuItem('Help','Shortcut Editor','sfOpenShortcutEditor()','Ctrl Alt K');
+    if(typeof sfInstallMenuActions==='function')sfInstallMenuActions();
+  }
+
+  function sfInjectProductionPanels(){
+    var hierarchy=document.querySelector('.rp-body>.rp-sec[data-rpanel="hierarchy"]');
+    if(hierarchy&&!document.getElementById('sf-collections-panel')){
+      var collections=document.createElement('div');
+      collections.className='sf-outliner-panel sf-pro-panel';
+      collections.id='sf-collections-panel';
+      hierarchy.appendChild(collections);
+    }
+    var review=document.querySelector('.rp-body>.rp-sec[data-rpanel="review"]');
+    if(review&&!document.getElementById('sf-scene-doctor-panel')){
+      var doctor=document.createElement('div');
+      doctor.className='sf-pro-panel';
+      doctor.id='sf-scene-doctor-panel';
+      review.insertBefore(doctor,review.firstChild);
+    }
+    var library=document.querySelector('.rp-body>.rp-sec[data-rpanel="library"]');
+    if(library&&!document.getElementById('sf-pro-preset-browser')){
+      var preset=document.createElement('div');
+      preset.className='sf-pro-panel';
+      preset.id='sf-pro-preset-browser';
+      library.appendChild(preset);
+    }
+    var exportSec=document.querySelector('.rp-body>.rp-sec[data-rpanel="export"]');
+    if(exportSec&&!document.getElementById('sf-render-advisor-panel')){
+      var advisor=document.createElement('div');
+      advisor.className='sf-pro-panel';
+      advisor.id='sf-render-advisor-panel';
+      var profiles=document.createElement('div');
+      profiles.className='sf-pro-panel';
+      profiles.id='sf-export-profile-panel';
+      exportSec.insertBefore(advisor,exportSec.firstChild);
+      exportSec.insertBefore(profiles,advisor.nextSibling);
+    }
+  }
+  function sfInjectProductionOverlays(){
+    if(!document.getElementById('sf-shortcut-ov')){
+      var shortcut=document.createElement('div');
+      shortcut.className='overlay sf-pro-overlay';
+      shortcut.id='sf-shortcut-ov';
+      shortcut.innerHTML='<div class="sf-pro-modal"><div class="sf-pro-modal-head"><div><b>Shortcut Editor</b><span>Customize production workflow keys</span></div><button onclick="sfCloseShortcutEditor()">Close</button></div><div id="sf-shortcut-list" class="sf-shortcut-list"></div><div class="sf-pro-modal-foot"><button onclick="sfResetShortcuts()">Reset defaults</button><button onclick="sfCloseShortcutEditor()">Done</button></div></div>';
+      document.body.appendChild(shortcut);
+    }
+    if(!document.getElementById('sf-tutorial-ov')){
+      var tutorial=document.createElement('div');
+      tutorial.className='overlay sf-pro-overlay';
+      tutorial.id='sf-tutorial-ov';
+      tutorial.innerHTML='<div class="sf-pro-modal sf-tutorial-modal"><div class="sf-pro-modal-head"><div><b>SkyForge Walkthrough</b><span>Five steps to a clean publish</span></div><button onclick="sfCloseMiniTutorial()">Close</button></div><div class="sf-tutorial-body"></div><div class="sf-pro-modal-foot"><button data-tutorial-prev onclick="sfTutorialPrev()">Back</button><button data-tutorial-next onclick="sfTutorialNext()">Next</button></div></div>';
+      document.body.appendChild(tutorial);
+    }
+  }
+  function sfInjectProductionStyles(){
+    if(document.getElementById('sf-pro-suite-style'))return;
+    var style=document.createElement('style');
+    style.id='sf-pro-suite-style';
+    style.textContent=
+      '.sf-template-strip{margin:14px 0 12px;padding:10px;border:1px solid rgba(255,171,84,.26);background:rgba(18,20,24,.64);border-radius:8px}'+
+      '.sf-template-head,.sf-pro-head,.sf-pro-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.sf-template-head span,.sf-pro-head b,.sf-pro-modal-head b{font-size:12px;color:var(--t1);font-weight:800}.sf-template-head button,.sf-pro-mini,.sf-pro-modal-head button{border:1px solid var(--b1);background:rgba(255,255,255,.06);color:var(--t2);border-radius:6px;padding:5px 8px;font:700 10px var(--fm);cursor:pointer}'+
+      '.sf-template-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}.sf-template-card,.sf-pro-preset,.sf-export-profile{border:1px solid rgba(255,171,84,.23);background:linear-gradient(145deg,rgba(255,171,84,.13),rgba(255,255,255,.04));color:var(--t1);border-radius:8px;padding:9px;text-align:left;cursor:pointer}.sf-template-card b,.sf-pro-preset b,.sf-export-profile b{display:block;font-size:11px}.sf-template-card span,.sf-pro-preset em,.sf-export-profile em,.sf-export-profile span,.sf-pro-head span,.sf-pro-modal-head span{display:block;margin-top:3px;font:600 10px var(--fm);color:var(--t3);font-style:normal;line-height:1.35}'+
+      '.sf-pro-panel{margin:8px 0;padding:10px;border:1px solid rgba(255,171,84,.2);background:rgba(17,19,23,.62);border-radius:8px}.sf-pro-head.compact{margin-bottom:8px}.sf-pro-filter{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0}.sf-pro-filter input{flex:1;min-width:110px;background:rgba(0,0,0,.24);border:1px solid var(--b1);color:var(--t1);border-radius:6px;padding:7px;font:600 10px var(--fm)}.sf-pro-filter button,.sf-pro-actions button,.sf-layer-row button,.sf-doctor-item button{border:1px solid var(--b1);background:rgba(255,255,255,.06);color:var(--t2);border-radius:6px;padding:6px 8px;font:700 10px var(--fm);cursor:pointer}.sf-pro-filter button.on,.sf-export-profile.on{border-color:var(--acc);background:rgba(255,171,84,.16);color:var(--acc)}'+
+      '.sf-pro-preset-grid,.sf-export-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.sf-pro-preset span{display:inline-block;font:800 9px var(--fm);color:var(--acc);margin-bottom:5px}.sf-pro-empty{font:600 10px var(--fm);color:var(--t3);padding:8px;border:1px dashed var(--b1);border-radius:6px}'+
+      '.sf-doctor-score{display:flex;justify-content:space-between;align-items:center;margin:8px 0;padding:8px;border-radius:8px;border:1px solid var(--b1);background:rgba(255,255,255,.05)}.sf-doctor-score.ok b{color:var(--gn)}.sf-doctor-score.warn b{color:var(--acc)}.sf-doctor-score span{font:700 10px var(--fm);color:var(--t3)}.sf-doctor-list,.sf-layer-list,.sf-shortcut-list{display:grid;gap:7px}.sf-doctor-item,.sf-layer-row,.sf-shortcut-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.18);border-radius:8px;padding:8px}.sf-doctor-item.warn{border-color:rgba(255,171,84,.36)}.sf-doctor-item b,.sf-layer-row b,.sf-shortcut-row b{font-size:10px;color:var(--t1)}.sf-doctor-item span,.sf-layer-row span,.sf-shortcut-row span{display:block;font:600 9px var(--fm);color:var(--t3);line-height:1.35}.sf-layer-row.solo{border-color:var(--acc);background:rgba(255,171,84,.12)}'+
+      '.sf-advisor-meter{height:7px;background:rgba(0,0,0,.28);border:1px solid var(--b1);border-radius:999px;overflow:hidden;margin:8px 0}.sf-advisor-meter i{display:block;height:100%;background:linear-gradient(90deg,#ff8a3d,#ffd06a);border-radius:999px}.sf-advisor-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.sf-advisor-grid div{border:1px solid var(--b1);border-radius:7px;padding:7px;background:rgba(255,255,255,.04)}.sf-advisor-grid b{display:block;font-size:11px;color:var(--t1)}.sf-advisor-grid span{font:700 9px var(--fm);color:var(--t3)}.sf-pro-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}'+
+      '.sf-pro-inspector-extra{margin-top:10px;padding-top:8px;border-top:1px solid var(--b1)}.sf-recovery-banner{position:fixed;top:48px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:12px;min-width:360px;max-width:calc(100vw - 30px);padding:10px 12px;border:1px solid rgba(255,171,84,.45);background:rgba(20,21,24,.96);box-shadow:0 18px 50px rgba(0,0,0,.38);border-radius:8px}.sf-recovery-banner div{flex:1}.sf-recovery-banner b{display:block;font-size:12px;color:var(--t1)}.sf-recovery-banner span{display:block;font:600 10px var(--fm);color:var(--t3)}.sf-recovery-banner button{border:1px solid var(--b1);background:rgba(255,171,84,.13);color:var(--t1);border-radius:6px;padding:6px 9px;font:800 10px var(--fm);cursor:pointer}'+
+      '.sf-pro-overlay.show{display:flex}.sf-pro-modal{width:min(640px,calc(100vw - 34px));max-height:82vh;overflow:auto;border:1px solid rgba(255,171,84,.28);background:rgba(22,23,27,.98);box-shadow:0 30px 80px rgba(0,0,0,.55);border-radius:8px;padding:14px}.sf-pro-modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.sf-pro-modal-foot button,.sf-shortcut-row input{border:1px solid var(--b1);background:rgba(255,255,255,.06);color:var(--t1);border-radius:6px;padding:7px 9px;font:700 10px var(--fm)}.sf-shortcut-row input{width:145px}.sf-tutorial-body{padding:18px 4px 10px}.sf-tutorial-body span{font:800 10px var(--fm);color:var(--acc)}.sf-tutorial-body h2{margin:8px 0 6px;font-size:20px;color:var(--t1)}.sf-tutorial-body p{margin:0;color:var(--t2);line-height:1.5}.sf-tutorial-focus{outline:2px solid var(--acc)!important;outline-offset:3px;box-shadow:0 0 0 6px rgba(255,171,84,.12)!important}'+
+      '@media(max-width:720px){.sf-template-grid,.sf-pro-preset-grid,.sf-export-grid{grid-template-columns:1fr}.sf-advisor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sf-recovery-banner{min-width:0;align-items:flex-start;flex-wrap:wrap}.sf-shortcut-row{align-items:flex-start;flex-direction:column}.sf-shortcut-row input{width:100%}}';
+    document.head.appendChild(style);
+  }
+  function sfInitializeProductionSuite(){
+    sfInjectProductionStyles();
+    sfInjectProductionPanels();
+    sfInjectProductionOverlays();
+    sfRenderStartupTemplates();
+    sfInstallInspectorExtras();
+    sfInstallTopMenuEntries();
+    sfRenderPresetBrowser();
+    sfRenderExportProfiles();
+    sfRenderQualityAdvisor();
+    sfRunSceneDoctor(true);
+    sfRenderSceneCollections();
+    sfInstallShortcutRuntime();
+    sfInstallLocalAutosave();
+    document.addEventListener('click',function(e){
+      if(e.target&&e.target.closest&&e.target.closest('#outliner-list'))setTimeout(sfRenderSceneCollections,60);
+    },true);
+    document.addEventListener('change',function(e){
+      if(e.target&&e.target.closest&&e.target.closest('.shell'))setTimeout(function(){sfRenderQualityAdvisor();sfRunSceneDoctor(true);},120);
+    },true);
+  }
+
+  window.sfApplyProjectTemplate=sfApplyProjectTemplate;
+  window.sfOpenPresetBrowser=sfOpenPresetBrowser;
+  window.sfRenderPresetBrowser=sfRenderPresetBrowser;
+  window.sfSetPresetSearch=sfSetPresetSearch;
+  window.sfSetPresetCategory=sfSetPresetCategory;
+  window.sfApplyProPreset=sfApplyProPreset;
+  window.sfSceneDoctorReport=sfSceneDoctorReport;
+  window.sfRunSceneDoctor=sfRunSceneDoctor;
+  window.sfRenderSceneDoctor=sfRenderSceneDoctor;
+  window.sfFixSceneDoctorIssue=sfFixSceneDoctorIssue;
+  window.sfApplyExportProfile=sfApplyExportProfile;
+  window.sfExportActiveProfile=sfExportActiveProfile;
+  window.sfRenderExportProfiles=sfRenderExportProfiles;
+  window.sfRenderQualityAdvisor=sfRenderQualityAdvisor;
+  window.sfLocalAutosaveSnapshot=sfLocalAutosaveSnapshot;
+  window.sfRecoverLocalAutosave=sfRecoverLocalAutosave;
+  window.sfDismissLocalRecovery=sfDismissLocalRecovery;
+  window.sfRenderSceneCollections=sfRenderSceneCollections;
+  window.sfToggleCollectionOpen=sfToggleCollectionOpen;
+  window.sfSoloCollection=sfSoloCollection;
+  window.sfRestoreAllCollections=sfRestoreAllCollections;
+  window.sfCopySelectedProps=sfCopySelectedProps;
+  window.sfPasteSelectedProps=sfPasteSelectedProps;
+  window.sfResetSelectedProps=sfResetSelectedProps;
+  window.sfBakeSelectedToNode=sfBakeSelectedToNode;
+  window.sfOpenShortcutEditor=sfOpenShortcutEditor;
+  window.sfCloseShortcutEditor=sfCloseShortcutEditor;
+  window.sfSaveShortcut=sfSaveShortcut;
+  window.sfResetShortcuts=sfResetShortcuts;
+  window.sfStartMiniTutorial=sfStartMiniTutorial;
+  window.sfTutorialNext=sfTutorialNext;
+  window.sfTutorialPrev=sfTutorialPrev;
+  window.sfCloseMiniTutorial=sfCloseMiniTutorial;
+
+  sfProReady(sfInitializeProductionSuite);
 })();
 </script>
 </body>
