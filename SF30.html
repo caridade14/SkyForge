@@ -6980,7 +6980,7 @@ document.addEventListener('keydown',function(e){
 });
 
 /* ── TIMELINE ── */
-var playing=false,pctTL=22,rafTL=null,tlLastTime=0;
+var playing=false,pctTL=0,rafTL=null,tlLastTime=0;
 var SF_KEYFRAMES=[];
 var SF_TIMELINE={duration:300,zoom:1,selectedKeyId:''};
 var ph=document.getElementById('playhead');
@@ -7021,6 +7021,32 @@ function sfTimelineApplyTimeOfDay(frame){
   if(input&&document.activeElement!==input)input.value=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
   if(typeof sfApplySceneTimeRealtime==='function')sfApplySceneTimeRealtime(true);
 }
+function sfTimelineHasObjectKeyPairs(){
+  sfEnsureTimelineState();
+  var buckets={};
+  SF_KEYFRAMES.forEach(function(k){
+    if(!k||!k.data||k.data.type==='SCENE')return;
+    var key=k.objectKey||k.objectName||'';
+    if(!key)return;
+    buckets[key]=(buckets[key]||0)+1;
+  });
+  return Object.keys(buckets).some(function(key){return buckets[key]>1;});
+}
+function sfTimelineHasCurveTracks(){
+  return typeof sfHasCurveChannels==='function'&&sfHasCurveChannels();
+}
+function sfTimelineEvaluateAtFrame(frame,options){
+  options=options||{};
+  var changed=false;
+  if(sfTimelineHasObjectKeyPairs()&&typeof sfInterpolateTimelineAtFrame==='function'){
+    changed=sfInterpolateTimelineAtFrame(frame,true)||changed;
+  }
+  if(sfTimelineHasCurveTracks()&&typeof sfApplyAllCurvesAtPlayhead==='function'){
+    sfApplyAllCurvesAtPlayhead(true);
+    changed=true;
+  }
+  return changed;
+}
 function sfSyncTimelineDurationUI(){
   var dur=sfTimelineDuration(),fps=sfTimelineFps();
   var input=document.getElementById('tl-frames');
@@ -7036,7 +7062,7 @@ function sfSetTimelineDuration(value){
   SF_TIMELINE.duration=next;
   var input=document.getElementById('tl-frames');
   if(input)input.value=next;
-  setPH(sfClamp(keepFrame/next*100,0,100));
+  setPH(sfClamp(keepFrame/next*100,0,100),{apply:false});
   sfBuildTimelineRuler();
   sfRenderKeyframes();
   sfSyncTimelineDurationUI();
@@ -7044,12 +7070,13 @@ function sfSetTimelineDuration(value){
   triToast('Timeline frames: '+next);
 }
 function sfSetTimelineFps(){
-  setPH(pctTL);
+  setPH(pctTL,{apply:false});
   sfBuildTimelineRuler();
   sfSyncTimelineDurationUI();
   SF_DIRTY=true;
 }
-function setPH(p){
+function setPH(p,options){
+  options=options||{};
   pctTL=Math.max(0,Math.min(100,p));
   if(ph)ph.style.left=pctTL+'%';
   var tot=sfTimelineDuration(),fps=sfTimelineFps(),cur=Math.round(tot*(pctTL/100));
@@ -7061,12 +7088,7 @@ function setPH(p){
   if(typeof sfUpdateTimelineReadout==='function')sfUpdateTimelineReadout();
   if(typeof sfRenderKeyframes==='function')sfRenderKeyframes();
   if(typeof sfDrawCurveEditor==='function')sfDrawCurveEditor();
-  if(!SF_TIMELINE_INTERNAL){
-    sfTimelineApplyTimeOfDay(cur);
-    if(typeof sfApplyAllCurvesAtPlayhead==='function')sfApplyAllCurvesAtPlayhead(true);
-    else if(typeof sfApplyCurveAtPlayhead==='function')sfApplyCurveAtPlayhead(true);
-    if(typeof sfInterpolateTimelineAtFrame==='function')sfInterpolateTimelineAtFrame(sfTimelineFrame(),true);
-  }
+  if(!SF_TIMELINE_INTERNAL&&options.apply===true)sfTimelineEvaluateAtFrame(cur,options);
 }
 function animTL(ts){
   if(!playing)return;
@@ -7076,8 +7098,7 @@ function animTL(ts){
   tlLastTime=now;
   var tot=sfTimelineDuration(),frame=sfTimelineFrame()+dt*sfTimelineFps();
   if(frame>=tot)frame=0;
-  setPH(tot?frame/tot*100:0);
-  sfInterpolateTimelineAtFrame(sfTimelineFrame());
+  setPH(tot?frame/tot*100:0,{apply:true,source:'play'});
   rafTL=requestAnimationFrame(animTL);
 }
 function togglePlay(){
@@ -7086,7 +7107,7 @@ function togglePlay(){
   if(playing){tlLastTime=0;ico.innerHTML='<rect x="1" y="1" width="4" height="10" fill="currentColor"/><rect x="7" y="1" width="4" height="10" fill="currentColor"/>';rafTL=requestAnimationFrame(animTL);}
   else{tlLastTime=0;cancelAnimationFrame(rafTL);ico.innerHTML='<path d="M2 1l9 5-9 5z" fill="currentColor" stroke="none"/>';}
 }
-function jumpTo(p){pctTL=p;setPH(p);sfApplyNearestKeyframe(true);}
+function jumpTo(p,options){pctTL=p;setPH(p,Object.assign({apply:false},options||{}));}
 function sfClearDemoTimelineKeys(){
   document.querySelectorAll('.tl-ltrack>.tl-key,.tl-ltrack>.tl-range').forEach(function(el){el.remove();});
 }
@@ -7168,7 +7189,7 @@ function sfApplyKeyframe(k){
   if(!k)return;
   if(k.objectKey==='__scene__' || (k.data&&k.data.type==='SCENE')){
     SF_TIMELINE.selectedKeyId=k.id||'';
-    setPH(sfClamp(k.frame/sfTimelineDuration()*100,0,100));
+    setPH(sfClamp(k.frame/sfTimelineDuration()*100,0,100),{apply:false});
     if(k.data&&k.data.props&&k.data.props.time){
       var sceneTime=document.getElementById('scene-time');
       if(sceneTime)sceneTime.value=k.data.props.time;
@@ -7222,7 +7243,7 @@ function sfStepKeyframe(dir){
   var next=dir>0?keys.find(function(k){return k.frame>frame;}):keys.slice().reverse().find(function(k){return k.frame<frame;});
   next=next||(dir>0?keys[0]:keys[keys.length-1]);
   SF_TIMELINE.selectedKeyId=next.id||'';
-  setPH(next.frame/sfTimelineDuration()*100);
+  setPH(next.frame/sfTimelineDuration()*100,{apply:false});
   sfApplyKeyframe(next);
 }
 function sfDeleteNearestKeyframe(){
@@ -7291,7 +7312,7 @@ function sfRenderKeyframes(){
       e.preventDefault();
       e.stopPropagation();
       SF_TIMELINE.selectedKeyId=k.id||'';
-      setPH(k.frame/sfTimelineDuration()*100);
+      setPH(k.frame/sfTimelineDuration()*100,{apply:false});
       sfApplyKeyframe(k);
     });
     track.appendChild(dot);
@@ -7308,7 +7329,10 @@ function sfApplyTimelineState(timeline){
   var zoom=document.getElementById('tl-zoom');if(zoom)zoom.value=SF_TIMELINE.zoom;
   sfSetTimelineZoom(SF_TIMELINE.zoom);
   sfBuildTimelineRuler();
-  setPH(Number(timeline?.framePercent)||0);
+  var wasInternal=SF_TIMELINE_INTERNAL;
+  SF_TIMELINE_INTERNAL=true;
+  try{setPH(Number(timeline?.framePercent)||0,{apply:false});}
+  finally{SF_TIMELINE_INTERNAL=wasInternal;}
   sfRenderKeyframes();
   sfSyncTimelineDurationUI();
 }
@@ -7364,10 +7388,10 @@ function sfInstallTimelineInteraction(){
       if(target&&target.closest&&target.closest('.sf-generated-key,.tl-key,input,button,select'))return;
       e.preventDefault();
       dragging=true;
-      setPH(sfTimelinePctFromEvent(e));
+      setPH(sfTimelinePctFromEvent(e),{apply:false});
       try{if(body.setPointerCapture)body.setPointerCapture(e.pointerId);}catch(_){}
     });
-    body.addEventListener('pointermove',function(e){if(dragging){e.preventDefault();setPH(sfTimelinePctFromEvent(e));}});
+    body.addEventListener('pointermove',function(e){if(dragging){e.preventDefault();setPH(sfTimelinePctFromEvent(e),{apply:false});}});
     function end(e){dragging=false;try{if(body.releasePointerCapture&&e)body.releasePointerCapture(e.pointerId);}catch(_){}}
     body.addEventListener('pointerup',end);
     body.addEventListener('pointercancel',end);
@@ -7385,7 +7409,9 @@ function sfInstallTimelineInteraction(){
 }
 function sfInterpolateTimelineAtFrame(frame,silent){
   sfEnsureTimelineState();
+  if(!sfTimelineHasObjectKeyPairs())return false;
   var rows=Array.from(document.querySelectorAll('#outliner-list .tri-out-extra'));
+  var changed=false;
   rows.forEach(function(row){
     var key=row.dataset.sfKey,name=row.children[1]?.textContent?.trim();
     var keys=SF_KEYFRAMES.filter(function(k){return k&&k.data&&k.data.type!=='SCENE'&&(k.objectKey===key || k.objectName===name);}).sort(function(a,b){return a.frame-b.frame;});
@@ -7398,10 +7424,12 @@ function sfInterpolateTimelineAtFrame(frame,silent){
     sfSetRowPosition(row,{x:lerp(a.data.x,b.data.x),y:lerp(a.data.y,b.data.y),z:lerp(a.data.z,b.data.z)},true);
     sfSetRowRotation(row,lerp(a.data.rot,b.data.rot),true);
     sfSetRowScale(row,lerp(a.data.scale,b.data.scale),true);
+    changed=true;
   });
-  if(typeof drawSky==='function')drawSky();
+  if(changed&&typeof drawSky==='function')drawSky();
+  return changed;
 }
-setPH(22);
+setPH(0,{apply:false});
 sfBuildTimelineRuler();
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sfInstallTimelineInteraction);
 else setTimeout(sfInstallTimelineInteraction,0);
@@ -7981,7 +8009,7 @@ function sfApplyAllCurvesAtPlayhead(silent){
   }finally{
     window.SF_CURVE_BATCH_APPLY=wasBatch;
   }
-  if(typeof drawSky==='function')drawSky();
+  if(count&&typeof drawSky==='function')drawSky();
   sfDrawCurveEditor();
   if(!silent){
     sfCurveStatus('Applied '+count+' curves at F'+frame,'ok');
