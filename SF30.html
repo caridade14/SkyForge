@@ -383,13 +383,17 @@ body.sf-ab-on .ab-label{display:block}
 .tl-mini:hover{color:var(--acc);border-color:rgba(232,129,42,.42)}
 .tl-readout{min-width:150px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:9px var(--fm);color:var(--t2);border-left:1px solid var(--b1);padding-left:8px}
 .tl-readout b{color:var(--acc);font-weight:400}
-.tl-zoom{width:72px;accent-color:var(--acc)}
+.tl-zoom{width:96px;accent-color:var(--acc)}
+.tl-zoom-btn{height:20px;min-width:20px;border:1px solid var(--b1);border-radius:3px;background:var(--bg3);color:var(--t2);font:900 9px var(--fm);cursor:pointer;padding:0 5px}
+.tl-zoom-btn:hover{color:var(--acc);border-color:rgba(232,129,42,.42);background:var(--bg4)}
+.tl-zoom-btn.wide{min-width:28px}
+.tl-zoom-val{min-width:36px;text-align:center;font:800 9px var(--fm);color:var(--acc)}
 .tl-body{flex:1;position:relative;overflow:auto;cursor:crosshair}
-.tl-ruler{position:absolute;top:0;left:0;right:0;height:14px;background:var(--bg2);border-bottom:1px solid var(--b0);display:flex;align-items:flex-end;padding-bottom:2px}
+.tl-ruler{position:absolute;top:0;left:0;right:auto;min-width:100%;width:100%;height:14px;background:var(--bg2);border-bottom:1px solid var(--b0);display:flex;align-items:flex-end;padding-bottom:2px}
 .tl-tick{flex:1;position:relative;font-size:8.5px;color:var(--t4);font-family:var(--fm);padding-left:2px}
 .tl-tick::before{content:'';position:absolute;bottom:100%;left:0;width:1px;height:3px;background:var(--b2)}
 .tl-tick.maj{color:var(--t3)}.tl-tick.maj::before{height:7px;background:var(--b3)}
-.tl-lanes{position:absolute;top:14px;left:0;right:0;bottom:auto;min-height:108px}
+.tl-lanes{position:absolute;top:14px;left:0;right:auto;bottom:auto;min-width:100%;width:100%;min-height:108px}
 .tl-lane{height:18px;border-bottom:1px solid var(--b0);display:flex;align-items:center;position:relative}
 .tl-lane.sel{background:rgba(232,129,42,.07)}
 .tl-lname{width:72px;padding-left:6px;font-size:9px;color:var(--t3);flex-shrink:0;font-family:var(--fm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -3304,7 +3308,12 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
         <span style="font-size:10px;color:var(--t3);font-family:var(--fm)">frames</span>
         <input class="tl-num" id="tl-frames" type="number" min="1" step="1" value="300" onchange="sfSetTimelineDuration(this.value)" onkeydown="if(event.key==='Enter')this.blur()">
         <span style="font-size:10px;color:var(--t3);font-family:var(--fm)">zoom</span>
-        <input class="tl-zoom" id="tl-zoom" type="range" min="1" max="3" step="0.25" value="1" oninput="sfSetTimelineZoom(this.value)">
+        <button class="tl-zoom-btn" title="Timeline zoom out" onclick="sfTimelineZoomBy(-.25)">-</button>
+        <input class="tl-zoom" id="tl-zoom" type="range" min="1" max="8" step="0.25" value="1" title="Timeline zoom. Ctrl+wheel also zooms." oninput="sfSetTimelineZoom(this.value)">
+        <span class="tl-zoom-val" id="tl-zoom-val">100%</span>
+        <button class="tl-zoom-btn" title="Timeline zoom in" onclick="sfTimelineZoomBy(.25)">+</button>
+        <button class="tl-zoom-btn wide" title="Reset timeline zoom" onclick="sfResetTimelineZoom()">1:1</button>
+        <button class="tl-zoom-btn wide" title="Fit work area in timeline" onclick="sfFitTimelineZoom()">FIT</button>
         <span style="font-size:10px;color:var(--t3);font-family:var(--fm)" id="st-fr">Fr 68 / 300</span>
       </div>
     </div>
@@ -7279,7 +7288,7 @@ function sfEnsureTimelineState(){
   if(!Array.isArray(SF_KEYFRAMES))SF_KEYFRAMES=[];
   if(!SF_TIMELINE||typeof SF_TIMELINE!=='object')SF_TIMELINE={duration:300,zoom:1,selectedKeyId:'',workStart:0,workEnd:300,markers:[],snap:true,livePreview:false,ripple:false,ghost:true,mode:'edit'};
   SF_TIMELINE.duration=Math.max(1,Math.round(Number(SF_TIMELINE.duration)||300));
-  SF_TIMELINE.zoom=sfClamp(Number(SF_TIMELINE.zoom)||1,1,3);
+  SF_TIMELINE.zoom=sfClamp(Number(SF_TIMELINE.zoom)||1,1,8);
   SF_TIMELINE.selectedKeyId=String(SF_TIMELINE.selectedKeyId||'');
   SF_TIMELINE.workStart=Math.max(0,Math.min(SF_TIMELINE.duration,Math.round(Number(SF_TIMELINE.workStart)||0)));
   SF_TIMELINE.workEnd=Math.max(0,Math.min(SF_TIMELINE.duration,Math.round(Number(SF_TIMELINE.workEnd)||SF_TIMELINE.duration)));
@@ -7392,6 +7401,7 @@ function sfSyncTimelineDurationUI(){
   if(end)end.textContent=sfFormatFrameTime(dur,fps);
   var stFps=document.getElementById('st-fps');
   if(stFps)stFps.textContent=fps+' fps';
+  sfUpdateTimelineZoomUi();
 }
 function sfSetTimelineDuration(value){
   var keepFrame=sfTimelineFrame();
@@ -7450,13 +7460,76 @@ function jumpTo(p,options){pctTL=p;setPH(p,Object.assign({apply:false},options||
 function sfClearDemoTimelineKeys(){
   document.querySelectorAll('.tl-ltrack>.tl-key,.tl-ltrack>.tl-range').forEach(function(el){el.remove();});
 }
-function sfSetTimelineZoom(value){
-  SF_TIMELINE.zoom=sfClamp(Number(value)||1,1,3);
+function sfTimelineFrameAtClientX(clientX){
+  var lanes=document.querySelector('.tl-lanes');
+  if(!lanes||!Number.isFinite(Number(clientX)))return sfTimelineFrame();
+  var r=lanes.getBoundingClientRect();
+  var pct=sfClamp((Number(clientX)-r.left)/Math.max(1,r.width)*100,0,100);
+  return Math.round(sfTimelineDuration()*pct/100);
+}
+function sfTimelineEnsureScrollSpacer(){
+  var body=document.querySelector('.tl-body');
+  if(!body)return null;
+  var spacer=document.getElementById('sf-tl-scroll-spacer');
+  if(!spacer){
+    spacer=document.createElement('div');
+    spacer.id='sf-tl-scroll-spacer';
+    spacer.style.height='1px';
+    spacer.style.pointerEvents='none';
+    spacer.style.visibility='hidden';
+    body.insertBefore?body.insertBefore(spacer,body.firstChild):body.appendChild(spacer);
+  }
+  return spacer;
+}
+function sfUpdateTimelineZoomUi(){
+  if(typeof sfClamp!=='function')return;
+  var zoom=sfClamp(Number(SF_TIMELINE&&SF_TIMELINE.zoom)||1,1,8);
+  var input=document.getElementById('tl-zoom');
+  if(input&&document.activeElement!==input)input.value=zoom;
+  var label=document.getElementById('tl-zoom-val');
+  if(label)label.textContent=Math.round(zoom*100)+'%';
+}
+function sfTimelineScrollToFrame(frame,align){
+  var body=document.querySelector('.tl-body'),lanes=document.querySelector('.tl-lanes');
+  if(!body||!lanes)return;
+  align=Number.isFinite(Number(align))?Number(align):0.5;
+  var pct=sfTimelinePctForFrame(frame)/100;
+  var width=Math.max(lanes.scrollWidth||0,lanes.getBoundingClientRect().width||0,body.scrollWidth||0);
+  if(width<=body.clientWidth)return;
+  var next=width*pct-(body.clientWidth*align);
+  body.scrollLeft=Math.max(0,Math.min(width-body.clientWidth,next));
+}
+function sfSetTimelineZoom(value,options){
+  sfEnsureTimelineState();
+  options=options||{};
+  var anchorFrame=Number.isFinite(Number(options.anchorFrame))?Number(options.anchorFrame):sfTimelineFrame();
+  SF_TIMELINE.zoom=sfClamp(Number(value)||1,1,8);
   var w=(SF_TIMELINE.zoom*100)+'%';
-  var lanes=document.querySelector('.tl-lanes'),ruler=document.getElementById('tl-ruler');
-  if(lanes)lanes.style.width=w;
-  if(ruler)ruler.style.width=w;
+  var body=document.querySelector('.tl-body'),lanes=document.querySelector('.tl-lanes'),ruler=document.getElementById('tl-ruler'),spacer=sfTimelineEnsureScrollSpacer();
+  if(body)body.style.setProperty('--sf-tl-zoom',SF_TIMELINE.zoom);
+  if(lanes){lanes.style.width=w;lanes.style.minWidth='100%';}
+  if(ruler){ruler.style.width=w;ruler.style.minWidth='100%';}
+  if(spacer)spacer.style.width=w;
+  sfUpdateTimelineZoomUi();
   sfRenderKeyframes();
+  if(typeof sfRenderTimelinePro==='function')sfRenderTimelinePro();
+  sfTimelineScrollToFrame(anchorFrame,Number.isFinite(Number(options.align))?Number(options.align):0.5);
+  if(options.notify!==false)sfTimelineStatus('Timeline zoom '+Math.round(SF_TIMELINE.zoom*100)+'%','ok');
+}
+function sfTimelineZoomBy(delta,options){
+  sfEnsureTimelineState();
+  options=options||{};
+  var anchor=Number.isFinite(Number(options.anchorFrame))?Number(options.anchorFrame):sfTimelineFrame();
+  sfSetTimelineZoom(SF_TIMELINE.zoom+(Number(delta)||0),Object.assign({},options,{anchorFrame:anchor}));
+}
+function sfResetTimelineZoom(){
+  sfSetTimelineZoom(1,{anchorFrame:sfTimelineFrame()});
+}
+function sfFitTimelineZoom(){
+  sfEnsureTimelineState();
+  var start=SF_TIMELINE.workStart||0,end=SF_TIMELINE.workEnd||sfTimelineDuration(),span=Math.max(1,end-start);
+  var zoom=sfClamp(sfTimelineDuration()/span,1,8);
+  sfSetTimelineZoom(zoom,{anchorFrame:start+span/2});
 }
 function sfBuildTimelineRuler(){
   var ruler=document.getElementById('tl-ruler');if(!ruler)return;
@@ -7754,6 +7827,22 @@ function sfInstallTimelineInteraction(){
       e.preventDefault();
       sfAddKeyframe();
     });
+    body.addEventListener('wheel',function(e){
+      var target=e.target&&e.target.closest?e.target:(e.target&&e.target.parentElement);
+      if(target&&target.closest&&target.closest('input,button,select'))return;
+      if(e.ctrlKey||e.altKey){
+        e.preventDefault();
+        var anchor=sfTimelineFrameAtClientX(e.clientX);
+        sfTimelineZoomBy(e.deltaY<0?.25:-.25,{anchorFrame:anchor,notify:false});
+      }else if(e.shiftKey&&Math.abs(e.deltaY)>Math.abs(e.deltaX)){
+        e.preventDefault();
+        body.scrollLeft+=e.deltaY;
+      }
+    },{passive:false});
+  }
+  if(typeof window!=='undefined'&&window.addEventListener&&body.dataset.tlResizeReady!=='1'){
+    body.dataset.tlResizeReady='1';
+    window.addEventListener('resize',function(){sfSetTimelineZoom(SF_TIMELINE.zoom,{anchorFrame:sfTimelineFrame(),notify:false});});
   }
   sfBuildTimelineRuler();
   sfSetTimelineZoom(SF_TIMELINE.zoom);
@@ -8086,7 +8175,7 @@ function sfRenderTimelinePro(){
     if(snap){snap.textContent=SF_TIMELINE.snap?'SNAP ON':'SNAP OFF';snap.className='tl-pro-btn'+(SF_TIMELINE.snap?' on':'');}
     if(ripple){ripple.textContent=SF_TIMELINE.ripple?'RIPPLE':'LOCKED';ripple.className='tl-pro-btn'+(SF_TIMELINE.ripple?' on':'');}
     if(ghost){ghost.textContent=SF_TIMELINE.ghost?'GHOST':'CLEAN';ghost.className='tl-pro-btn'+(SF_TIMELINE.ghost?' on':'');}
-    if(read)read.textContent='Keys '+analysis.keys+' / Markers '+analysis.markers+' / Work F'+SF_TIMELINE.workStart+'-'+SF_TIMELINE.workEnd+(analysis.warnings.length?' / '+analysis.warnings[0]:' / Motion healthy');
+    if(read)read.textContent='Keys '+analysis.keys+' / Markers '+analysis.markers+' / Work F'+SF_TIMELINE.workStart+'-'+SF_TIMELINE.workEnd+' / Zoom '+Math.round(SF_TIMELINE.zoom*100)+'%'+(analysis.warnings.length?' / '+analysis.warnings[0]:' / Motion healthy');
     if(mini)mini.innerHTML=sfTimelineMinimapHtml();
   }
 }
