@@ -66,8 +66,8 @@ body.sf-hide-left .sidebar,body.sf-hide-right .rpanel,body.sf-hide-timeline .tim
 .logo-ver{font-size:8.5px;font-family:var(--fm);color:var(--t3);background:var(--bg4);border:1px solid var(--b1);border-radius:3px;padding:1px 5px;margin-left:2px}
 
 /* MENUS */
-.mb-menus{display:flex;height:100%;align-items:stretch;justify-content:space-between;gap:clamp(2px,.34vw,9px);flex:1 1 auto;min-width:0;overflow:visible}
-.mb-m{padding:0 10px;font-size:12.5px;color:var(--t2);display:flex;align-items:center;justify-content:center;white-space:nowrap;cursor:pointer;transition:color .1s,background .1s;position:relative;overflow:visible}
+.mb-menus{display:flex;height:100%;align-items:stretch;justify-content:flex-start;gap:5px;flex:1 1 auto;min-width:0;overflow:visible}
+.mb-m{padding:0 8px;font-size:12.5px;color:var(--t2);display:flex;align-items:center;justify-content:center;white-space:nowrap;cursor:pointer;transition:color .1s,background .1s;position:relative;overflow:visible}
 .mb-m:hover{color:var(--t0);background:var(--bg3)}
 .mb-m.active{color:var(--t0)}
 /* dropdown */
@@ -1287,12 +1287,12 @@ body{
 .mb-menus{
   flex:1 1 auto;
   min-width:0;
-  justify-content:space-between;
-  gap:clamp(3px,.46vw,12px);
+  justify-content:flex-start;
+  gap:5px;
 }
 .mb-m{
   min-height:38px;
-  padding:0 11px;
+  padding:0 9px;
   font-size:12.5px;
   border-radius:6px;
 }
@@ -1745,7 +1745,7 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
 @media (max-width:1280px){
   :root{--lw:264px;--rw:286px;--tlh:108px}
   .mb-pill{display:none}
-  .mb-menus{justify-content:space-between;gap:3px}
+  .mb-menus{justify-content:flex-start;gap:3px}
   .tab{padding:0 9px}
   .tri-brain{display:none}
 }
@@ -1862,12 +1862,12 @@ html,body{
 .mb-menus{
   flex:1 1 auto;
   min-width:0;
-  justify-content:space-between;
-  gap:clamp(3px,.5vw,13px);
+  justify-content:flex-start;
+  gap:5px;
 }
 .mb-m{
   min-height:30px;
-  padding:0 9px;
+  padding:0 8px;
   font-size:12.5px;
   color:#d7dce6;
   border-radius:7px;
