@@ -2850,13 +2850,13 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
           <div><b>Value</b><span id="curve-value-readout">-</span></div>
         </div>
         <div class="curve-actions">
-          <button class="curve-btn" data-curve-action="add-point" onclick="sfAddCurvePointAtPlayhead()">Add Point</button>
+          <button class="curve-btn" data-curve-action="add-point" onclick="sfAddCurvePointAtPlayhead()">Set End</button>
           <button class="curve-btn" data-curve-action="duplicate" onclick="sfDuplicateCurveChannel()">Duplicate</button>
           <button class="curve-btn" data-curve-action="clear" onclick="sfClearCurvePoints()">Clear</button>
         </div>
         <div class="curve-actions">
-          <button class="curve-btn" data-curve-action="smooth" onclick="sfSmoothCurve()">Smooth</button>
-          <button class="curve-btn danger" data-curve-action="delete-point" onclick="sfDeleteCurvePoint()">Delete Point</button>
+          <button class="curve-btn" data-curve-action="smooth" onclick="sfSmoothCurve()">Flatten</button>
+          <button class="curve-btn danger" data-curve-action="delete-point" onclick="sfDeleteCurvePoint()">Swap Ends</button>
           <button class="curve-btn danger" data-curve-action="remove-curve" onclick="sfDeleteCurrentCurveChannel()">Remove Curve</button>
         </div>
         <div class="curve-actions">
@@ -2865,7 +2865,7 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
           <button class="curve-btn" data-curve-action="bake" onclick="sfBakeCurvesToScene()">Bake Rig</button>
         </div>
         <div class="curve-status" id="curve-status">No curves loaded.</div>
-        <div class="curve-hint">Click graph space to add a point to the active curve. Drag points to shape it; the timeline now evaluates all visible curve tracks together.</div>
+        <div class="curve-hint">Affine mode: each track is y=ax+b. Click or drag the left/right endpoint to set the line.</div>
       </div>
     </div>
 
@@ -7447,13 +7447,13 @@ var SF_CURVE_DRAG=null;
 var SF_CURVE_COLORS=['#e8812a','#ffb454','#30d158','#bf5af2','#ff453a','#ffd60a','#64d2ff','#ff7ab6','#8e8e93','#9fe870'];
 function sfCurvePresetDefinitions(){
   return {
-    temperature:{label:'Temperature K',min:2000,max:12000,unit:'K',target:true,points:[{x:0,y:4200},{x:.5,y:5600},{x:1,y:7200}]},
-    exposure:{label:'Exposure EV',min:-3,max:3,unit:'EV',target:true,points:[{x:0,y:-.25},{x:.5,y:.35},{x:1,y:.05}]},
-    sunIntensity:{label:'Sun intensity',min:0,max:5,unit:'',target:true,points:[{x:0,y:1.2},{x:.5,y:2.6},{x:1,y:.9}]},
-    cloudCoverage:{label:'Cloud coverage',min:0,max:100,unit:'%',target:true,points:[{x:0,y:18},{x:.5,y:48},{x:1,y:32}]},
-    cloudDensity:{label:'Cloud density',min:0,max:1,unit:'',target:true,points:[{x:0,y:.18},{x:.5,y:.56},{x:1,y:.34}]},
-    haze:{label:'Atmosphere haze',min:0,max:1,unit:'',target:true,points:[{x:0,y:.12},{x:.5,y:.42},{x:1,y:.24}]},
-    aurora:{label:'Aurora intensity',min:0,max:1,unit:'',target:true,points:[{x:0,y:0},{x:.72,y:.75},{x:1,y:.28}]}
+    temperature:{label:'Temperature K',min:2000,max:12000,unit:'K',target:true,points:[{x:0,y:4200},{x:1,y:7200}]},
+    exposure:{label:'Exposure EV',min:-3,max:3,unit:'EV',target:true,points:[{x:0,y:-.25},{x:1,y:.05}]},
+    sunIntensity:{label:'Sun intensity',min:0,max:5,unit:'',target:true,points:[{x:0,y:1.2},{x:1,y:.9}]},
+    cloudCoverage:{label:'Cloud coverage',min:0,max:100,unit:'%',target:true,points:[{x:0,y:18},{x:1,y:32}]},
+    cloudDensity:{label:'Cloud density',min:0,max:1,unit:'',target:true,points:[{x:0,y:.18},{x:1,y:.34}]},
+    haze:{label:'Atmosphere haze',min:0,max:1,unit:'',target:true,points:[{x:0,y:.12},{x:1,y:.24}]},
+    aurora:{label:'Aurora intensity',min:0,max:1,unit:'',target:true,points:[{x:0,y:0},{x:1,y:.28}]}
   };
 }
 function sfCurvePresetDefinition(key){
@@ -7479,7 +7479,42 @@ function sfCurveDefaultPoints(ch){
   ch=ch||{min:0,max:1};
   var a=Number(ch.min)||0,b=Number(ch.max);
   if(!Number.isFinite(b)||b<=a)b=a+1;
-  return [{x:0,y:a+(b-a)*.25},{x:.5,y:a+(b-a)*.72},{x:1,y:a+(b-a)*.40}];
+  return [{x:0,y:a},{x:1,y:b}];
+}
+function sfCurveClampY(ch,value){
+  value=Number(value);
+  if(!Number.isFinite(value))value=Number(ch&&ch.min)||0;
+  return Math.max(ch.min,Math.min(ch.max,value));
+}
+function sfCurveAffinePoints(ch,points){
+  ch=ch||{min:0,max:1};
+  points=Array.isArray(points)?points:[];
+  var pts=points.map(function(pt){
+    return {x:Math.max(0,Math.min(1,Number(pt&&pt.x)||0)),y:Number(pt&&pt.y)};
+  }).filter(function(pt){return Number.isFinite(pt.y);});
+  if(!pts.length)return sfCurveDefaultPoints(ch);
+  pts.forEach(function(pt){pt.y=sfCurveClampY(ch,pt.y);});
+  if(pts.length===1){
+    var flat=pts[0].y;
+    return [{x:0,y:flat},{x:1,y:flat}];
+  }
+  var n=pts.length,sx=0,sy=0,sxx=0,sxy=0;
+  pts.forEach(function(pt){sx+=pt.x;sy+=pt.y;sxx+=pt.x*pt.x;sxy+=pt.x*pt.y;});
+  var denom=n*sxx-sx*sx;
+  var a=Math.abs(denom)>.000001?(n*sxy-sx*sy)/denom:0;
+  var b=(sy-a*sx)/n;
+  return [{x:0,y:sfCurveClampY(ch,b)},{x:1,y:sfCurveClampY(ch,a+b)}];
+}
+function sfCurveAffineParams(ch){
+  var pts=sfCurveAffinePoints(ch,ch&&ch.points);
+  return {a:pts[1].y-pts[0].y,b:pts[0].y};
+}
+function sfCurveFormulaText(ch){
+  if(!ch)return 'y = ax + b';
+  var p=sfCurveAffineParams(ch);
+  var a=Number(p.a).toFixed(ch.unit==='K'?0:2);
+  var b=Number(p.b).toFixed(ch.unit==='K'?0:2);
+  return 'y = '+a+'x '+(p.b<0?'- ':'+ ')+Math.abs(Number(b)).toFixed(ch.unit==='K'?0:2);
 }
 function sfCurveStatus(message,type){
   var el=document.getElementById('curve-status');
@@ -7499,13 +7534,13 @@ function sfEnsureCurveState(){
     ch.max=Number.isFinite(Number(ch.max))?Number(ch.max):Number(fallback.max)||1;
     if(ch.max<=ch.min)ch.max=ch.min+1;
     ch.unit=ch.unit==null?(fallback.unit||''):String(ch.unit);
-    ch.points=Array.isArray(ch.points)&&ch.points.length?ch.points.map(function(pt){return {x:Number(pt.x)||0,y:Number(pt.y)}}):JSON.parse(JSON.stringify(fallback.points||sfCurveDefaultPoints(ch)));
-    ch.points.forEach(function(pt){if(!Number.isFinite(pt.y))pt.y=ch.min;});
+    ch.points=sfCurveAffinePoints(ch,Array.isArray(ch.points)&&ch.points.length?ch.points:(fallback.points||sfCurveDefaultPoints(ch)));
+    ch.affine=true;
     if(preset){ch.target=true;if(ch.custom==null)ch.custom=false;}
     SF_CURVES.channels[key]=ch;
   });
   if(!SF_CURVES.channels[SF_CURVES.active])SF_CURVES.active=Object.keys(SF_CURVES.channels)[0]||'';
-  SF_CURVES.selectedPoint=Math.max(0,Number(SF_CURVES.selectedPoint)||0);
+  SF_CURVES.selectedPoint=Math.max(0,Math.min(1,Number(SF_CURVES.selectedPoint)||0));
 }
 function sfCollectCurveState(){sfEnsureCurveState();return JSON.parse(JSON.stringify(SF_CURVES));}
 function sfApplyCurveState(state){
@@ -7517,13 +7552,14 @@ function sfApplyCurveState(state){
     var ch=SF_CURVES.channels[k],def=base.channels[k]||ch;
     SF_CURVES.channels[k]=Object.assign({},def,ch);
     SF_CURVES.channels[k].points=Array.isArray(ch.points)&&ch.points.length?ch.points:def.points;
+    SF_CURVES.channels[k].affine=true;
   });
   sfEnsureCurveState();
   sfDrawCurveEditor();
 }
 function sfHasCurveChannels(){sfEnsureCurveState();return Object.keys(SF_CURVES.channels||{}).length>0;}
 function sfCurveChannel(){sfEnsureCurveState();return SF_CURVES.channels[SF_CURVES.active]||null;}
-function sfCurvePoints(){var ch=sfCurveChannel();if(!ch)return [];ch.points=Array.isArray(ch.points)?ch.points:[];return ch.points;}
+function sfCurvePoints(){var ch=sfCurveChannel();if(!ch)return [];ch.points=sfCurveAffinePoints(ch,ch.points);ch.affine=true;return ch.points;}
 function sfRequireCurveChannel(action){
   if(sfHasCurveChannels())return true;
   sfCurveStatus(action||'Create a curve first.','warn');
@@ -7540,11 +7576,10 @@ function sfClampCurvePoint(pt,ch){
 function sfSortCurvePoints(ch,selected){
   ch=ch||sfCurveChannel();
   if(!ch)return [];
-  ch.points=Array.isArray(ch.points)?ch.points:[];
-  ch.points.forEach(function(pt){sfClampCurvePoint(pt,ch);});
-  ch.points.sort(function(a,b){return a.x-b.x;});
-  if(selected)SF_CURVES.selectedPoint=Math.max(0,ch.points.indexOf(selected));
-  else SF_CURVES.selectedPoint=Math.max(0,Math.min(SF_CURVES.selectedPoint,ch.points.length-1));
+  var selectedIndex=selected?(Number(selected.x)<.5?0:1):SF_CURVES.selectedPoint;
+  ch.points=sfCurveAffinePoints(ch,ch.points);
+  if(selected)SF_CURVES.selectedPoint=selectedIndex;
+  else SF_CURVES.selectedPoint=Math.max(0,Math.min(1,SF_CURVES.selectedPoint));
   return ch.points;
 }
 function sfCurveFormat(value,ch){
@@ -7579,8 +7614,8 @@ function sfRenderCurveList(){
   var keys=Object.keys(SF_CURVES.channels);
   if(!keys.length){list.innerHTML='<div class="curve-empty">No curves yet.</div>';return;}
   list.innerHTML=keys.map(function(key){
-    var ch=SF_CURVES.channels[key]||{},count=Array.isArray(ch.points)?ch.points.length:0;
-    var meta=count+' pts'+(ch.unit?' / '+ch.unit:'')+(ch.target?' / target':(ch.custom?' / custom':''));
+    var ch=SF_CURVES.channels[key]||{};
+    var meta='affine'+(ch.unit?' / '+ch.unit:'')+(ch.target?' / target':(ch.custom?' / custom':''));
     return '<button type="button" class="curve-item '+(key===SF_CURVES.active?'active':'')+'" data-curve-key="'+sfCurveSafeText(key)+'" style="--curve-color:'+sfCurveSafeText(sfCurveColor(key))+'"><i class="curve-swatch"></i><strong>'+sfCurveSafeText(ch.label||key)+'</strong><span>'+sfCurveSafeText(meta)+'</span></button>';
   }).join('');
 }
@@ -7593,23 +7628,15 @@ function sfUpdateCurveSummary(){
   var input=document.getElementById('curve-point-value');
   if(input){input.disabled=!keys.length;if(!keys.length)input.value='';}
   if(total)total.textContent=keys.length+' track'+(keys.length===1?'':'s');
-  if(active)active.textContent=keys.length?(pts.length+' pt'+(pts.length===1?'':'s')+' / '+(ch.unit||'value')):'none';
-  if(selected)selected.textContent=sel?'F'+Math.round(sel.x*duration)+' / '+sfCurveFormat(sel.y,ch):'none';
+  if(active)active.textContent=keys.length?sfCurveFormulaText(ch):'none';
+  if(selected)selected.textContent=sel?((SF_CURVES.selectedPoint===0?'Start':'End')+' / '+sfCurveFormat(sel.y,ch)):'none';
 }
 function sfCurveValueAt(channel,x){
   var ch=SF_CURVES.channels[channel]||sfCurveChannel();
   if(!ch)return 0;
-  var pts=(ch.points||[]).slice().sort(function(a,b){return a.x-b.x;});
-  if(!pts.length)return ch.min||0;
-  if(x<=pts[0].x)return pts[0].y;
-  for(var i=0;i<pts.length-1;i++){
-    if(x>=pts[i].x && x<=pts[i+1].x){
-      var t=(x-pts[i].x)/Math.max(.0001,pts[i+1].x-pts[i].x);
-      t=t*t*(3-2*t);
-      return pts[i].y+(pts[i+1].y-pts[i].y)*t;
-    }
-  }
-  return pts[pts.length-1].y;
+  var pts=sfCurveAffinePoints(ch,ch.points);
+  x=Math.max(0,Math.min(1,Number(x)||0));
+  return pts[0].y+(pts[1].y-pts[0].y)*x;
 }
 function sfCurveCanvasSetup(){
   var c=document.getElementById('curve-canvas');if(!c)return null;
@@ -7695,6 +7722,7 @@ function sfDrawCurveEditor(){
   });
   ctx.fillStyle='rgba(255,255,255,.58)';ctx.font='9px DM Mono,monospace';
   ctx.fillText((ch.label||SF_CURVES.active)+'  /  '+keys.length+' tracks',8,13);
+  ctx.fillText(sfCurveFormulaText(ch),8,26);
   ctx.fillText(sfCurveFormat(ch.max,ch),w-78,13);
   ctx.fillText(sfCurveFormat(ch.min,ch),w-78,h-8);
   var readFrame=document.getElementById('curve-frame-readout'),readValue=document.getElementById('curve-value-readout'),input=document.getElementById('curve-point-value'),sel=document.getElementById('curve-channel');
@@ -7729,11 +7757,12 @@ function sfCurveHit(x,y,box){
 function sfInsertCurvePoint(x,y,apply){
   var ch=sfCurveChannel();
   if(!ch)return null;
-  var pt=sfClampCurvePoint({x:x,y:y},ch);
-  ch.points=sfCurvePoints();
-  var existing=ch.points.find(function(p){return Math.abs((Number(p.x)||0)-pt.x)<.006;});
-  if(existing){existing.y=pt.y;pt=existing;}
-  else ch.points.push(pt);
+  ch.points=sfCurveAffinePoints(ch,ch.points);
+  var index=Number(x)<.5?0:1;
+  var pt=ch.points[index];
+  pt.x=index?1:0;
+  pt.y=sfCurveClampY(ch,y);
+  SF_CURVES.selectedPoint=index;
   sfSortCurvePoints(ch,pt);
   SF_DIRTY=true;
   sfDrawCurveEditor();
@@ -7795,7 +7824,7 @@ function sfInstallCurveEditor(){
         var ch=sfCurveChannel(),next=sfScreenToCurve(p.x,p.y,ch,p.box);
         sfInsertCurvePoint(next.x,next.y,true);
         hit=SF_CURVES.selectedPoint;
-        if(typeof triToast==='function')triToast('Curve point added');
+        if(typeof triToast==='function')triToast('Affine endpoint set');
       }
       SF_CURVES.selectedPoint=hit;SF_CURVE_DRAG={id:e.pointerId};
       try{c.setPointerCapture&&c.setPointerCapture(e.pointerId);}catch(_){}
@@ -7807,8 +7836,8 @@ function sfInstallCurveEditor(){
       e.stopPropagation();
       var p=sfCurvePointerPoint(e),ch=sfCurveChannel(),pts=sfCurvePoints(),pt=pts[SF_CURVES.selectedPoint];if(!p||!pt)return;
       var next=sfScreenToCurve(p.x,p.y,ch,p.box);
-      pt.x=Math.max(0,Math.min(1,next.x));
-      pt.y=Math.max(ch.min,Math.min(ch.max,next.y));
+      pt.x=SF_CURVES.selectedPoint===0?0:1;
+      pt.y=sfCurveClampY(ch,next.y);
       sfSortCurvePoints(ch,pt);
       SF_DIRTY=true;sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);
     });
@@ -7824,7 +7853,7 @@ function sfInstallCurveEditor(){
       if(sfCurveHit(p.x,p.y,p.box)>=0)return;
       var ch=sfCurveChannel(),pt=sfScreenToCurve(p.x,p.y,ch,p.box);
       sfInsertCurvePoint(pt.x,pt.y,true);
-      if(typeof triToast==='function')triToast('Curve point added');
+      if(typeof triToast==='function')triToast('Affine endpoint set');
     });
     window.addEventListener('resize',sfDrawCurveEditor);
   }
@@ -7836,18 +7865,21 @@ function sfSetSelectedCurvePointValue(value,silent){
   var next=Number(value);
   if(!Number.isFinite(next))next=ch.min;
   pt.y=Math.max(ch.min,Math.min(ch.max,next));SF_DIRTY=true;sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);
-  if(!silent)sfCurveStatus('Point value set to '+sfCurveFormat(pt.y,ch),'ok');
+  if(!silent)sfCurveStatus('Endpoint value set to '+sfCurveFormat(pt.y,ch),'ok');
 }
 function sfSetCurveChannelValue(channel,value){
   sfEnsureCurveState();
   if(!SF_CURVES.channels[channel])return;
   var ch=SF_CURVES.channels[channel],x=sfCurveFrame01(),y=Math.max(ch.min,Math.min(ch.max,Number(value)||0));
-  var pt={x:x,y:y};
-  ch.points.push(pt);sfSortCurvePoints(ch,pt);
-  while(ch.points.length>12)ch.points.splice(1,1);
-  SF_CURVES.active=channel;SF_CURVES.selectedPoint=ch.points.findIndex(function(p){return p.x===x&&p.y===y;});
+  ch.points=sfCurveAffinePoints(ch,ch.points);
+  var index=x<.5?0:1;
+  var pt=ch.points[index];
+  pt.x=index?1:0;
+  pt.y=y;
+  SF_CURVES.active=channel;SF_CURVES.selectedPoint=index;
+  sfSortCurvePoints(ch,pt);
   sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);
-  sfCurveStatus('Keyed '+(ch.label||channel)+' at F'+sfTimelineFrame(),'ok');
+  sfCurveStatus('Set affine endpoint for '+(ch.label||channel),'ok');
 }
 function sfCurveSlug(value){
   return String(value||'curve').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'curve';
@@ -7869,9 +7901,7 @@ function sfCreateCurveChannel(name,min,max,unit){
   var key='custom-'+sfCurveSlug(name);
   var i=2,base=key;
   while(SF_CURVES.channels[key])key=base+'-'+(i++);
-  var mid=sfCurveFrame01();
-  if(mid<=.02||mid>=.98)mid=.5;
-  SF_CURVES.channels[key]={label:name,min:min,max:max,unit:unit,custom:true,current:null,points:[{x:0,y:min+(max-min)*.25},{x:mid,y:min+(max-min)*.72},{x:1,y:min+(max-min)*.40}]};
+  SF_CURVES.channels[key]={label:name,min:min,max:max,unit:unit,custom:true,current:null,affine:true,points:[{x:0,y:min},{x:1,y:max}]};
   SF_CURVES.active=key;
   SF_CURVES.selectedPoint=1;
   SF_DIRTY=true;
@@ -7898,10 +7928,11 @@ function sfCreateCurvePresetChannel(presetKey){
   channel.custom=false;
   channel.target=true;
   channel.current=null;
-  channel.points=Array.isArray(channel.points)&&channel.points.length?channel.points:sfCurveDefaultPoints(channel);
+  channel.affine=true;
+  channel.points=sfCurveAffinePoints(channel,Array.isArray(channel.points)&&channel.points.length?channel.points:sfCurveDefaultPoints(channel));
   SF_CURVES.channels[presetKey]=channel;
   SF_CURVES.active=presetKey;
-  SF_CURVES.selectedPoint=Math.min(1,channel.points.length-1);
+  SF_CURVES.selectedPoint=1;
   SF_DIRTY=true;
   sfDrawCurveEditor();
   sfCurveStatus('Target curve created: '+channel.label,'ok');
@@ -7919,7 +7950,9 @@ function sfDuplicateCurveChannel(){
   clone.current=null;
   SF_CURVES.channels[nextKey]=clone;
   SF_CURVES.active=nextKey;
-  SF_CURVES.selectedPoint=Math.max(0,Math.min(1,(clone.points||[]).length-1));
+  clone.points=sfCurveAffinePoints(clone,clone.points);
+  clone.affine=true;
+  SF_CURVES.selectedPoint=1;
   SF_DIRTY=true;
   sfDrawCurveEditor();
   sfCurveStatus('Curve duplicated: '+baseLabel,'ok');
@@ -7941,7 +7974,7 @@ function sfDeleteCurrentCurveChannel(){
 function sfAddCurvePointAtPlayhead(){
   if(!sfRequireCurveChannel())return;
   var x=sfCurveFrame01(),y=sfCurveValueAt(SF_CURVES.active,x);
-  sfInsertCurvePoint(x,y,true);sfCurveStatus('Point added at F'+sfTimelineFrame(),'ok');if(typeof triToast==='function')triToast('Curve point added');
+  sfInsertCurvePoint(x,y,true);sfCurveStatus('Affine endpoint set at F'+sfTimelineFrame(),'ok');if(typeof triToast==='function')triToast('Affine endpoint set');
 }
 function sfClearCurvePoints(){
   if(!sfRequireCurveChannel())return;
@@ -7957,24 +7990,24 @@ function sfClearCurvePoints(){
 }
 function sfDeleteCurvePoint(){
   if(!sfRequireCurveChannel())return;
-  var pts=sfCurvePoints();if(pts.length<=2){sfCurveStatus('Curve needs at least 2 points','warn');if(typeof triToast==='function')triToast('Curve needs at least 2 points');return;}
-  pts.splice(Math.max(0,SF_CURVES.selectedPoint),1);SF_CURVES.selectedPoint=Math.min(SF_CURVES.selectedPoint,pts.length-1);
-  SF_DIRTY=true;sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);sfCurveStatus('Curve point deleted','ok');if(typeof triToast==='function')triToast('Curve point deleted');
+  var pts=sfCurvePoints(),y0=pts[0].y;
+  pts[0].y=pts[1].y;pts[1].y=y0;
+  SF_CURVES.selectedPoint=SF_CURVES.selectedPoint===0?1:0;
+  SF_DIRTY=true;sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);sfCurveStatus('Affine endpoints swapped','ok');if(typeof triToast==='function')triToast('Curve endpoints swapped');
 }
 function sfSmoothCurve(){
   if(!sfRequireCurveChannel())return;
-  var pts=sfCurvePoints();if(pts.length<3)return;
-  for(var i=1;i<pts.length-1;i++)pts[i].y=(pts[i-1].y+pts[i].y*2+pts[i+1].y)/4;
-  SF_DIRTY=true;sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);sfCurveStatus('Curve smoothed','ok');if(typeof triToast==='function')triToast('Curve smoothed');
+  var pts=sfCurvePoints(),flat=(pts[0].y+pts[1].y)/2;
+  pts[0].y=flat;pts[1].y=flat;
+  SF_DIRTY=true;sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);sfCurveStatus('Affine curve flattened','ok');if(typeof triToast==='function')triToast('Curve flattened');
 }
 function sfResetCurve(){
   if(!sfRequireCurveChannel())return;
-  var fresh=sfDefaultCurveState();
   var key=SF_CURVES.active,ch=SF_CURVES.channels[key];
-  if(fresh.channels[key])SF_CURVES.channels[key]=JSON.parse(JSON.stringify(fresh.channels[key]));
-  else if(ch){
-    SF_CURVES.channels[key]=Object.assign({},ch,{points:[{x:0,y:ch.min+(ch.max-ch.min)*.25},{x:.5,y:ch.min+(ch.max-ch.min)*.72},{x:1,y:ch.min+(ch.max-ch.min)*.40}]});
-  }
+  var preset=sfCurvePresetDefinition(key);
+  if(preset)SF_CURVES.channels[key]=Object.assign({},JSON.parse(JSON.stringify(preset)),{current:ch.current,custom:false,target:true,affine:true});
+  else if(ch)SF_CURVES.channels[key]=Object.assign({},ch,{affine:true,points:sfCurveDefaultPoints(ch)});
+  sfEnsureCurveState();
   SF_CURVES.selectedPoint=0;SF_DIRTY=true;sfDrawCurveEditor();sfApplyCurveAtPlayhead(true);sfCurveStatus('Curve reset','ok');
 }
 function sfApplyCurveAtPlayhead(silent){
@@ -8050,8 +8083,10 @@ function sfCurveEditorSelfTest(){
     var count1=sfCurvePoints().length;
     sfSetSelectedCurvePointValue(.5);
     var selected=sfCurvePoints()[SF_CURVES.selectedPoint];
+    var pts=sfCurvePoints(),mid=sfCurveValueAt(SF_CURVES.active,.5);
+    var affine=count1===2&&count0===2&&Math.abs(mid-((pts[0].y+pts[1].y)/2))<.001;
     sfApplyAllCurvesAtPlayhead(true);
-    return {targetCreated:targetCreated,multiCreated:multiCreated,duplicated:duplicated,pointAdded:count1===count0+1,valueSet:!!selected&&Math.abs(selected.y-.5)<.001,applyAll:true};
+    return {targetCreated:targetCreated,multiCreated:multiCreated,duplicated:duplicated,affine:affine,valueSet:!!selected&&Math.abs(selected.y-.5)<.001,applyAll:true};
   }finally{
     sfApplyCurveState(snapshot);
   }
