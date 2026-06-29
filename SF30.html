@@ -1349,7 +1349,7 @@ body{
   flex:1 1 auto;
   min-width:0;
   justify-content:flex-start;
-  gap:5px;
+  gap:3px;
 }
 .mb-m{
   min-height:38px;
@@ -1803,10 +1803,20 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
   outline:2px solid rgba(232,129,42,.72);
   outline-offset:2px;
 }
+@media (max-width:1600px){
+  .logo-word,.tri-build-badge{display:none}
+  .mb-pill{display:none}
+  .mb-menus{gap:1px}
+  .mb-m{padding:0 4px;font-size:10.8px}
+  .mb-r{margin-left:5px;gap:3px}
+  .mb-render{margin-left:4px;padding:4px 8px;font-size:10px}
+}
 @media (max-width:1280px){
   :root{--lw:264px;--rw:286px;--tlh:108px}
   .mb-pill{display:none}
   .mb-menus{justify-content:flex-start;gap:3px}
+  .mb-m{padding:0 5px;font-size:11px}
+  .mb-render{padding:4px 9px;font-size:10.8px}
   .tab{padding:0 9px}
   .tri-brain{display:none}
 }
@@ -1928,8 +1938,8 @@ html,body{
 }
 .mb-m{
   min-height:30px;
-  padding:0 8px;
-  font-size:12.5px;
+  padding:0 6px;
+  font-size:11.8px;
   color:#d7dce6;
   border-radius:7px;
 }
@@ -1963,6 +1973,14 @@ html,body{
 .mb-render:hover,.btn-export:hover,.modal-btn.ok:hover,.tri-btn.primary:hover{
   background:linear-gradient(180deg,#ffb86d,#f09840);
   box-shadow:0 1px 0 rgba(255,255,255,.34) inset,0 16px 40px rgba(232,129,42,.38);
+}
+@media (max-width:1600px){
+  .logo-word,.tri-build-badge{display:none}
+  .mb-pill{display:none}
+  .mb-menus{gap:1px}
+  .mb-m{padding:0 4px;font-size:10.8px}
+  .mb-r{margin-left:5px;gap:3px}
+  .mb-render{margin-left:4px;padding:4px 8px;font-size:10px}
 }
 .tabbar{
   min-height:38px;
@@ -2597,6 +2615,24 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
       </div>
     </div>
 
+    <div class="mb-m" onclick="toggleMenu(this)">Camera
+      <div class="mb-dd">
+        <div class="dd-item acc" onclick="sfMenuOpenCameraPanel()">Active Camera Panel</div>
+        <div class="dd-item" onclick="sfCreateCinemaCamera('arri-alexa-35')">Add ARRI Alexa Camera</div>
+        <div class="dd-item" onclick="sfCreateCinemaCamera('sony-venice-2')">Add Sony Venice Camera</div>
+        <div class="dd-item" onclick="sfCreateCinemaCamera('imax-65mm')">Add IMAX Plate Camera</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfMenuApplyCameraPreset('arri-alexa-35')">Apply ARRI Alexa 35</div>
+        <div class="dd-item" onclick="sfMenuApplyCameraPreset('red-v-raptor-xl')">Apply RED V-Raptor XL</div>
+        <div class="dd-item" onclick="sfMenuApplyCameraPreset('panavision-dxl2')">Apply Panavision DXL2</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfMenuSetCameraFov(35)">FOV 35 deg</div>
+        <div class="dd-item" onclick="sfMenuSetCameraFov(50)">FOV 50 deg</div>
+        <div class="dd-item" onclick="sfMenuSetCameraFov(72)">FOV 72 deg</div>
+        <div class="dd-item" onclick="sfApplyLensFlarePreset()">Enable Lens FX</div>
+      </div>
+    </div>
+
     <div class="mb-m" onclick="toggleMenu(this)">Optimize
       <div class="mb-dd">
         <div class="dd-item acc" onclick="sfOptimizeScene('scene')">Optimize Scene</div>
@@ -2620,6 +2656,21 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
         <div class="dd-item" onclick="sfApplyAssetPreset('volume')">Volume Rigs</div>
         <div class="dd-item" onclick="sfApplyAssetPreset('material')">Reference Materials</div>
         <div class="dd-item" onclick="sfApplyAssetPreset('lut')">LUT / Color Assets</div>
+      </div>
+    </div>
+
+    <div class="mb-m" onclick="toggleMenu(this)">Marketplace
+      <div class="mb-dd">
+        <div class="dd-item acc" onclick="sfMenuOpenMarketplace('Presets')">Marketplace Home</div>
+        <div class="dd-item" onclick="sfSelectMarketplace('HDRIs')">HDRI Packs</div>
+        <div class="dd-item" onclick="sfSelectMarketplace('Clouds')">Cloud Packs</div>
+        <div class="dd-item" onclick="sfSelectMarketplace('Skies')">Sky Presets</div>
+        <div class="dd-item" onclick="sfSelectMarketplace('Volumes')">Volume Kits</div>
+        <div class="dd-item" onclick="sfSelectMarketplace('Materials')">Reference Materials</div>
+        <div class="dd-item" onclick="sfSelectMarketplace('LUTs')">Color LUTs</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfMenuInstallPack('cinematic skies')">Install Cinematic Skies</div>
+        <div class="dd-item" onclick="sfMenuInstallPack('weather starter pack')">Install Weather Starter Pack</div>
       </div>
     </div>
 
@@ -2677,6 +2728,23 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
       </div>
     </div>
 
+    <div class="mb-m" onclick="toggleMenu(this)">Nodes
+      <div class="mb-dd">
+        <div class="dd-item acc" onclick="sfMenuOpenNodeGraph()">Node Graph</div>
+        <div class="dd-item" onclick="sfFrameNodeGraph()">Frame All Nodes</div>
+        <div class="dd-item" onclick="sfApplyNodeGraphToScene()">Apply Graph to Viewport</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfCreateNode('TIME')">Add Time Driver Node</div>
+        <div class="dd-item" onclick="sfCreateNode('WIND')">Add Wind Field Node</div>
+        <div class="dd-item" onclick="sfCreateNode('GRADE')">Add Color Grade Node</div>
+        <div class="dd-item" onclick="sfCreateNode('MATH')">Add Math Modifier Node</div>
+        <div class="dd-item" onclick="sfCreateNode('MIX')">Add Mix Node</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfMenuCreateNodeRig()">Build Smart Node Rig</div>
+        <div class="dd-item" onclick="sfConnectSelectedNodeToOutput()">Connect Selected to Output</div>
+      </div>
+    </div>
+
     <div class="mb-m" onclick="toggleMenu(this)">Color
       <div class="mb-dd">
         <div class="dd-item acc" onclick="sfSetWorkingSpace('ACEScg')">ACEScg Working Space</div>
@@ -2728,6 +2796,23 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
       </div>
     </div>
 
+    <div class="mb-m" onclick="toggleMenu(this)">Review
+      <div class="mb-dd">
+        <div class="dd-item acc" onclick="sfMenuOpenReviewPanel()">Review Panel</div>
+        <div class="dd-item" onclick="sfRunSceneDoctor()">Scene Doctor<span class="dd-kbd">Ctrl Shift D</span></div>
+        <div class="dd-item" onclick="sfShowSceneAudit()">Scene Audit</div>
+        <div class="dd-item" onclick="sfSelectRightPanelTab('export');sfRenderQualityAdvisor()">Render Quality Advisor</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfToggleABCompare()">A/B Compare</div>
+        <div class="dd-item" onclick="sfCaptureABBefore()">Capture Before</div>
+        <div class="dd-item" onclick="sfCreateABSnapshot('Review snapshot')">Create Review Snapshot</div>
+        <div class="dd-item" onclick="sfSetABMode('split')">Split Review Mode</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfOpenVersions(SF_PROJECT_ID)">Version History</div>
+        <div class="dd-item" onclick="sfSelectRightPanelTab('queue');sfLoadRenderQueue()">Render Logs</div>
+      </div>
+    </div>
+
     <div class="mb-m" onclick="toggleMenu(this)">Pipeline
       <div class="mb-dd">
         <div class="dd-item acc" onclick="triToast('Blender package prepared')">Send HDRI to Blender<span class="dd-kbd">Ctrl B</span></div>
@@ -2738,6 +2823,22 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
         <div class="dd-sep"></div>
         <div class="dd-item">ACEScg Color Pipeline</div>
         <div class="dd-item">Version Control</div>
+      </div>
+    </div>
+
+    <div class="mb-m" onclick="toggleMenu(this)">Automation
+      <div class="mb-dd">
+        <div class="dd-item acc" onclick="openCmd()">Command Palette<span class="dd-kbd">Ctrl P</span></div>
+        <div class="dd-item" onclick="startMacro()">Record Macro<span class="dd-kbd">Ctrl M</span></div>
+        <div class="dd-item" onclick="stopMacro()">Stop Macro</div>
+        <div class="dd-item" onclick="sfGenerateTimelineBeatMap()">Generate Beat Map</div>
+        <div class="dd-item" onclick="sfTimelinePolishMotion()">Timeline Motion Pass</div>
+        <div class="dd-item" onclick="sfTimelineDistributeKeys()">Auto Space Keys</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="sfLocalAutosaveSnapshot('manual');triToast('Recovery snapshot saved')">Save Recovery Snapshot</div>
+        <div class="dd-item" onclick="sfRecoverLocalAutosave()">Recover Autosave</div>
+        <div class="dd-item" onclick="sfOpenShortcutEditor()">Shortcut Editor</div>
+        <div class="dd-item" onclick="sfStartMiniTutorial()">Mini Tutorial</div>
       </div>
     </div>
 
@@ -6056,6 +6157,68 @@ function sfSelectMarketplace(label){
   if(card && card.scrollIntoView)card.scrollIntoView({block:'nearest'});
   triToast('Marketplace: '+label);
 }
+function sfMenuOpenCameraPanel(){
+  if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('hierarchy');
+  if(typeof sfPickCreateType==='function')sfPickCreateType('CAM');
+  var row=typeof sfActiveCameraRow==='function'?sfActiveCameraRow(false):null;
+  if(row&&typeof triSelectOut==='function')triSelectOut(row);
+  if(typeof sfScrollSidebarTo==='function')sfScrollSidebarTo('sec-fx','Camera');
+  triToast(row?'Camera panel: '+(row.children[1]?.textContent?.trim()||'Camera'):'Camera panel ready');
+}
+function sfMenuApplyCameraPreset(preset){
+  var row=typeof sfActiveCameraRow==='function'?sfActiveCameraRow(true):null;
+  if(row&&typeof sfApplyCameraPresetToRow==='function')sfApplyCameraPresetToRow(row,preset);
+  if(row&&typeof triSelectOut==='function')triSelectOut(row);
+  sfMenuOpenCameraPanel();
+}
+function sfMenuSetCameraFov(value){
+  var row=typeof sfActiveCameraRow==='function'?sfActiveCameraRow(true):null;
+  if(row){
+    var props=typeof sfGetRowProps==='function'?sfGetRowProps(row):{};
+    props.fov=Number(value)||50;
+    if(typeof sfSetRowProps==='function')sfSetRowProps(row,props);
+    if(typeof sfRefreshOutlinerInspector==='function')sfRefreshOutlinerInspector(row);
+    if(typeof triSelectOut==='function')triSelectOut(row);
+  }
+  var fov=document.querySelector('#fov-badge input'),out=document.getElementById('fov-v');
+  if(fov)fov.value=Number(value)||50;
+  if(out)out.textContent=(Number(value)||50)+'°';
+  if(typeof drawSky==='function')drawSky();
+  triToast('Camera FOV: '+(Number(value)||50)+' deg');
+}
+function sfMenuOpenMarketplace(label){
+  if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('library');
+  if(typeof sfOpenPresetBrowser==='function')sfOpenPresetBrowser();
+  sfSelectMarketplace(label||'Presets');
+}
+function sfMenuInstallPack(name){
+  sfMenuOpenMarketplace('Presets');
+  if(typeof sfApplyProPreset==='function'){
+    if(String(name||'').toLowerCase().includes('weather'))sfApplyProPreset('node-weather');
+    else sfApplyProPreset('hdri-golden');
+  }else if(typeof sfApplyAssetPreset==='function')sfApplyAssetPreset('sky');
+  triToast('Installed pack: '+name);
+}
+function sfMenuOpenNodeGraph(){
+  if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('nodes');
+  if(typeof sfRenderNodeGraph==='function')sfRenderNodeGraph();
+  if(typeof sfFrameNodeGraph==='function')setTimeout(sfFrameNodeGraph,30);
+  triToast('Node Graph opened');
+}
+function sfMenuCreateNodeRig(){
+  sfMenuOpenNodeGraph();
+  if(typeof sfCreateNode==='function'){
+    ['TIME','WIND','GRADE','MATH','MIX'].forEach(function(type){sfCreateNode(type);});
+  }
+  if(typeof sfConnectSelectedNodeToOutput==='function')sfConnectSelectedNodeToOutput();
+  if(typeof sfApplyNodeGraphToScene==='function')sfApplyNodeGraphToScene();
+  triToast('Smart node rig created');
+}
+function sfMenuOpenReviewPanel(){
+  if(typeof sfSelectRightPanelTab==='function')sfSelectRightPanelTab('review');
+  if(typeof sfRunSceneDoctor==='function')sfRunSceneDoctor(true);
+  triToast('Review panel opened');
+}
 function sfDefaultSpaceColorState(){
   return {workingSpace:'ACEScg',displayTransform:'Scene Linear',preset:'Neutral QC',look:'Kodak 2383',contrast:.22,saturation:.68,highlightRolloff:.74,gamutWarning:false,enabled:true,intensity:1};
 }
@@ -6646,7 +6809,7 @@ function sfRunMenuAction(label){
   if(['hdris','clouds','skies','volumes','presets','materials','luts'].includes(l)){sfSelectMarketplace(label);return true;}
   if(l.includes('install asset pack')){sfSelectMarketplace('Presets');return true;}
   if(l.includes('documentation')||l.includes('video tutorials')){openCmd();triToast(label+' search opened');return true;}
-  if(l.includes('keyboard shortcuts')){openCmd();return true;}
+  if(l.includes('keyboard shortcuts')){if(typeof sfOpenShortcutEditor==='function')sfOpenShortcutEditor();else openCmd();return true;}
   if(l.includes('report a bug')){sfAddSceneObject('NOTE','Bug Report Note',{props:{status:'TODO',priority:3,text:'Describe issue, steps, expected result, actual result.'}});return true;}
   if(l.includes('about skyforge')){triToast('SkyForge v10 - cinematic HDRI/sky production tool');return true;}
   return false;
