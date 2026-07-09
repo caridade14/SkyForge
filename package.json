@@ -5,7 +5,9 @@
   "description": "Local backend for the SkyForge prototype.",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test",
+    "test:natural-light": "node --test tests/natural-light.test.js"
   },
   "engines": {
     "node": ">=18"
