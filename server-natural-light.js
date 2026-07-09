@@ -18,7 +18,10 @@ const INTERNAL_PORT = Number(
 );
 const HOST = process.env.HOST || "127.0.0.1";
 const MAX_BODY_BYTES = Number(process.env.SKYFORGE_MAX_LIGHTING_BODY || 1_000_000);
-const NATURAL_LIGHT_CLIENT_TAG = '<script src="/natural-light-preview.js" defer></script>';
+const NATURAL_LIGHT_CLIENT_TAGS = [
+  '<script src="/natural-light-preview.js" defer></script>',
+  '<script src="/natural-light-dashboard.js" defer></script>'
+];
 
 let backendProcess = null;
 let shuttingDown = false;
@@ -70,12 +73,14 @@ function normalizeLightingInput(body = {}) {
 }
 
 function injectNaturalLightClient(html) {
-  const source = String(html || "");
-  if (source.includes(NATURAL_LIGHT_CLIENT_TAG)) return source;
+  let source = String(html || "");
+  const missingTags = NATURAL_LIGHT_CLIENT_TAGS.filter((tag) => !source.includes(tag));
+  if (!missingTags.length) return source;
+  const injection = missingTags.join("\n");
   if (/<\/body\s*>/i.test(source)) {
-    return source.replace(/<\/body\s*>/i, `${NATURAL_LIGHT_CLIENT_TAG}\n</body>`);
+    return source.replace(/<\/body\s*>/i, `${injection}\n</body>`);
   }
-  return `${source}\n${NATURAL_LIGHT_CLIENT_TAG}\n`;
+  return `${source}\n${injection}\n`;
 }
 
 function shouldInjectNaturalLightClient(req, upstreamResponse) {
@@ -244,8 +249,10 @@ const server = http.createServer(async (req, res) => {
       multipleScatteringLutModel:
         "skyforge-multiple-scattering-lut-phase4",
       multipleScatteringLutVersion: "0.4.0",
-      previewClientVersion: "0.2.0",
+      previewClientVersion: "0.4.0",
+      dashboardVersion: "0.1.0",
       previewInjection: true,
+      dashboardInjection: true,
       endpoints: [
         "POST /api/lighting/evaluate",
         "POST /api/lighting/scene-state",
