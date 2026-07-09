@@ -3,7 +3,12 @@
 const http = require("http");
 const path = require("path");
 const { spawn } = require("child_process");
-const { evaluateNaturalLight } = require("./src/natural-light");
+const {
+  evaluateNaturalLight,
+  normalizeNaturalLightInput,
+  createNaturalLightSceneState,
+  generateSkyViewLut
+} = require("./src/natural-light");
 
 const PUBLIC_PORT = Number(process.env.PORT || 3000);
 const INTERNAL_PORT = Number(
@@ -53,17 +58,12 @@ async function readJsonBody(req) {
 }
 
 function normalizeLightingInput(body = {}) {
-  const source = body.input || body.naturalLight || body;
-  const required = ["latitude", "longitude", "dateTime"];
-  const missing = required.filter((key) => source[key] === undefined || source[key] === null || source[key] === "");
-
-  if (missing.length) {
-    const error = new Error(`Missing required fields: ${missing.join(", ")}`);
+  try {
+    return normalizeNaturalLightInput(body);
+  } catch (error) {
     error.statusCode = 400;
     throw error;
   }
-
-  return source;
 }
 
 function proxyRequest(req, res) {
@@ -158,8 +158,16 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, 200, {
       ok: true,
       service: "skyforge-natural-light",
+      apiVersion: "0.2.0",
       model: "skyforge-natural-light-phase1",
       modelVersion: "0.1.0",
+      skyViewLutModel: "skyforge-sky-view-lut-phase2",
+      skyViewLutVersion: "0.2.0",
+      endpoints: [
+        "POST /api/lighting/evaluate",
+        "POST /api/lighting/scene-state",
+        "POST /api/lighting/lut/sky-view"
+      ],
       backendPort: INTERNAL_PORT
     });
     return;
@@ -173,6 +181,30 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       sendJson(res, error.statusCode || 500, {
         error: error.message || "Natural-light evaluation failed"
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/lighting/scene-state") {
+    try {
+      const body = await readJsonBody(req);
+      sendJson(res, 200, createNaturalLightSceneState(body));
+    } catch (error) {
+      sendJson(res, error.statusCode || 400, {
+        error: error.message || "Natural-light scene-state normalization failed"
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/lighting/lut/sky-view") {
+    try {
+      const body = await readJsonBody(req);
+      sendJson(res, 200, generateSkyViewLut(body));
+    } catch (error) {
+      sendJson(res, error.statusCode || 400, {
+        error: error.message || "Sky-view LUT generation failed"
       });
     }
     return;
@@ -210,6 +242,7 @@ async function start() {
   server.listen(PUBLIC_PORT, HOST, () => {
     console.log(`SkyForge Natural Light gateway: http://${HOST}:${PUBLIC_PORT}`);
     console.log(`Physical lighting API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/evaluate`);
+    console.log(`Sky-view LUT API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/lut/sky-view`);
   });
 }
 
