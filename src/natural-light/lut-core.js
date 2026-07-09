@@ -2,7 +2,7 @@
 
 const {
   calculateSolarPosition,
-  absoluteAirMass,
+  relativeAirMass,
   pressureRatioAtAltitude
 } = require("./solar-core");
 const {
@@ -45,6 +45,10 @@ function finiteInRange(name, value, fallback, min, max) {
 function roundFloat(value, digits = 7) {
   if (!Number.isFinite(value)) return 0;
   return Number(value.toFixed(digits));
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function directionFromLutCoordinate(x, y, width, height) {
@@ -93,7 +97,7 @@ function resolveTransmittanceLutOptions(payload = {}) {
       options.maxAltitudeMeters,
       DEFAULT_TRANSMITTANCE_MAX_ALTITUDE_METERS,
       1_000,
-      80_000
+      20_000
     )
   };
 }
@@ -102,10 +106,7 @@ function generateSkyViewLut(payload = {}) {
   const input = normalizeNaturalLightInput(payload);
   const { width, height } = resolveLutOptions(payload);
   const solarPosition = calculateSolarPosition(input);
-  const sunAirMass = absoluteAirMass(
-    solarPosition.apparentZenithDeg,
-    input.altitudeMeters
-  );
+  const sunAirMass = relativeAirMass(solarPosition.apparentZenithDeg);
   const pressureRatio = pressureRatioAtAltitude(input.altitudeMeters);
 
   const rawPixels = new Array(width * height * 3);
@@ -210,6 +211,15 @@ function nearestTransmittanceSample(spectrum, wavelengthNm) {
   return nearest?.transmittance ?? 0;
 }
 
+function remainingColumnScales(altitudeMeters, maxAltitudeMeters) {
+  const normalizedAltitude = clamp(altitudeMeters / maxAltitudeMeters, 0, 1);
+  return {
+    aerosol: Math.exp(-altitudeMeters / 1_800),
+    waterVapor: Math.exp(-altitudeMeters / 2_200),
+    ozone: clamp(1 - 0.5 * Math.pow(normalizedAltitude, 1.35), 0.5, 1)
+  };
+}
+
 function generateTransmittanceLut(payload = {}) {
   const input = normalizeNaturalLightInput(payload);
   const { width, height, maxAltitudeMeters } = resolveTransmittanceLutOptions(payload);
@@ -223,17 +233,20 @@ function generateTransmittanceLut(payload = {}) {
     const altitudeFraction = 1 - (y + 0.5) / height;
     const altitudeMeters = altitudeFraction * maxAltitudeMeters;
     const pressureRatio = pressureRatioAtAltitude(altitudeMeters);
+    const columnScales = remainingColumnScales(altitudeMeters, maxAltitudeMeters);
 
     for (let x = 0; x < width; x += 1) {
       const zenithDeg = ((x + 0.5) / width) * 89.5;
-      const airMass = absoluteAirMass(zenithDeg, altitudeMeters);
+      const airMass = relativeAirMass(zenithDeg);
       const spectrum = directTransmittanceSpectrum({
         airMass,
         pressureRatio,
-        aerosolOpticalDepth550: input.aerosolOpticalDepth550,
+        aerosolOpticalDepth550:
+          input.aerosolOpticalDepth550 * columnScales.aerosol,
         angstromExponent: input.angstromExponent,
-        ozoneDobsonUnits: input.ozoneDobsonUnits,
-        precipitableWaterCm: input.precipitableWaterCm
+        ozoneDobsonUnits: input.ozoneDobsonUnits * columnScales.ozone,
+        precipitableWaterCm:
+          input.precipitableWaterCm * columnScales.waterVapor
       });
 
       let broadband = 0;
@@ -263,6 +276,11 @@ function generateTransmittanceLut(payload = {}) {
       version: TRANSMITTANCE_LUT_VERSION,
       sourceSolver: "skyforge-natural-light-phase3",
       absorption: "ozone-oxygen-water-band-model",
+      altitudeColumns: {
+        aerosolScaleHeightMeters: 1_800,
+        waterVaporScaleHeightMeters: 2_200,
+        ozoneRemainingFractionAtTop: 0.5
+      },
       limitations: [
         "Band-parameterized gas absorption",
         "No line-by-line pressure broadening",
@@ -316,6 +334,7 @@ module.exports = {
   directionFromLutCoordinate,
   resolveLutOptions,
   resolveTransmittanceLutOptions,
+  remainingColumnScales,
   generateSkyViewLut,
   generateTransmittanceLut
 };
