@@ -18,9 +18,19 @@
   "use strict";
 
   const API_ENDPOINT = "/api/lighting/preview";
-  const CLIENT_VERSION = "0.2.0";
+  const CLIENT_VERSION = "0.4.0";
   const LUT_WIDTH = 96;
   const LUT_HEIGHT = 48;
+  const TRANSMITTANCE_LUT_WIDTH = 32;
+  const TRANSMITTANCE_LUT_HEIGHT = 16;
+  const MULTIPLE_SCATTERING_LUT_WIDTH = 24;
+  const MULTIPLE_SCATTERING_LUT_HEIGHT = 12;
+  const VISUALIZATION_MODES = new Set(["sky", "transmittance", "multiple-scattering"]);
+  const OVERRIDE_LIMITS = Object.freeze({
+    groundAlbedo: [0, 1],
+    aerosolSingleScatteringAlbedo: [0, 1],
+    multipleScatteringOrders: [1, 8]
+  });
   const RELEVANT_IDS = new Set([
     "scene-date",
     "scene-time",
@@ -43,6 +53,9 @@
     lastInputKey: "",
     lastResult: null,
     restoredInput: null,
+    overrides: {},
+    visualizationMode: "sky",
+    overlayOpacity: 0.72,
     overlayCanvas: null,
     overlayContext: null,
     lutCanvas: null,
@@ -142,18 +155,39 @@
     return Math.round(clamp(srgb, 0, 1) * 255);
   }
 
+  function lutChannelCount(lut) {
+    const width = Number(lut?.layout?.width) || 0;
+    const height = Number(lut?.layout?.height) || 0;
+    const declared = Array.isArray(lut?.layout?.channels)
+      ? lut.layout.channels.length
+      : 0;
+    if (declared >= 3) return declared;
+    const samples = width * height;
+    const inferred = samples > 0 && Array.isArray(lut?.pixels)
+      ? Math.floor(lut.pixels.length / samples)
+      : 3;
+    return Math.max(3, inferred || 3);
+  }
+
   function sampleLutPixel(lut, x, y) {
     const width = Number(lut?.layout?.width) || 0;
     const height = Number(lut?.layout?.height) || 0;
     if (!width || !height || !Array.isArray(lut?.pixels)) return [0, 0, 0];
     const px = clamp(Math.trunc(x), 0, width - 1);
     const py = clamp(Math.trunc(y), 0, height - 1);
-    const offset = (py * width + px) * 3;
+    const stride = lutChannelCount(lut);
+    const offset = (py * width + px) * stride;
     return [
       finiteOr(lut.pixels[offset], 0),
       finiteOr(lut.pixels[offset + 1], 0),
       finiteOr(lut.pixels[offset + 2], 0)
     ];
+  }
+
+  function selectLutForMode(result, mode = "sky") {
+    if (mode === "transmittance") return result?.transmittanceLut || null;
+    if (mode === "multiple-scattering") return result?.multipleScatteringLut || null;
+    return result?.skyViewLut || null;
   }
 
   function elementValue(documentRef, id, fallback = "") {
@@ -162,7 +196,7 @@
     return element.value !== undefined ? element.value : element.textContent || fallback;
   }
 
-  function buildInputFromDocument(documentRef, windowRef = root) {
+  function buildInputFromDocument(documentRef, windowRef = root, explicitOverrides = null) {
     const now = new Date();
     const dateString = elementValue(documentRef, "scene-date", now.toISOString().slice(0, 10));
     const timeString = elementValue(
@@ -183,8 +217,14 @@
     const ozoneControl = parseFirstNumber(elementValue(documentRef, "v-oz", "0.60"), 0.6);
     const mieControl = parseFirstNumber(elementValue(documentRef, "v-mie", "0.35"), 0.35);
     const temperatureC = parseFirstNumber(elementValue(documentRef, "city-temp", "15"), 15);
-
+    const externalOverrides = windowRef?.SkyForgeNaturalLightOverrides;
+    const overrides = {
+      ...state.overrides,
+      ...(externalOverrides && typeof externalOverrides === "object" ? externalOverrides : {}),
+      ...(explicitOverrides && typeof explicitOverrides === "object" ? explicitOverrides : {})
+    };
     const restored = state.restoredInput || {};
+
     return {
       latitude: clamp(parseFirstNumber(elementValue(documentRef, "city-lat", restored.latitude ?? 48.8566), 48.8566), -90, 90),
       longitude: clamp(parseFirstNumber(elementValue(documentRef, "city-lon", restored.longitude ?? 2.3522), 2.3522), -180, 180),
@@ -196,9 +236,29 @@
       aerosolOpticalDepth550: clamp(haze, 0, 5),
       angstromExponent: clamp(finiteOr(restored.angstromExponent, 1.3), 0, 4),
       mieAsymmetry: clamp(0.65 + mieControl * 0.3, -0.99, 0.99),
-      groundAlbedo: clamp(finiteOr(restored.groundAlbedo, 0.2), 0, 1),
+      aerosolSingleScatteringAlbedo: clamp(
+        finiteOr(
+          overrides.aerosolSingleScatteringAlbedo,
+          restored.aerosolSingleScatteringAlbedo ?? 0.92
+        ),
+        0,
+        1
+      ),
+      groundAlbedo: clamp(
+        finiteOr(overrides.groundAlbedo, restored.groundAlbedo ?? 0.2),
+        0,
+        1
+      ),
       ozoneDobsonUnits: clamp(200 + ozoneControl * 200, 100, 700),
-      precipitableWaterCm: clamp(finiteOr(restored.precipitableWaterCm, 1.5), 0, 12)
+      precipitableWaterCm: clamp(finiteOr(restored.precipitableWaterCm, 1.5), 0, 12),
+      multipleScatteringOrders: Math.round(clamp(
+        finiteOr(
+          overrides.multipleScatteringOrders,
+          restored.multipleScatteringOrders ?? 4
+        ),
+        1,
+        8
+      ))
     };
   }
 
@@ -213,8 +273,10 @@
     style.textContent = `
       #sf-physical-sky-canvas{
         position:absolute;inset:0;width:100%;height:100%;pointer-events:none;
-        z-index:3;opacity:.82;transition:opacity .18s ease;
+        z-index:0;opacity:var(--sf-natural-light-opacity,.72);
+        transition:opacity .18s ease;mix-blend-mode:normal;
       }
+      #sf-physical-sky-canvas.sf-diagnostic{z-index:4;opacity:.94}
       #sf-physical-sky-canvas.sf-disabled{opacity:0}
       .sf-physical-light-badge{
         display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:5px;
@@ -236,6 +298,14 @@
     const viewport = documentRef.getElementById("vp");
     if (!viewport) return null;
 
+    try {
+      if (root?.getComputedStyle?.(viewport).position === "static") {
+        viewport.style.position = "relative";
+      }
+    } catch {
+      // Layout inspection is optional.
+    }
+
     let canvas = documentRef.getElementById("sf-physical-sky-canvas");
     if (!canvas) {
       canvas = documentRef.createElement("canvas");
@@ -247,6 +317,7 @@
 
     state.overlayCanvas = canvas;
     state.overlayContext = canvas.getContext("2d", { alpha: true });
+    applyOverlayOpacity();
     syncOverlaySize();
 
     if (typeof root?.ResizeObserver === "function") {
@@ -268,8 +339,8 @@
     const badge = documentRef.createElement("button");
     badge.type = "button";
     badge.className = "sf-physical-light-badge sf-loading";
-    badge.textContent = "PHYS · CONNECTING";
-    badge.title = "Toggle the SkyForge physical Natural Light preview";
+    badge.textContent = "PHYS 4 · CONNECTING";
+    badge.title = "Toggle the SkyForge Phase 4 Natural Light preview";
     badge.addEventListener("click", () => setEnabled(!state.enabled));
     host.prepend(badge);
     state.statusBadge = badge;
@@ -285,6 +356,11 @@
     if (status === "off") badge.classList.add("sf-off");
     badge.textContent = text;
     if (title) badge.title = title;
+  }
+
+  function emit(name, detail) {
+    if (!root?.dispatchEvent || typeof root.CustomEvent !== "function") return;
+    root.dispatchEvent(new root.CustomEvent(name, { detail }));
   }
 
   function syncOverlaySize() {
@@ -307,6 +383,7 @@
     if (!width || !height || !Array.isArray(lut?.pixels)) return null;
 
     const documentRef = root?.document;
+    if (!documentRef) return null;
     const canvas = state.lutCanvas || documentRef.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -366,6 +443,14 @@
     context.restore();
   }
 
+  function applyOverlayOpacity() {
+    if (!state.overlayCanvas) return;
+    state.overlayCanvas.style.setProperty(
+      "--sf-natural-light-opacity",
+      String(clamp(state.overlayOpacity, 0, 1))
+    );
+  }
+
   function renderPhysicalPreview() {
     const canvas = state.overlayCanvas;
     const context = state.overlayContext;
@@ -375,30 +460,37 @@
     syncOverlaySize();
     context.clearRect(0, 0, canvas.width, canvas.height);
     canvas.classList.toggle("sf-disabled", !state.enabled);
-    if (!state.enabled || !result?.skyViewLut) return;
+    canvas.classList.toggle("sf-diagnostic", state.visualizationMode !== "sky");
+    if (!state.enabled) return;
 
-    const lutCanvas = buildLutCanvas(result.skyViewLut);
+    const selectedLut = selectLutForMode(result, state.visualizationMode);
+    if (!selectedLut) return;
+    const lutCanvas = buildLutCanvas(selectedLut);
     if (!lutCanvas) return;
 
     context.save();
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
-    context.globalAlpha = 0.93;
+    context.globalAlpha = state.visualizationMode === "sky" ? 0.9 : 1;
     context.drawImage(lutCanvas, 0, 0, canvas.width, canvas.height);
 
-    const horizonFade = context.createLinearGradient(0, canvas.height * 0.72, 0, canvas.height);
-    horizonFade.addColorStop(0, "rgba(255,255,255,0)");
-    horizonFade.addColorStop(1, "rgba(245,174,105,.12)");
-    context.fillStyle = horizonFade;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    if (state.visualizationMode === "sky") {
+      const horizonFade = context.createLinearGradient(0, canvas.height * 0.72, 0, canvas.height);
+      horizonFade.addColorStop(0, "rgba(255,255,255,0)");
+      horizonFade.addColorStop(1, "rgba(245,174,105,.12)");
+      context.fillStyle = horizonFade;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
     context.restore();
 
-    drawSolarDisc(
-      context,
-      canvas.width,
-      canvas.height,
-      result.evaluation?.solarPosition || result.skyViewLut?.solarPosition
-    );
+    if (state.visualizationMode === "sky") {
+      drawSolarDisc(
+        context,
+        canvas.width,
+        canvas.height,
+        result?.evaluation?.solarPosition || result?.skyViewLut?.solarPosition
+      );
+    }
   }
 
   function setText(documentRef, id, value) {
@@ -438,7 +530,7 @@
 
     const modelStatus = Array.from(documentRef.querySelectorAll(".statusbar .st"))
       .find((element) => /Hosek|Nishita|Physical|Spectral/i.test(element.textContent || ""));
-    if (modelStatus) modelStatus.textContent = "Spectral Physical · LUT";
+    if (modelStatus) modelStatus.textContent = "Spectral Physical · GAS + MULTI";
   }
 
   function sceneInputFromState(sceneState) {
@@ -446,7 +538,8 @@
     return {
       ...sceneState.location,
       ...sceneState.time,
-      ...sceneState.atmosphere
+      ...sceneState.atmosphere,
+      multipleScatteringOrders: sceneState.solver?.multipleScatteringOrders ?? 4
     };
   }
 
@@ -455,6 +548,12 @@
     const input = sceneInputFromState(sceneState);
     if (!documentRef || !input) return;
     state.restoredInput = input;
+    state.overrides = {
+      ...state.overrides,
+      groundAlbedo: input.groundAlbedo,
+      aerosolSingleScatteringAlbedo: input.aerosolSingleScatteringAlbedo,
+      multipleScatteringOrders: input.multipleScatteringOrders
+    };
 
     const dateMatch = String(input.dateTime || "").match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
     const assignments = {
@@ -467,6 +566,7 @@
       const element = documentRef.getElementById(id);
       if (element && value !== undefined && value !== null) element.value = String(value);
     }
+    emit("skyforge:natural-light-restored", getState());
   }
 
   async function requestPreview(force = false) {
@@ -483,7 +583,8 @@
     state.abortController = typeof root.AbortController === "function"
       ? new root.AbortController()
       : null;
-    setBadge("loading", "PHYS · SOLVING", "Computing physical sunlight and Sky-View LUT");
+    setBadge("loading", "PHYS 4 · SOLVING", "Computing gas-aware multiple scattering and LUTs");
+    emit("skyforge:natural-light-status", { status: "loading", input });
 
     try {
       const response = await root.fetch(API_ENDPOINT, {
@@ -491,7 +592,17 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           input,
-          lut: { width: LUT_WIDTH, height: LUT_HEIGHT }
+          lut: { width: LUT_WIDTH, height: LUT_HEIGHT },
+          transmittanceLut: {
+            width: TRANSMITTANCE_LUT_WIDTH,
+            height: TRANSMITTANCE_LUT_HEIGHT,
+            maxAltitudeMeters: 20_000
+          },
+          multipleScatteringLut: {
+            width: MULTIPLE_SCATTERING_LUT_WIDTH,
+            height: MULTIPLE_SCATTERING_LUT_HEIGHT,
+            maxAltitudeMeters: 20_000
+          }
         }),
         signal: state.abortController?.signal
       });
@@ -506,13 +617,18 @@
       updateUi(payload);
       setBadge(
         "live",
-        "PHYS · LIVE",
-        `Natural Light ${payload.evaluation?.model?.version || ""} · Sky LUT ${payload.skyViewLut?.model?.version || ""}`
+        "PHYS 4 · MULTI",
+        `Natural Light ${payload.evaluation?.model?.version || ""} · ${payload.evaluation?.multipleScattering?.model?.orders || input.multipleScatteringOrders} orders`
       );
+      emit("skyforge:natural-light-updated", payload);
       return payload;
     } catch (error) {
       if (error?.name === "AbortError") return null;
-      setBadge("error", "PHYS · OFFLINE", error?.message || "Natural Light API unavailable");
+      setBadge("error", "PHYS 4 · OFFLINE", error?.message || "Natural Light API unavailable");
+      emit("skyforge:natural-light-status", {
+        status: "error",
+        error: error?.message || "Natural Light API unavailable"
+      });
       return null;
     }
   }
@@ -563,7 +679,7 @@
       if (label.includes("procedural")) setEnabled(false);
       if (label.includes("hybrid")) {
         state.enabled = true;
-        if (state.overlayCanvas) state.overlayCanvas.style.opacity = ".56";
+        setOverlayOpacity(0.5);
         scheduleRefresh(0, true);
       }
     });
@@ -606,16 +722,45 @@
     state.enabled = Boolean(enabled);
     if (state.overlayCanvas) {
       state.overlayCanvas.classList.toggle("sf-disabled", !state.enabled);
-      state.overlayCanvas.style.opacity = "";
     }
     if (!state.enabled) {
       state.abortController?.abort();
-      setBadge("off", "PHYS · OFF", "Physical preview disabled; procedural SkyForge preview remains active");
+      setBadge("off", "PHYS 4 · OFF", "Physical preview disabled; procedural SkyForge preview remains active");
     } else {
-      setBadge("loading", "PHYS · SOLVING", "Physical preview enabled");
+      setBadge("loading", "PHYS 4 · SOLVING", "Physical preview enabled");
       scheduleRefresh(0, true);
     }
+    emit("skyforge:natural-light-status", { status: state.enabled ? "enabled" : "disabled" });
     return state.enabled;
+  }
+
+  function setOverrides(nextOverrides = {}, options = {}) {
+    const sanitized = {};
+    for (const [name, limits] of Object.entries(OVERRIDE_LIMITS)) {
+      if (nextOverrides[name] === undefined || nextOverrides[name] === null) continue;
+      const value = clamp(finiteOr(nextOverrides[name], state.overrides[name] ?? limits[0]), limits[0], limits[1]);
+      sanitized[name] = name === "multipleScatteringOrders" ? Math.round(value) : value;
+    }
+    state.overrides = { ...state.overrides, ...sanitized };
+    if (root) root.SkyForgeNaturalLightOverrides = { ...state.overrides };
+    if (options.refresh !== false) scheduleRefresh(options.delay ?? 80, true);
+    emit("skyforge:natural-light-controls", getState());
+    return { ...state.overrides };
+  }
+
+  function setVisualizationMode(mode) {
+    const normalized = VISUALIZATION_MODES.has(mode) ? mode : "sky";
+    state.visualizationMode = normalized;
+    renderPhysicalPreview();
+    emit("skyforge:natural-light-controls", getState());
+    return state.visualizationMode;
+  }
+
+  function setOverlayOpacity(value) {
+    state.overlayOpacity = clamp(finiteOr(value, state.overlayOpacity), 0, 1);
+    applyOverlayOpacity();
+    emit("skyforge:natural-light-controls", getState());
+    return state.overlayOpacity;
   }
 
   function onControlEvent(event) {
@@ -642,6 +787,19 @@
     root.document.addEventListener("change", onControlEvent, true);
     state.hookTimer = root.setInterval(installFunctionHooks, 1000);
     root.setTimeout(() => requestPreview(true), 350);
+    emit("skyforge:natural-light-status", { status: "installed", clientVersion: CLIENT_VERSION });
+  }
+
+  function destroy() {
+    root?.clearTimeout(state.refreshTimer);
+    root?.clearInterval(state.hookTimer);
+    state.abortController?.abort();
+    state.resizeObserver?.disconnect();
+    root?.document?.removeEventListener("input", onControlEvent, true);
+    root?.document?.removeEventListener("change", onControlEvent, true);
+    state.overlayCanvas?.remove();
+    state.statusBadge?.remove();
+    state.installed = false;
   }
 
   function getState() {
@@ -652,23 +810,35 @@
       sceneState: state.lastResult?.sceneState || null,
       evaluation: state.lastResult?.evaluation || null,
       skyViewLut: state.lastResult?.skyViewLut || null,
+      transmittanceLut: state.lastResult?.transmittanceLut || null,
+      multipleScatteringLut: state.lastResult?.multipleScatteringLut || null,
+      visualizationMode: state.visualizationMode,
+      overlayOpacity: state.overlayOpacity,
+      overrides: { ...state.overrides },
       clientVersion: CLIENT_VERSION
     };
   }
 
   return {
     CLIENT_VERSION,
+    VISUALIZATION_MODES,
     parseFirstNumber,
     parseOffsetText,
     formatOffset,
     resolveTimezoneOffsetMinutes,
     linearToDisplayChannel,
+    lutChannelCount,
     sampleLutPixel,
+    selectLutForMode,
     buildInputFromDocument,
     install,
+    destroy,
     refresh: () => requestPreview(true),
     render: renderPhysicalPreview,
     setEnabled,
+    setOverrides,
+    setVisualizationMode,
+    setOverlayOpacity,
     getState
   };
 });
