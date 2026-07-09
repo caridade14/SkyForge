@@ -39,6 +39,8 @@ jobs:
         run: |
           node --check src/natural-light/solar-core.js
           node --check src/natural-light/atmosphere-core.js
+          node --check src/natural-light/gas-absorption-core.js
+          node --check src/natural-light/atmosphere-advanced.js
           node --check src/natural-light/input-schema.js
           node --check src/natural-light/lut-core.js
           node --check src/natural-light/index.js
@@ -56,18 +58,34 @@ jobs:
             sleep 0.25
           done
 
-          node -e "const h=require('/tmp/lighting-health.json'); if(!h.ok||!h.previewInjection) process.exit(1)"
+          node - <<'NODE'
+          const health = require('/tmp/lighting-health.json');
+          if (!health.ok || !health.previewInjection) process.exit(1);
+          if (health.model !== 'skyforge-natural-light-phase3') process.exit(1);
+          if (health.transmittanceLutModel !== 'skyforge-transmittance-lut-phase3') process.exit(1);
+          NODE
+
           curl -fsS http://127.0.0.1:3000/ | grep -q 'natural-light-preview.js'
           curl -fsS http://127.0.0.1:3000/natural-light-preview.js | grep -q 'SkyForgeNaturalLightPreview'
 
           curl -fsS \
             -H 'Content-Type: application/json' \
-            -d '{"input":{"latitude":48.8566,"longitude":2.3522,"dateTime":"2026-07-09T14:00:00+02:00","altitudeMeters":35,"aerosolOpticalDepth550":0.12},"lut":{"width":8,"height":4}}' \
+            -d '{"input":{"latitude":48.8566,"longitude":2.3522,"dateTime":"2026-07-09T14:00:00+02:00","altitudeMeters":35,"aerosolOpticalDepth550":0.12,"ozoneDobsonUnits":320,"precipitableWaterCm":2.1},"lut":{"width":8,"height":4},"transmittanceLut":{"width":8,"height":4,"maxAltitudeMeters":20000}}' \
             http://127.0.0.1:3000/api/lighting/preview > /tmp/physical-preview.json
 
           node - <<'NODE'
           const result = require('/tmp/physical-preview.json');
           if (result.sceneState?.schema?.id !== 'skyforge.natural-light') process.exit(1);
-          if (result.evaluation?.model?.id !== 'skyforge-natural-light-phase1') process.exit(1);
+          if (result.sceneState?.solver?.id !== 'skyforge-natural-light-phase3') process.exit(1);
+          if (result.evaluation?.model?.id !== 'skyforge-natural-light-phase3') process.exit(1);
+          if (!(result.evaluation?.irradiance?.broadbandGasTransmittance > 0)) process.exit(1);
           if (result.skyViewLut?.pixels?.length !== 8 * 4 * 3) process.exit(1);
+          if (result.transmittanceLut?.pixels?.length !== 8 * 4 * 4) process.exit(1);
           NODE
+
+          curl -fsS \
+            -H 'Content-Type: application/json' \
+            -d '{"input":{"latitude":48.8566,"longitude":2.3522,"dateTime":"2026-07-09T14:00:00+02:00"},"transmittanceLut":{"width":4,"height":2}}' \
+            http://127.0.0.1:3000/api/lighting/lut/transmittance > /tmp/transmittance-lut.json
+
+          node -e "const l=require('/tmp/transmittance-lut.json'); if(l.pixels?.length!==4*2*4) process.exit(1)"
