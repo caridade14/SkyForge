@@ -19,6 +19,7 @@ const INTERNAL_PORT = Number(
 const HOST = process.env.HOST || "127.0.0.1";
 const MAX_BODY_BYTES = Number(process.env.SKYFORGE_MAX_LIGHTING_BODY || 1_000_000);
 const NATURAL_LIGHT_CLIENT_TAGS = [
+  '<link rel="stylesheet" href="/natural-light-ergonomics.css">',
   '<script src="/natural-light-preview.js" defer></script>',
   '<script src="/natural-light-dashboard.js" defer></script>'
 ];
@@ -250,9 +251,11 @@ const server = http.createServer(async (req, res) => {
         "skyforge-multiple-scattering-lut-phase4",
       multipleScatteringLutVersion: "0.4.0",
       previewClientVersion: "0.4.0",
-      dashboardVersion: "0.1.0",
+      dashboardVersion: "0.2.0",
+      ergonomicsSkinVersion: "0.1.0",
       previewInjection: true,
       dashboardInjection: true,
+      ergonomicsSkinInjection: true,
       endpoints: [
         "POST /api/lighting/evaluate",
         "POST /api/lighting/scene-state",
