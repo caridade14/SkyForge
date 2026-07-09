@@ -59,8 +59,13 @@ function evaluateNaturalLight(input = {}) {
     Math.sin(single.solarPosition.apparentElevationDeg * Math.PI / 180)
   );
   const singleDiffuse = single.irradiance.diffuseHorizontalEstimatedWm2;
+  const atmosphericRatio =
+    multiple.metrics.singleScatterSeedBroadband > 0
+      ? multiple.metrics.atmosphericMultipleBroadband /
+        multiple.metrics.singleScatterSeedBroadband
+      : 0;
   const multipleBoost = singleDiffuse * clamp(
-    multiple.metrics.multipleToSingleRatio,
+    atmosphericRatio,
     0,
     2.5
   );
