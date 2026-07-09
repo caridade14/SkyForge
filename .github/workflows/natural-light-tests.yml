@@ -38,6 +38,7 @@ jobs:
         run: |
           node --check server-natural-light.js
           node --check natural-light-preview.js
+          node --check natural-light-dashboard.js
 
       - name: Validate Natural Light modules
         run: |
@@ -67,16 +68,21 @@ jobs:
 
           node - <<'NODE'
           const health = require('/tmp/lighting-health.json');
-          if (!health.ok || !health.previewInjection) process.exit(1);
+          if (!health.ok || !health.previewInjection || !health.dashboardInjection) process.exit(1);
           if (health.model !== 'skyforge-natural-light-phase4') process.exit(1);
           if (health.multipleScatteringModel !== 'skyforge-multiple-scattering-phase4') process.exit(1);
           if (health.skyViewLutModel !== 'skyforge-sky-view-lut-phase4') process.exit(1);
           if (health.transmittanceLutModel !== 'skyforge-transmittance-lut-phase3') process.exit(1);
           if (health.multipleScatteringLutModel !== 'skyforge-multiple-scattering-lut-phase4') process.exit(1);
+          if (health.previewClientVersion !== '0.4.0') process.exit(1);
+          if (health.dashboardVersion !== '0.1.0') process.exit(1);
           NODE
 
-          curl -fsS http://127.0.0.1:3000/ | grep -q 'natural-light-preview.js'
+          curl -fsS http://127.0.0.1:3000/ > /tmp/skyforge-home.html
+          grep -q 'natural-light-preview.js' /tmp/skyforge-home.html
+          grep -q 'natural-light-dashboard.js' /tmp/skyforge-home.html
           curl -fsS http://127.0.0.1:3000/natural-light-preview.js | grep -q 'SkyForgeNaturalLightPreview'
+          curl -fsS http://127.0.0.1:3000/natural-light-dashboard.js | grep -q 'SkyForgeNaturalLightDashboard'
 
           curl -fsS \
             -H 'Content-Type: application/json' \
