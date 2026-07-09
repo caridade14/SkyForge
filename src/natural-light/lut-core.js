@@ -5,20 +5,39 @@ const {
   absoluteAirMass,
   pressureRatioAtAltitude
 } = require("./solar-core");
-const { sampleSingleScatteringSky } = require("./atmosphere-core");
+const {
+  sampleSingleScatteringSky,
+  directTransmittanceSpectrum
+} = require("./atmosphere-advanced");
+const { normalizedSolarSpectrum } = require("./atmosphere-core");
 const { normalizeNaturalLightInput } = require("./input-schema");
 
-const SKY_VIEW_LUT_MODEL_ID = "skyforge-sky-view-lut-phase2";
-const SKY_VIEW_LUT_VERSION = "0.2.0";
+const SKY_VIEW_LUT_MODEL_ID = "skyforge-sky-view-lut-phase3";
+const SKY_VIEW_LUT_VERSION = "0.3.0";
+const TRANSMITTANCE_LUT_MODEL_ID = "skyforge-transmittance-lut-phase3";
+const TRANSMITTANCE_LUT_VERSION = "0.3.0";
 const DEFAULT_LUT_WIDTH = 64;
 const DEFAULT_LUT_HEIGHT = 32;
 const MAX_LUT_WIDTH = 256;
 const MAX_LUT_HEIGHT = 128;
+const DEFAULT_TRANSMITTANCE_WIDTH = 48;
+const DEFAULT_TRANSMITTANCE_HEIGHT = 24;
+const MAX_TRANSMITTANCE_WIDTH = 256;
+const MAX_TRANSMITTANCE_HEIGHT = 128;
+const DEFAULT_TRANSMITTANCE_MAX_ALTITUDE_METERS = 20_000;
 
 function integerInRange(name, value, fallback, min, max) {
   const resolved = value === undefined || value === null ? fallback : Number(value);
   if (!Number.isInteger(resolved) || resolved < min || resolved > max) {
     throw new RangeError(`${name} must be an integer in [${min}, ${max}]`);
+  }
+  return resolved;
+}
+
+function finiteInRange(name, value, fallback, min, max) {
+  const resolved = value === undefined || value === null ? fallback : Number(value);
+  if (!Number.isFinite(resolved) || resolved < min || resolved > max) {
+    throw new RangeError(`${name} must be a finite number in [${min}, ${max}]`);
   }
   return resolved;
 }
@@ -50,6 +69,35 @@ function resolveLutOptions(payload = {}) {
   };
 }
 
+function resolveTransmittanceLutOptions(payload = {}) {
+  const options = payload.transmittanceLut && typeof payload.transmittanceLut === "object"
+    ? payload.transmittanceLut
+    : (payload.lut && typeof payload.lut === "object" ? payload.lut : payload);
+  return {
+    width: integerInRange(
+      "transmittanceLut.width",
+      options.width,
+      DEFAULT_TRANSMITTANCE_WIDTH,
+      4,
+      MAX_TRANSMITTANCE_WIDTH
+    ),
+    height: integerInRange(
+      "transmittanceLut.height",
+      options.height,
+      DEFAULT_TRANSMITTANCE_HEIGHT,
+      2,
+      MAX_TRANSMITTANCE_HEIGHT
+    ),
+    maxAltitudeMeters: finiteInRange(
+      "transmittanceLut.maxAltitudeMeters",
+      options.maxAltitudeMeters,
+      DEFAULT_TRANSMITTANCE_MAX_ALTITUDE_METERS,
+      1_000,
+      80_000
+    )
+  };
+}
+
 function generateSkyViewLut(payload = {}) {
   const input = normalizeNaturalLightInput(payload);
   const { width, height } = resolveLutOptions(payload);
@@ -73,7 +121,9 @@ function generateSkyViewLut(payload = {}) {
         pressureRatio,
         aerosolOpticalDepth550: input.aerosolOpticalDepth550,
         angstromExponent: input.angstromExponent,
-        mieAsymmetry: input.mieAsymmetry
+        mieAsymmetry: input.mieAsymmetry,
+        ozoneDobsonUnits: input.ozoneDobsonUnits,
+        precipitableWaterCm: input.precipitableWaterCm
       });
 
       const offset = (y * width + x) * 3;
@@ -112,12 +162,12 @@ function generateSkyViewLut(payload = {}) {
     model: {
       id: SKY_VIEW_LUT_MODEL_ID,
       version: SKY_VIEW_LUT_VERSION,
-      scattering: "single",
-      sourceSolver: "skyforge-natural-light-phase1",
+      scattering: "single-with-band-gas-absorption",
+      sourceSolver: "skyforge-natural-light-phase3",
       limitations: [
         "Relative radiance normalization",
         "No multiple scattering yet",
-        "No ozone or water-vapour absorption yet",
+        "Gas absorption is band-parameterized, not line-by-line",
         "No direct solar-disc rasterization"
       ]
     },
@@ -147,14 +197,125 @@ function generateSkyViewLut(payload = {}) {
   };
 }
 
+function nearestTransmittanceSample(spectrum, wavelengthNm) {
+  let nearest = spectrum[0];
+  let nearestDistance = Infinity;
+  for (const sample of spectrum) {
+    const distance = Math.abs(sample.wavelengthNm - wavelengthNm);
+    if (distance < nearestDistance) {
+      nearest = sample;
+      nearestDistance = distance;
+    }
+  }
+  return nearest?.transmittance ?? 0;
+}
+
+function generateTransmittanceLut(payload = {}) {
+  const input = normalizeNaturalLightInput(payload);
+  const { width, height, maxAltitudeMeters } = resolveTransmittanceLutOptions(payload);
+  const solarSpectrum = normalizedSolarSpectrum();
+  const pixels = new Array(width * height * 4);
+  let minimumBroadband = Infinity;
+  let maximumBroadband = 0;
+  let broadbandSum = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    const altitudeFraction = 1 - (y + 0.5) / height;
+    const altitudeMeters = altitudeFraction * maxAltitudeMeters;
+    const pressureRatio = pressureRatioAtAltitude(altitudeMeters);
+
+    for (let x = 0; x < width; x += 1) {
+      const zenithDeg = ((x + 0.5) / width) * 89.5;
+      const airMass = absoluteAirMass(zenithDeg, altitudeMeters);
+      const spectrum = directTransmittanceSpectrum({
+        airMass,
+        pressureRatio,
+        aerosolOpticalDepth550: input.aerosolOpticalDepth550,
+        angstromExponent: input.angstromExponent,
+        ozoneDobsonUnits: input.ozoneDobsonUnits,
+        precipitableWaterCm: input.precipitableWaterCm
+      });
+
+      let broadband = 0;
+      let weightSum = 0;
+      for (let index = 0; index < spectrum.length; index += 1) {
+        const weight = solarSpectrum[index]?.value ?? 1;
+        broadband += spectrum[index].transmittance * weight;
+        weightSum += weight;
+      }
+      broadband = weightSum > 0 ? broadband / weightSum : 0;
+
+      const offset = (y * width + x) * 4;
+      pixels[offset] = roundFloat(nearestTransmittanceSample(spectrum, 650));
+      pixels[offset + 1] = roundFloat(nearestTransmittanceSample(spectrum, 550));
+      pixels[offset + 2] = roundFloat(nearestTransmittanceSample(spectrum, 450));
+      pixels[offset + 3] = roundFloat(broadband);
+      minimumBroadband = Math.min(minimumBroadband, broadband);
+      maximumBroadband = Math.max(maximumBroadband, broadband);
+      broadbandSum += broadband;
+    }
+  }
+
+  const pixelCount = width * height;
+  return {
+    model: {
+      id: TRANSMITTANCE_LUT_MODEL_ID,
+      version: TRANSMITTANCE_LUT_VERSION,
+      sourceSolver: "skyforge-natural-light-phase3",
+      absorption: "ozone-oxygen-water-band-model",
+      limitations: [
+        "Band-parameterized gas absorption",
+        "No line-by-line pressure broadening",
+        "No multiple scattering"
+      ]
+    },
+    layout: {
+      projection: "altitude-vs-zenith",
+      width,
+      height,
+      channels: ["red650", "green550", "blue450", "broadband"],
+      xAxis: { quantity: "zenithDeg", range: [0, 89.5] },
+      yAxis: {
+        quantity: "altitudeMeters",
+        range: [maxAltitudeMeters, 0],
+        rowOrder: "top-atmosphere-to-ground"
+      }
+    },
+    input,
+    encoding: {
+      range: [0, 1],
+      normalization: "none"
+    },
+    statistics: {
+      minimumBroadbandTransmittance: roundFloat(
+        Number.isFinite(minimumBroadband) ? minimumBroadband : 0
+      ),
+      maximumBroadbandTransmittance: roundFloat(maximumBroadband),
+      meanBroadbandTransmittance: roundFloat(
+        pixelCount ? broadbandSum / pixelCount : 0
+      )
+    },
+    pixels
+  };
+}
+
 module.exports = {
   SKY_VIEW_LUT_MODEL_ID,
   SKY_VIEW_LUT_VERSION,
+  TRANSMITTANCE_LUT_MODEL_ID,
+  TRANSMITTANCE_LUT_VERSION,
   DEFAULT_LUT_WIDTH,
   DEFAULT_LUT_HEIGHT,
   MAX_LUT_WIDTH,
   MAX_LUT_HEIGHT,
+  DEFAULT_TRANSMITTANCE_WIDTH,
+  DEFAULT_TRANSMITTANCE_HEIGHT,
+  MAX_TRANSMITTANCE_WIDTH,
+  MAX_TRANSMITTANCE_HEIGHT,
+  DEFAULT_TRANSMITTANCE_MAX_ALTITUDE_METERS,
   directionFromLutCoordinate,
   resolveLutOptions,
-  generateSkyViewLut
+  resolveTransmittanceLutOptions,
+  generateSkyViewLut,
+  generateTransmittanceLut
 };
