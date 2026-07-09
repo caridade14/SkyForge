@@ -145,8 +145,10 @@ function createNaturalLightSceneState(payload = {}) {
     },
     mode: "physical",
     solver: {
-      id: "skyforge-natural-light-phase1",
-      version: "0.1.0",
+      id: "skyforge-natural-light-phase3",
+      version: "0.3.0",
+      scattering: "single-with-band-gas-absorption",
+      gasAbsorption: "ozone-oxygen-water-band-model",
       spectralRangeNm: [380, 780],
       spectralStepNm: 10
     },
