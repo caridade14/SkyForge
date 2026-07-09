@@ -135,6 +135,7 @@ function computeMultipleScatteringSpectrum(input = {}) {
   const solar = base.normalizedSolarSpectrum();
   const sunAirMass = relativeAirMass(Math.min(89.5, sunZenithDeg));
   const sunCosine = Math.max(0, Math.cos(sunZenithDeg * Math.PI / 180));
+  const sunVisibility = clamp((90.5 - sunZenithDeg) / 1.5, 0, 1);
 
   const direct = directTransmittanceSpectrum({
     airMass: sunAirMass,
@@ -194,7 +195,8 @@ function computeMultipleScatteringSpectrum(input = {}) {
       solar[index].value *
       directTransmittance *
       scatteringInteraction *
-      (0.32 + 0.68 * diffuseInteraction);
+      (0.32 + 0.68 * diffuseInteraction) *
+      sunVisibility;
     const directGroundSource =
       solar[index].value *
       directTransmittance *
