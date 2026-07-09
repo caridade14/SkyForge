@@ -1,13 +1,17 @@
 "use strict";
 
 const solar = require("./solar-core");
-const atmosphere = require("./atmosphere-core");
+const atmosphereBase = require("./atmosphere-core");
+const gasAbsorption = require("./gas-absorption-core");
+const atmosphereAdvanced = require("./atmosphere-advanced");
 const inputSchema = require("./input-schema");
 const lut = require("./lut-core");
 
 module.exports = {
   ...solar,
-  ...atmosphere,
+  ...atmosphereBase,
+  ...gasAbsorption,
+  ...atmosphereAdvanced,
   ...inputSchema,
   ...lut
 };
