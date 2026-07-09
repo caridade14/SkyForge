@@ -7,7 +7,8 @@ const {
   evaluateNaturalLight,
   normalizeNaturalLightInput,
   createNaturalLightSceneState,
-  generateSkyViewLut
+  generateSkyViewLut,
+  generateTransmittanceLut
 } = require("./src/natural-light");
 
 const PUBLIC_PORT = Number(process.env.PORT || 3000);
@@ -189,13 +190,21 @@ async function waitForBackend(attempts = 50, delayMs = 100) {
 function buildPhysicalPreview(body = {}) {
   const input = normalizeLightingInput(body);
   return {
-    apiVersion: "0.2.0",
+    apiVersion: "0.3.0",
     input,
     sceneState: createNaturalLightSceneState(input),
     evaluation: evaluateNaturalLight(input),
     skyViewLut: generateSkyViewLut({
       input,
       lut: body.lut || {}
+    }),
+    transmittanceLut: generateTransmittanceLut({
+      input,
+      transmittanceLut: body.transmittanceLut || {
+        width: 32,
+        height: 16,
+        maxAltitudeMeters: 20_000
+      }
     })
   };
 }
@@ -212,17 +221,22 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, 200, {
       ok: true,
       service: "skyforge-natural-light",
-      apiVersion: "0.2.0",
-      model: "skyforge-natural-light-phase1",
-      modelVersion: "0.1.0",
-      skyViewLutModel: "skyforge-sky-view-lut-phase2",
-      skyViewLutVersion: "0.2.0",
+      apiVersion: "0.3.0",
+      model: "skyforge-natural-light-phase3",
+      modelVersion: "0.3.0",
+      gasAbsorptionModel: "skyforge-gas-absorption-phase3",
+      gasAbsorptionVersion: "0.3.0",
+      skyViewLutModel: "skyforge-sky-view-lut-phase3",
+      skyViewLutVersion: "0.3.0",
+      transmittanceLutModel: "skyforge-transmittance-lut-phase3",
+      transmittanceLutVersion: "0.3.0",
       previewClientVersion: "0.2.0",
       previewInjection: true,
       endpoints: [
         "POST /api/lighting/evaluate",
         "POST /api/lighting/scene-state",
         "POST /api/lighting/lut/sky-view",
+        "POST /api/lighting/lut/transmittance",
         "POST /api/lighting/preview"
       ],
       backendPort: INTERNAL_PORT
@@ -262,6 +276,18 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       sendJson(res, error.statusCode || 400, {
         error: error.message || "Sky-view LUT generation failed"
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/lighting/lut/transmittance") {
+    try {
+      const body = await readJsonBody(req);
+      sendJson(res, 200, generateTransmittanceLut(body));
+    } catch (error) {
+      sendJson(res, error.statusCode || 400, {
+        error: error.message || "Transmittance LUT generation failed"
       });
     }
     return;
@@ -313,6 +339,7 @@ async function start() {
     console.log(`Physical lighting API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/evaluate`);
     console.log(`Physical preview API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/preview`);
     console.log(`Sky-view LUT API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/lut/sky-view`);
+    console.log(`Transmittance LUT API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/lut/transmittance`);
   });
 }
 
