@@ -30,8 +30,10 @@ jobs:
       - name: Run Node test suite
         run: npm test
 
-      - name: Validate gateway syntax
-        run: node --check server-natural-light.js
+      - name: Validate gateway and client syntax
+        run: |
+          node --check server-natural-light.js
+          node --check natural-light-preview.js
 
       - name: Validate Natural Light modules
         run: |
@@ -40,3 +42,32 @@ jobs:
           node --check src/natural-light/input-schema.js
           node --check src/natural-light/lut-core.js
           node --check src/natural-light/index.js
+
+      - name: Smoke test physical preview gateway
+        run: |
+          npm start > /tmp/skyforge-natural-light.log 2>&1 &
+          SKYFORGE_PID=$!
+          trap 'kill $SKYFORGE_PID 2>/dev/null || true; cat /tmp/skyforge-natural-light.log' EXIT
+
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/api/lighting/health > /tmp/lighting-health.json; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node -e "const h=require('/tmp/lighting-health.json'); if(!h.ok||!h.previewInjection) process.exit(1)"
+          curl -fsS http://127.0.0.1:3000/ | grep -q 'natural-light-preview.js'
+          curl -fsS http://127.0.0.1:3000/natural-light-preview.js | grep -q 'SkyForgeNaturalLightPreview'
+
+          curl -fsS \
+            -H 'Content-Type: application/json' \
+            -d '{"input":{"latitude":48.8566,"longitude":2.3522,"dateTime":"2026-07-09T14:00:00+02:00","altitudeMeters":35,"aerosolOpticalDepth550":0.12},"lut":{"width":8,"height":4}}' \
+            http://127.0.0.1:3000/api/lighting/preview > /tmp/physical-preview.json
+
+          node - <<'NODE'
+          const result = require('/tmp/physical-preview.json');
+          if (result.sceneState?.schema?.id !== 'skyforge.natural-light') process.exit(1);
+          if (result.evaluation?.model?.id !== 'skyforge-natural-light-phase1') process.exit(1);
+          if (result.skyViewLut?.pixels?.length !== 8 * 4 * 3) process.exit(1);
+          NODE
