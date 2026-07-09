@@ -6,9 +6,9 @@ const assert = require("node:assert/strict");
 const preview = require("../natural-light-preview.js");
 const dashboard = require("../natural-light-dashboard.js");
 
-test("preview client reports the Phase 4 client version", () => {
+test("preview client reports the Phase 4 client versions", () => {
   assert.equal(preview.CLIENT_VERSION, "0.4.0");
-  assert.equal(dashboard.DASHBOARD_VERSION, "0.1.0");
+  assert.equal(dashboard.DASHBOARD_VERSION, "0.2.0");
 });
 
 test("preview client parses and formats UTC offsets", () => {
@@ -149,8 +149,31 @@ test("preview display conversion produces bounded channel values", () => {
   assert.ok(preview.linearToDisplayChannel(10) <= 255);
 });
 
-test("dashboard formatting is deterministic", () => {
+test("dashboard physical surface presets are deterministic", () => {
+  assert.equal(dashboard.getGroundPresetValue("asphalt"), 0.08);
+  assert.equal(dashboard.getGroundPresetValue("vegetation"), 0.22);
+  assert.equal(dashboard.getGroundPresetValue("snow"), 0.82);
+  assert.equal(dashboard.inferGroundPreset(0.45), "sand");
+  assert.equal(dashboard.inferGroundPreset(0.31), "custom");
+});
+
+test("dashboard quality presets map to bounded solver orders", () => {
+  assert.equal(dashboard.getQualityOrders("realtime"), 2);
+  assert.equal(dashboard.getQualityOrders("production"), 4);
+  assert.equal(dashboard.getQualityOrders("reference"), 8);
+  assert.equal(dashboard.inferQualityPreset(4), "production");
+  assert.equal(dashboard.inferQualityPreset(6), "custom");
+});
+
+test("dashboard convergence classifier exposes actionable states", () => {
+  assert.equal(dashboard.classifyConvergence(0.004).id, "converged");
+  assert.equal(dashboard.classifyConvergence(0.01).id, "acceptable");
+  assert.equal(dashboard.classifyConvergence(0.04).id, "refine");
+});
+
+test("dashboard formatting and defaults are deterministic", () => {
   assert.equal(dashboard.formatNumber(0.12345, 2), "0.12");
   assert.equal(dashboard.formatNumber(undefined, 2), "—");
   assert.equal(dashboard.DEFAULTS.multipleScatteringOrders, 4);
+  assert.equal(dashboard.DEFAULTS.qualityPreset, "production");
 });
