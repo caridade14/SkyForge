@@ -10,15 +10,25 @@ const DEFAULT_NATURAL_LIGHT_INPUT = Object.freeze({
   aerosolOpticalDepth550: 0.1,
   angstromExponent: 1.3,
   mieAsymmetry: 0.76,
+  aerosolSingleScatteringAlbedo: 0.92,
   groundAlbedo: 0.2,
   ozoneDobsonUnits: 300,
-  precipitableWaterCm: 1.5
+  precipitableWaterCm: 1.5,
+  multipleScatteringOrders: 4
 });
 
 function finiteNumber(name, value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < min || number > max) {
     throw new RangeError(`${name} must be a finite number in [${min}, ${max}]`);
+  }
+  return number;
+}
+
+function integerNumber(name, value, min, max) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > max) {
+    throw new RangeError(`${name} must be an integer in [${min}, ${max}]`);
   }
   return number;
 }
@@ -115,6 +125,13 @@ function normalizeNaturalLightInput(payload = {}) {
       -0.99,
       0.99
     ),
+    aerosolSingleScatteringAlbedo: finiteNumber(
+      "aerosolSingleScatteringAlbedo",
+      source.aerosolSingleScatteringAlbedo ??
+        DEFAULT_NATURAL_LIGHT_INPUT.aerosolSingleScatteringAlbedo,
+      0,
+      1
+    ),
     groundAlbedo: finiteNumber(
       "groundAlbedo",
       source.groundAlbedo ?? DEFAULT_NATURAL_LIGHT_INPUT.groundAlbedo,
@@ -132,6 +149,13 @@ function normalizeNaturalLightInput(payload = {}) {
       source.precipitableWaterCm ?? DEFAULT_NATURAL_LIGHT_INPUT.precipitableWaterCm,
       0,
       12
+    ),
+    multipleScatteringOrders: integerNumber(
+      "multipleScatteringOrders",
+      source.multipleScatteringOrders ??
+        DEFAULT_NATURAL_LIGHT_INPUT.multipleScatteringOrders,
+      1,
+      8
     )
   };
 }
@@ -145,9 +169,12 @@ function createNaturalLightSceneState(payload = {}) {
     },
     mode: "physical",
     solver: {
-      id: "skyforge-natural-light-phase3",
-      version: "0.3.0",
-      scattering: "single-with-band-gas-absorption",
+      id: "skyforge-natural-light-phase4",
+      version: "0.4.0",
+      scattering: "finite-order-multiple-with-ground-bounce",
+      multipleScatteringModel: "finite-order-hemispheric-recurrence",
+      multipleScatteringOrders: input.multipleScatteringOrders,
+      groundModel: "lambertian",
       gasAbsorption: "ozone-oxygen-water-band-model",
       spectralRangeNm: [380, 780],
       spectralStepNm: 10
@@ -167,6 +194,8 @@ function createNaturalLightSceneState(payload = {}) {
       aerosolOpticalDepth550: input.aerosolOpticalDepth550,
       angstromExponent: input.angstromExponent,
       mieAsymmetry: input.mieAsymmetry,
+      aerosolSingleScatteringAlbedo:
+        input.aerosolSingleScatteringAlbedo,
       groundAlbedo: input.groundAlbedo,
       ozoneDobsonUnits: input.ozoneDobsonUnits,
       precipitableWaterCm: input.precipitableWaterCm
@@ -180,7 +209,10 @@ function naturalLightInputFromSceneState(sceneState = {}) {
     return normalizeNaturalLightInput({
       ...source.location,
       ...source.time,
-      ...source.atmosphere
+      ...source.atmosphere,
+      multipleScatteringOrders:
+        source.solver?.multipleScatteringOrders ??
+        DEFAULT_NATURAL_LIGHT_INPUT.multipleScatteringOrders
     });
   }
   return normalizeNaturalLightInput(source);
