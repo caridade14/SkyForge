@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "start:lighting": "node server-natural-light.js",
+    "dev:lighting": "node server-natural-light.js",
     "test": "node --test",
     "test:natural-light": "node --test tests/natural-light.test.js"
   },
