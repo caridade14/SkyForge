@@ -1,0 +1,33 @@
+name: Natural Light Engine Tests
+
+on:
+  push:
+    branches:
+      - feature/natural-light-engine
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  natural-light:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Run Natural Light Engine tests
+        run: npm run test:natural-light
+
+      - name: Validate gateway syntax
+        run: node --check server-natural-light.js
