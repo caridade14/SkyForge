@@ -2,6 +2,7 @@
 
 const {
   calculateSolarPosition,
+  relativeAirMass,
   absoluteAirMass,
   pressureRatioAtAltitude,
   extraterrestrialNormalIrradiance
@@ -129,7 +130,7 @@ function sampleSingleScatteringSky(input = {}) {
 
   const cosTheta = clamp(dot(viewDirection, sunDirection), -1, 1);
   const viewZenithDeg = Math.acos(clamp(viewDirection.y, -1, 1)) * 180 / Math.PI;
-  const viewAirMass = absoluteAirMass(Math.min(89.9, viewZenithDeg), input.altitudeMeters ?? 0);
+  const viewAirMass = relativeAirMass(Math.min(89.9, viewZenithDeg));
   const sunAirMass = input.sunAirMass;
   const pressureRatio = input.pressureRatio ?? 1;
   const aerosolOpticalDepth550 = input.aerosolOpticalDepth550 ?? 0.1;
@@ -192,13 +193,17 @@ function evaluateNaturalLight(input = {}) {
   const solarPosition = calculateSolarPosition(input);
   const altitudeMeters = input.altitudeMeters ?? 0;
   const pressureRatio = pressureRatioAtAltitude(altitudeMeters);
-  const sunAirMass = absoluteAirMass(solarPosition.apparentZenithDeg, altitudeMeters);
+  const sunRelativeAirMass = relativeAirMass(solarPosition.apparentZenithDeg);
+  const sunAbsoluteAirMass = absoluteAirMass(
+    solarPosition.apparentZenithDeg,
+    altitudeMeters
+  );
   const extraterrestrialWm2 = extraterrestrialNormalIrradiance(solarPosition.dayOfYear);
   const ozoneDobsonUnits = input.ozoneDobsonUnits ?? 300;
   const precipitableWaterCm = input.precipitableWaterCm ?? 1.5;
 
   const transmittance = directTransmittanceSpectrum({
-    airMass: sunAirMass,
+    airMass: sunRelativeAirMass,
     pressureRatio,
     aerosolOpticalDepth550: input.aerosolOpticalDepth550 ?? 0.1,
     angstromExponent: input.angstromExponent ?? 1.3,
@@ -215,7 +220,9 @@ function evaluateNaturalLight(input = {}) {
     const sample = transmittance[index];
     weightedTransmittance += sample.transmittance * weight;
     gasOnlyWeightedTransmittance +=
-      Math.exp(-sample.totalGasOpticalDepth * clamp(sunAirMass, 0, 40)) * weight;
+      Math.exp(
+        -sample.totalGasOpticalDepth * clamp(sunRelativeAirMass, 0, 40)
+      ) * weight;
     weightSum += weight;
   }
   weightedTransmittance = weightSum > 0 ? weightedTransmittance / weightSum : 0;
@@ -245,7 +252,7 @@ function evaluateNaturalLight(input = {}) {
   const zenithSky = sampleSingleScatteringSky({
     viewDirection: { x: 0, y: 1, z: 0 },
     sunDirection: solarPosition.sunDirection,
-    sunAirMass,
+    sunAirMass: sunRelativeAirMass,
     altitudeMeters,
     pressureRatio,
     aerosolOpticalDepth550: input.aerosolOpticalDepth550 ?? 0.1,
@@ -288,7 +295,12 @@ function evaluateNaturalLight(input = {}) {
       mieAsymmetry: input.mieAsymmetry ?? 0.76,
       ozoneDobsonUnits,
       precipitableWaterCm,
-      absoluteAirMass: Number.isFinite(sunAirMass) ? sunAirMass : null
+      relativeAirMass: Number.isFinite(sunRelativeAirMass)
+        ? sunRelativeAirMass
+        : null,
+      absoluteAirMass: Number.isFinite(sunAbsoluteAirMass)
+        ? sunAbsoluteAirMass
+        : null
     },
     irradiance: {
       extraterrestrialNormalWm2: extraterrestrialWm2,
