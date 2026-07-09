@@ -143,7 +143,7 @@ test("ozone and water columns lower their corresponding spectral bands", () => {
   assert.ok(spectralSample(humidHighOzone, 760).oxygenOpticalDepth > 0);
 });
 
-test("natural-light evaluation returns finite gas-aware daylight outputs", () => {
+test("natural-light evaluation returns finite multiple-scattering daylight outputs", () => {
   const result = evaluateNaturalLight({
     latitude: -8.8383,
     longitude: 13.2344,
@@ -155,8 +155,9 @@ test("natural-light evaluation returns finite gas-aware daylight outputs", () =>
     precipitableWaterCm: 3.2
   });
 
-  assert.equal(result.model.id, "skyforge-natural-light-phase3");
+  assert.equal(result.model.id, "skyforge-natural-light-phase4");
   assert.equal(result.model.gasAbsorptionModel.id, "skyforge-gas-absorption-phase3");
+  assert.equal(result.model.multipleScatteringModel.id, "skyforge-multiple-scattering-phase4");
   assert.ok(result.irradiance.directNormalWm2 > 0);
   assert.ok(result.irradiance.globalHorizontalEstimatedWm2 > 0);
   assert.ok(result.irradiance.broadbandGasTransmittance > 0);
@@ -164,6 +165,7 @@ test("natural-light evaluation returns finite gas-aware daylight outputs", () =>
   assert.ok(Number.isFinite(result.color.zenithSkyLinearSrgb.r));
   assert.equal(result.spectral.directSun.length, 41);
   assert.ok(result.spectral.transmittance.some((sample) => sample.totalGasOpticalDepth > 0));
+  assert.equal(result.spectral.multipleScatteringAtmosphere.length, 41);
 });
 
 test("natural-light input normalization accepts nested API payloads", () => {
@@ -183,6 +185,8 @@ test("natural-light input normalization accepts nested API payloads", () => {
   assert.equal(input.aerosolOpticalDepth550, 0.1);
   assert.equal(input.ozoneDobsonUnits, 300);
   assert.equal(input.precipitableWaterCm, 1.5);
+  assert.equal(input.aerosolSingleScatteringAlbedo, 0.92);
+  assert.equal(input.multipleScatteringOrders, 4);
 });
 
 test("natural-light input normalization rejects invalid physical values", () => {
@@ -203,6 +207,16 @@ test("natural-light input normalization rejects invalid physical values", () => 
     }),
     /dateTime/
   );
+
+  assert.throws(
+    () => normalizeNaturalLightInput({
+      latitude: 0,
+      longitude: 0,
+      dateTime: "2026-07-09T12:00:00Z",
+      multipleScatteringOrders: 9
+    }),
+    /multipleScatteringOrders/
+  );
 });
 
 test("natural-light scene state is persistence-safe and round-trips", () => {
@@ -214,13 +228,15 @@ test("natural-light scene state is persistence-safe and round-trips", () => {
     aerosolOpticalDepth550: 0.18,
     groundAlbedo: 0.24,
     ozoneDobsonUnits: 325,
-    precipitableWaterCm: 2.8
+    precipitableWaterCm: 2.8,
+    multipleScatteringOrders: 5
   });
 
   assert.equal(state.schema.id, "skyforge.natural-light");
   assert.equal(state.schema.version, 1);
   assert.equal(state.mode, "physical");
-  assert.equal(state.solver.id, "skyforge-natural-light-phase3");
+  assert.equal(state.solver.id, "skyforge-natural-light-phase4");
+  assert.equal(state.solver.multipleScatteringOrders, 5);
   assert.equal(state.atmosphere.groundAlbedo, 0.24);
   assert.equal(state.atmosphere.ozoneDobsonUnits, 325);
 
@@ -229,6 +245,7 @@ test("natural-light scene state is persistence-safe and round-trips", () => {
   assert.equal(restored.longitude, 13.2344);
   assert.equal(restored.aerosolOpticalDepth550, 0.18);
   assert.equal(restored.precipitableWaterCm, 2.8);
+  assert.equal(restored.multipleScatteringOrders, 5);
 });
 
 test("sky-view LUT directions are unit vectors on the upper hemisphere", () => {
@@ -237,7 +254,7 @@ test("sky-view LUT directions are unit vectors on the upper hemisphere", () => {
   assert.ok(Math.abs(Math.hypot(direction.x, direction.y, direction.z) - 1) < 1e-12);
 });
 
-test("sky-view LUT returns finite deterministic gas-aware linear RGB pixels", () => {
+test("sky-view LUT returns finite deterministic multiple-scattering RGB pixels", () => {
   const payload = {
     input: {
       latitude: 48.8566,
@@ -254,12 +271,13 @@ test("sky-view LUT returns finite deterministic gas-aware linear RGB pixels", ()
   const first = generateSkyViewLut(payload);
   const second = generateSkyViewLut(payload);
 
-  assert.equal(first.model.id, "skyforge-sky-view-lut-phase3");
+  assert.equal(first.model.id, "skyforge-sky-view-lut-phase4");
   assert.equal(first.layout.width, 8);
   assert.equal(first.layout.height, 4);
   assert.equal(first.pixels.length, 8 * 4 * 3);
   assert.ok(first.pixels.every((value) => Number.isFinite(value) && value >= 0 && value <= 1));
   assert.ok(first.statistics.maximumLuminance > 0);
+  assert.ok(first.statistics.multipleToSingleRatio >= 0);
   assert.deepEqual(first.pixels, second.pixels);
 });
 
