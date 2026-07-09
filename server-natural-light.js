@@ -16,6 +16,7 @@ const INTERNAL_PORT = Number(
 );
 const HOST = process.env.HOST || "127.0.0.1";
 const MAX_BODY_BYTES = Number(process.env.SKYFORGE_MAX_LIGHTING_BODY || 1_000_000);
+const NATURAL_LIGHT_CLIENT_TAG = '<script src="/natural-light-preview.js" defer></script>';
 
 let backendProcess = null;
 let shuttingDown = false;
@@ -66,6 +67,26 @@ function normalizeLightingInput(body = {}) {
   }
 }
 
+function injectNaturalLightClient(html) {
+  const source = String(html || "");
+  if (source.includes(NATURAL_LIGHT_CLIENT_TAG)) return source;
+  if (/<\/body\s*>/i.test(source)) {
+    return source.replace(/<\/body\s*>/i, `${NATURAL_LIGHT_CLIENT_TAG}\n</body>`);
+  }
+  return `${source}\n${NATURAL_LIGHT_CLIENT_TAG}\n`;
+}
+
+function shouldInjectNaturalLightClient(req, upstreamResponse) {
+  const contentType = String(upstreamResponse.headers["content-type"] || "").toLowerCase();
+  const contentEncoding = String(upstreamResponse.headers["content-encoding"] || "").toLowerCase();
+  return (
+    req.method === "GET" &&
+    upstreamResponse.statusCode === 200 &&
+    contentType.includes("text/html") &&
+    !contentEncoding
+  );
+}
+
 function proxyRequest(req, res) {
   const headers = { ...req.headers, host: `${HOST}:${INTERNAL_PORT}` };
   const upstream = http.request(
@@ -77,8 +98,27 @@ function proxyRequest(req, res) {
       headers
     },
     (upstreamResponse) => {
-      res.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
-      upstreamResponse.pipe(res);
+      if (!shouldInjectNaturalLightClient(req, upstreamResponse)) {
+        res.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
+        upstreamResponse.pipe(res);
+        return;
+      }
+
+      const chunks = [];
+      upstreamResponse.on("data", (chunk) => chunks.push(chunk));
+      upstreamResponse.on("end", () => {
+        const injected = Buffer.from(
+          injectNaturalLightClient(Buffer.concat(chunks).toString("utf8")),
+          "utf8"
+        );
+        const responseHeaders = { ...upstreamResponse.headers };
+        delete responseHeaders["content-length"];
+        delete responseHeaders.etag;
+        responseHeaders["content-length"] = String(injected.length);
+        responseHeaders["cache-control"] = "no-cache";
+        res.writeHead(upstreamResponse.statusCode || 200, responseHeaders);
+        res.end(injected);
+      });
     }
   );
 
@@ -146,6 +186,20 @@ async function waitForBackend(attempts = 50, delayMs = 100) {
   return false;
 }
 
+function buildPhysicalPreview(body = {}) {
+  const input = normalizeLightingInput(body);
+  return {
+    apiVersion: "0.2.0",
+    input,
+    sceneState: createNaturalLightSceneState(input),
+    evaluation: evaluateNaturalLight(input),
+    skyViewLut: generateSkyViewLut({
+      input,
+      lut: body.lut || {}
+    })
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
@@ -163,10 +217,13 @@ const server = http.createServer(async (req, res) => {
       modelVersion: "0.1.0",
       skyViewLutModel: "skyforge-sky-view-lut-phase2",
       skyViewLutVersion: "0.2.0",
+      previewClientVersion: "0.2.0",
+      previewInjection: true,
       endpoints: [
         "POST /api/lighting/evaluate",
         "POST /api/lighting/scene-state",
-        "POST /api/lighting/lut/sky-view"
+        "POST /api/lighting/lut/sky-view",
+        "POST /api/lighting/preview"
       ],
       backendPort: INTERNAL_PORT
     });
@@ -210,6 +267,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && requestUrl.pathname === "/api/lighting/preview") {
+    try {
+      const body = await readJsonBody(req);
+      sendJson(res, 200, buildPhysicalPreview(body));
+    } catch (error) {
+      sendJson(res, error.statusCode || 400, {
+        error: error.message || "Physical preview generation failed"
+      });
+    }
+    return;
+  }
+
   proxyRequest(req, res);
 });
 
@@ -242,6 +311,7 @@ async function start() {
   server.listen(PUBLIC_PORT, HOST, () => {
     console.log(`SkyForge Natural Light gateway: http://${HOST}:${PUBLIC_PORT}`);
     console.log(`Physical lighting API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/evaluate`);
+    console.log(`Physical preview API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/preview`);
     console.log(`Sky-view LUT API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/lut/sky-view`);
   });
 }
