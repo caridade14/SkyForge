@@ -3,10 +3,12 @@ name: Natural Light Engine Tests
 on:
   push:
     branches:
+      - main
       - feature/natural-light-engine
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,8 +27,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Run Natural Light Engine tests
-        run: npm run test:natural-light
+      - name: Run Node test suite
+        run: npm test
 
       - name: Validate gateway syntax
         run: node --check server-natural-light.js
+
+      - name: Validate Natural Light modules
+        run: |
+          node --check src/natural-light/solar-core.js
+          node --check src/natural-light/atmosphere-core.js
+          node --check src/natural-light/input-schema.js
+          node --check src/natural-light/lut-core.js
+          node --check src/natural-light/index.js
