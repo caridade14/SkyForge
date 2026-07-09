@@ -8,7 +8,8 @@ const {
   normalizeNaturalLightInput,
   createNaturalLightSceneState,
   generateSkyViewLut,
-  generateTransmittanceLut
+  generateTransmittanceLut,
+  generateMultipleScatteringLut
 } = require("./src/natural-light");
 
 const PUBLIC_PORT = Number(process.env.PORT || 3000);
@@ -190,7 +191,7 @@ async function waitForBackend(attempts = 50, delayMs = 100) {
 function buildPhysicalPreview(body = {}) {
   const input = normalizeLightingInput(body);
   return {
-    apiVersion: "0.3.0",
+    apiVersion: "0.4.0",
     input,
     sceneState: createNaturalLightSceneState(input),
     evaluation: evaluateNaturalLight(input),
@@ -203,6 +204,14 @@ function buildPhysicalPreview(body = {}) {
       transmittanceLut: body.transmittanceLut || {
         width: 32,
         height: 16,
+        maxAltitudeMeters: 20_000
+      }
+    }),
+    multipleScatteringLut: generateMultipleScatteringLut({
+      input,
+      multipleScatteringLut: body.multipleScatteringLut || {
+        width: 16,
+        height: 8,
         maxAltitudeMeters: 20_000
       }
     })
@@ -221,15 +230,20 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, 200, {
       ok: true,
       service: "skyforge-natural-light",
-      apiVersion: "0.3.0",
-      model: "skyforge-natural-light-phase3",
-      modelVersion: "0.3.0",
+      apiVersion: "0.4.0",
+      model: "skyforge-natural-light-phase4",
+      modelVersion: "0.4.0",
       gasAbsorptionModel: "skyforge-gas-absorption-phase3",
       gasAbsorptionVersion: "0.3.0",
-      skyViewLutModel: "skyforge-sky-view-lut-phase3",
-      skyViewLutVersion: "0.3.0",
+      multipleScatteringModel: "skyforge-multiple-scattering-phase4",
+      multipleScatteringVersion: "0.4.0",
+      skyViewLutModel: "skyforge-sky-view-lut-phase4",
+      skyViewLutVersion: "0.4.0",
       transmittanceLutModel: "skyforge-transmittance-lut-phase3",
       transmittanceLutVersion: "0.3.0",
+      multipleScatteringLutModel:
+        "skyforge-multiple-scattering-lut-phase4",
+      multipleScatteringLutVersion: "0.4.0",
       previewClientVersion: "0.2.0",
       previewInjection: true,
       endpoints: [
@@ -237,6 +251,7 @@ const server = http.createServer(async (req, res) => {
         "POST /api/lighting/scene-state",
         "POST /api/lighting/lut/sky-view",
         "POST /api/lighting/lut/transmittance",
+        "POST /api/lighting/lut/multiple-scattering",
         "POST /api/lighting/preview"
       ],
       backendPort: INTERNAL_PORT
@@ -293,6 +308,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (
+    req.method === "POST" &&
+    requestUrl.pathname === "/api/lighting/lut/multiple-scattering"
+  ) {
+    try {
+      const body = await readJsonBody(req);
+      sendJson(res, 200, generateMultipleScatteringLut(body));
+    } catch (error) {
+      sendJson(res, error.statusCode || 400, {
+        error: error.message || "Multiple-scattering LUT generation failed"
+      });
+    }
+    return;
+  }
+
   if (req.method === "POST" && requestUrl.pathname === "/api/lighting/preview") {
     try {
       const body = await readJsonBody(req);
@@ -340,6 +370,7 @@ async function start() {
     console.log(`Physical preview API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/preview`);
     console.log(`Sky-view LUT API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/lut/sky-view`);
     console.log(`Transmittance LUT API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/lut/transmittance`);
+    console.log(`Multiple-scattering LUT API: POST http://${HOST}:${PUBLIC_PORT}/api/lighting/lut/multiple-scattering`);
   });
 }
 
