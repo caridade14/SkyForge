@@ -1,8 +1,8 @@
 {
   "name": "skyforge-backend",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "SkyForge backend with the physical Natural Light gateway.",
+  "description": "SkyForge backend with the gas-aware physical Natural Light gateway.",
   "scripts": {
     "start": "node server-natural-light.js",
     "dev": "node server-natural-light.js",
