@@ -31,16 +31,9 @@ function gaussian(wavelengthNm, centerNm, sigmaNm) {
   return Math.exp(-0.5 * delta * delta);
 }
 
-/**
- * Effective vertical ozone optical depth.
- *
- * Two smooth components represent the visible edge of the Huggins system and
- * the broad Chappuis absorption system. Coefficients are intentionally smooth
- * because the current engine samples every 10 nm.
- */
 function ozoneVerticalOpticalDepth(wavelengthNm, ozoneDobsonUnits = REFERENCE_OZONE_DU) {
   const wavelength = assertFinite("wavelengthNm", wavelengthNm, 280, 2500);
-  const ozoneDu = assertFinite("ozoneDobsonUnits", ozoneDobsonUnits, 100, 700);
+  const ozoneDu = assertFinite("ozoneDobsonUnits", ozoneDobsonUnits, 0, 700);
   const columnScale = ozoneDu / REFERENCE_OZONE_DU;
 
   const hugginsVisibleEdge = 0.055 * gaussian(wavelength, 385, 18);
@@ -49,15 +42,9 @@ function ozoneVerticalOpticalDepth(wavelengthNm, ozoneDobsonUnits = REFERENCE_OZ
   return columnScale * (hugginsVisibleEdge + chappuisMain + chappuisBlueShoulder);
 }
 
-/**
- * Effective vertical oxygen optical depth.
- *
- * The visible gamma, B and A bands are represented as finite-width features
- * suitable for the engine's low-resolution interactive spectrum.
- */
 function oxygenVerticalOpticalDepth(wavelengthNm, pressureRatio = 1) {
   const wavelength = assertFinite("wavelengthNm", wavelengthNm, 280, 2500);
-  const pressure = assertFinite("pressureRatio", pressureRatio, 0.01, 1.2);
+  const pressure = assertFinite("pressureRatio", pressureRatio, 0.001, 1.2);
 
   const gammaBand = 0.008 * gaussian(wavelength, 628, 4.5);
   const bBand = 0.038 * gaussian(wavelength, 687, 4.2);
@@ -65,13 +52,6 @@ function oxygenVerticalOpticalDepth(wavelengthNm, pressureRatio = 1) {
   return pressure * (gammaBand + bBand + aBand);
 }
 
-/**
- * Effective vertical water-vapour optical depth.
- *
- * The exponent approximates saturation behaviour used by fast spectral
- * transmittance parameterizations. Only bands intersecting the 380–780 nm
- * SkyForge working range are represented here.
- */
 function waterVaporVerticalOpticalDepth(
   wavelengthNm,
   precipitableWaterCm = REFERENCE_WATER_CM
