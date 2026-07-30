@@ -1,0 +1,30 @@
+name: SkyForge Phase 6 CI
+
+on:
+  push:
+    branches:
+      - agent/phase6-galaxy-builder
+      - feature/natural-light-engine
+  pull_request:
+
+concurrency:
+  group: phase6-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install
+      - run: npm test
+      - run: node --check server-skyforge-phase6.js
+      - run: node --check phase6-gpu-renderer.js
+      - run: node --check galaxy-builder.js
