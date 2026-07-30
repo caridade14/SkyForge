@@ -70,10 +70,19 @@ function proxyRequest(req, res) {
     port: INNER_PORT,
     path: req.url,
     method: req.method,
-    headers
+    headers,
+    // Node.js 24 rejects legacy upstream responses that contain both
+    // Content-Length and Transfer-Encoding. The Phase 4 gateway can emit
+    // that combination while injecting its browser client, so accept the
+    // response here and normalize the headers before replying to the browser.
+    insecureHTTPParser: true
   }, (upstreamResponse) => {
     if (!shouldInject(req, upstreamResponse)) {
-      res.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
+      const responseHeaders = { ...upstreamResponse.headers };
+      if (responseHeaders["content-length"] && responseHeaders["transfer-encoding"]) {
+        delete responseHeaders["content-length"];
+      }
+      res.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
       upstreamResponse.pipe(res);
       return;
     }
@@ -83,6 +92,7 @@ function proxyRequest(req, res) {
       const injected = Buffer.from(injectPhase5Client(Buffer.concat(chunks).toString("utf8")), "utf8");
       const responseHeaders = { ...upstreamResponse.headers };
       delete responseHeaders["content-length"];
+      delete responseHeaders["transfer-encoding"];
       delete responseHeaders.etag;
       responseHeaders["content-length"] = String(injected.length);
       responseHeaders["cache-control"] = "no-cache";
