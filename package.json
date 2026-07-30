@@ -1,20 +1,19 @@
 {
   "name": "skyforge-backend",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
-  "description": "SkyForge Phase 6 GPU renderer with physical natural light and a procedural Galaxy Builder.",
+  "description": "SkyForge functional GPU scene engine with live city weather, layered aurora, interactive color science and opt-in galaxy creation.",
   "scripts": {
-    "start": "node server-skyforge-phase6.js",
-    "dev": "node server-skyforge-phase6.js",
-    "start:core": "node server.js",
-    "dev:core": "node server.js",
+    "start": "node server-skyforge-phase7.js",
+    "dev": "node server-skyforge-phase7.js",
+    "start:phase7": "node server-skyforge-phase7.js",
     "start:phase6": "node server-skyforge-phase6.js",
-    "start:lighting": "node server-natural-light-phase5.js",
-    "start:lighting:phase5": "node server-natural-light-phase5.js",
+    "start:phase5": "node server-natural-light-phase5.js",
     "start:lighting:phase4": "node server-natural-light.js",
+    "start:core": "node server.js",
     "test": "node --test",
-    "test:natural-light": "node --test tests/natural-light.test.js tests/multiple-scattering.test.js tests/natural-light-preview.test.js tests/phase5-render-pipeline.test.js",
-    "test:phase6": "node --test tests/phase6-galaxy.test.js"
+    "test:phase7": "node --test tests/phase7-functional-scene.test.js",
+    "test:natural-light": "node --test tests/natural-light.test.js tests/multiple-scattering.test.js tests/natural-light-preview.test.js tests/phase5-render-pipeline.test.js tests/phase6-galaxy.test.js tests/phase7-functional-scene.test.js"
   },
   "engines": {
     "node": ">=22"
