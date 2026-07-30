@@ -1,17 +1,18 @@
 {
   "name": "skyforge-backend",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "SkyForge backend with gas-aware multiple-scattering Natural Light rendering.",
+  "description": "SkyForge backend with gas-aware multiple scattering and an HDR ACEScg Natural Light Phase 5 reference renderer.",
   "scripts": {
-    "start": "node server-natural-light.js",
-    "dev": "node server-natural-light.js",
+    "start": "node server-natural-light-phase5.js",
+    "dev": "node server-natural-light-phase5.js",
     "start:core": "node server.js",
     "dev:core": "node server.js",
-    "start:lighting": "node server-natural-light.js",
-    "dev:lighting": "node server-natural-light.js",
+    "start:lighting": "node server-natural-light-phase5.js",
+    "dev:lighting": "node server-natural-light-phase5.js",
+    "start:lighting:phase4": "node server-natural-light.js",
     "test": "node --test",
-    "test:natural-light": "node --test tests/natural-light.test.js tests/multiple-scattering.test.js tests/natural-light-preview.test.js"
+    "test:natural-light": "node --test tests/natural-light.test.js tests/multiple-scattering.test.js tests/natural-light-preview.test.js tests/phase5-render-pipeline.test.js"
   },
   "engines": {
     "node": ">=22"
