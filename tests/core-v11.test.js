@@ -17,7 +17,7 @@ function dataUrl(source) {
 
 test("Core v11 browser modules have valid ES module syntax", () => {
   const modules = fs.readdirSync(CLIENT_ROOT).filter((name) => name.endsWith(".js"));
-  assert.ok(modules.length >= 8);
+  assert.ok(modules.length >= 9);
   for (const moduleName of modules) {
     const source = fs.readFileSync(path.join(CLIENT_ROOT, moduleName), "utf8");
     const result = spawnSync(process.execPath, ["--input-type=module", "--check"], { input: source, encoding: "utf8" });
@@ -62,6 +62,45 @@ test("Default node graph evaluates a complete sky scene", async () => {
   assert.equal(result.color.workingSpace, "ACEScg");
 });
 
+test("Performance guard deduplicates identical physical preview requests", async () => {
+  const performanceModule = await import(dataUrl(read("src/client/core/performance-guard.js")));
+  let calls = 0;
+  const root = {
+    location: { href: "http://localhost:3000/" },
+    fetch: async () => {
+      calls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
+    }
+  };
+  const scheduler = performanceModule.installPreviewFetchScheduler(root);
+  const [first, second] = await Promise.all([
+    root.fetch("/api/lighting/preview", { method: "POST", body: "{}" }),
+    root.fetch("/api/lighting/preview", { method: "POST", body: "{}" })
+  ]);
+  assert.equal(calls, 1);
+  assert.deepEqual(await first.json(), { ok: true });
+  assert.deepEqual(await second.json(), { ok: true });
+  scheduler.restore();
+});
+
+test("Performance guard throttles the legacy drawSky loop", async () => {
+  const performanceModule = await import(dataUrl(read("src/client/core/performance-guard.js")));
+  let now = 0;
+  let calls = 0;
+  const root = {
+    performance: { now: () => now },
+    drawSky: () => { calls += 1; return calls; }
+  };
+  assert.equal(performanceModule.throttleGlobalFunction("drawSky", 10, root), true);
+  root.drawSky();
+  now = 20;
+  root.drawSky();
+  now = 120;
+  root.drawSky();
+  assert.equal(calls, 2);
+});
+
 test("Natural-light gateway injects Core v11 and exposes Blender bridge routes", () => {
   const server = read("server-natural-light.js");
   assert.match(server, /skyforge-core-v11\.css/);
@@ -72,10 +111,14 @@ test("Natural-light gateway injects Core v11 and exposes Blender bridge routes",
   assert.match(server, /blender-world-latest\.json/);
 });
 
-test("Blender addon declares a localhost-only bridge", () => {
+test("Blender addon exposes a localhost-only N-panel bridge", () => {
   const addon = read("integrations/blender/skyforge_bridge_addon.py");
   assert.match(addon, /BRIDGE_HOST = "127\.0\.0\.1"/);
   assert.match(addon, /BRIDGE_PORT = 8765/);
   assert.match(addon, /\/skyforge\/health/);
   assert.match(addon, /\/skyforge\/world/);
+  assert.match(addon, /bl_space_type = "VIEW_3D"/);
+  assert.match(addon, /bl_region_type = "UI"/);
+  assert.match(addon, /bl_category = "SkyForge"/);
+  assert.match(addon, /"version": \(1, 1, 0\)/);
 });
