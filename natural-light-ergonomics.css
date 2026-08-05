@@ -1,0 +1,137 @@
+/* SkyForge Precision Ergonomics Skin v0.1.0
+ * Reduces decorative rounding while preserving circular controls,
+ * status dots, node sockets and toggle handles.
+ */
+
+:root {
+  --sf-precision-radius: 2px;
+  --sf-precision-radius-small: 1px;
+}
+
+/* Structural surfaces */
+.mb-dd,
+.modal,
+.layout-section,
+.cmd-box,
+.sf-card,
+.tri-state-card,
+.curve-summary div,
+.curve-stage,
+.curve-readout div,
+.curve-list,
+.curve-empty,
+.hdr-sphere,
+.hdr-readout,
+.pass-item,
+.rq-item,
+.rq-empty,
+.asset-card,
+.aurora-color-cell,
+.sf-node,
+.sf-node-inspector,
+.sf-weather-status,
+.city-col,
+.city-list,
+.city-item,
+.review-card,
+.queue-card,
+.export-card,
+.preview-card {
+  border-radius: var(--sf-precision-radius) !important;
+}
+
+/* Buttons, compact selectors and text inputs */
+button,
+select,
+textarea,
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+.logo-box,
+.logo-ver,
+.tri-build-badge,
+.mb-pill,
+.mb-render,
+.mb-icon-btn,
+.dd-item,
+.dd-kbd,
+.tb-badge,
+.mseg,
+.s-inp,
+.sf-star-count-input,
+.sf-star-apply,
+.s-pill,
+.s-clr,
+.aurora-gradient,
+.s-btn,
+.s-dv,
+.s-ni,
+.s-sel,
+.curve-select,
+.curve-input,
+.curve-btn,
+.curve-item,
+.layer-item,
+.layer-add,
+.sphere-hud,
+.fmt-b,
+.res-b,
+.pcard,
+.btn-export,
+.btn-sec,
+.connector-row,
+.bstatus,
+.bsend,
+.rq-cancel,
+.rq-link,
+.asset-search,
+.sf-chip,
+.sf-map-btn,
+.sf-city-select,
+.vp-btn,
+.ts-btn,
+.timeline-btn,
+.macro-sm-btn {
+  border-radius: var(--sf-precision-radius) !important;
+}
+
+/* Very small indicators stay compact rather than pill-shaped. */
+.ch-bg,
+.ch-fill,
+.rq-bar,
+.rq-fill,
+.r-bar-bg,
+.r-bar-fill,
+.progress,
+.progress-bar {
+  border-radius: var(--sf-precision-radius-small) !important;
+}
+
+/* Deliberately preserve functional circles. */
+.tab-dot,
+.st-dot,
+.bdot,
+.macro-dot,
+.sf-node-socket,
+.tog,
+.tog-k,
+input[type="range"]::-webkit-slider-thumb,
+input[type="range"]::-moz-range-thumb,
+.sf-nll-status-dot {
+  border-radius: 999px !important;
+}
+
+/* Sharper focus treatment improves keyboard navigation visibility. */
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+.mb-m:focus-visible {
+  outline: 1px solid var(--acc, #e8812a);
+  outline-offset: 1px;
+}
+
+/* Avoid excessive floating-card depth. */
+.mb-dd,
+.modal,
+.cmd-box {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .46) !important;
+}
