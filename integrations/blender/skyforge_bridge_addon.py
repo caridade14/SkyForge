@@ -1,9 +1,9 @@
 bl_info = {
     "name": "SkyForge Bridge",
     "author": "SkyForge",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (4, 0, 0),
-    "location": "World Properties > SkyForge Bridge",
+    "location": "3D Viewport > Sidebar > SkyForge",
     "description": "Receives SkyForge world, sun and color payloads over localhost",
     "category": "Lighting",
 }
@@ -25,6 +25,11 @@ _PENDING = []
 _LOCK = threading.Lock()
 
 
+class ReusableThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 def _json_response(handler, status, payload):
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(status)
@@ -42,7 +47,7 @@ def _read_json(handler):
 
 
 class SkyForgeRequestHandler(BaseHTTPRequestHandler):
-    server_version = "SkyForgeBlenderBridge/1.0"
+    server_version = "SkyForgeBlenderBridge/1.1"
 
     def log_message(self, _format, *_args):
         return
@@ -53,7 +58,7 @@ class SkyForgeRequestHandler(BaseHTTPRequestHandler):
                 "ok": True,
                 "connected": True,
                 "service": "skyforge-blender-bridge",
-                "version": "1.0.0",
+                "version": "1.1.0",
                 "blender": bpy.app.version_string,
             })
             return
@@ -70,7 +75,11 @@ class SkyForgeRequestHandler(BaseHTTPRequestHandler):
             with _LOCK:
                 _PENDING.append(payload)
                 del _PENDING[:-4]
-            _json_response(self, 202, {"ok": True, "queued": True, "receivedAt": payload.get("sentAt")})
+            _json_response(self, 202, {
+                "ok": True,
+                "queued": True,
+                "receivedAt": payload.get("sentAt"),
+            })
         except Exception as error:
             _json_response(self, 400, {"error": str(error)})
 
@@ -108,6 +117,12 @@ def _ensure_node(nodes, node_type, name):
     return node
 
 
+def _replace_input_link(links, output_socket, input_socket):
+    for link in list(input_socket.links):
+        links.remove(link)
+    links.new(output_socket, input_socket)
+
+
 def _apply_world(payload):
     scene, world = _ensure_world()
     nodes = world.node_tree.nodes
@@ -118,32 +133,38 @@ def _apply_world(payload):
     texcoord = _ensure_node(nodes, "ShaderNodeTexCoord", "SkyForge Coordinates")
     environment = _ensure_node(nodes, "ShaderNodeTexEnvironment", "SkyForge HDRI")
 
-    for node in (texcoord, mapping, environment, background, output):
-        node.select = False
     texcoord.location = (-720, 0)
     mapping.location = (-500, 0)
     environment.location = (-270, 0)
     background.location = (0, 0)
     output.location = (240, 0)
 
-    links.new(texcoord.outputs["Generated"], mapping.inputs["Vector"])
-    links.new(mapping.outputs["Vector"], environment.inputs["Vector"])
-    links.new(background.outputs["Background"], output.inputs["Surface"])
+    _replace_input_link(links, texcoord.outputs["Generated"], mapping.inputs["Vector"])
+    _replace_input_link(links, mapping.outputs["Vector"], environment.inputs["Vector"])
+    _replace_input_link(links, background.outputs["Background"], output.inputs["Surface"])
 
     hdri_path = payload.get("hdriPath")
     if hdri_path and os.path.isfile(hdri_path):
-        image = bpy.data.images.get(os.path.basename(hdri_path)) or bpy.data.images.load(hdri_path, check_existing=True)
+        image = bpy.data.images.get(os.path.basename(hdri_path)) or bpy.data.images.load(
+            hdri_path,
+            check_existing=True,
+        )
         environment.image = image
-        if not any(link.from_node == environment and link.to_node == background for link in links):
-            links.new(environment.outputs["Color"], background.inputs["Color"])
+        _replace_input_link(links, environment.outputs["Color"], background.inputs["Color"])
     else:
+        for link in list(background.inputs["Color"].links):
+            links.remove(link)
         atmosphere = payload.get("atmosphere") or {}
         sun = payload.get("sun") or {}
-        elevation = math.radians(float(sun.get("elevation", 7.0)))
-        haze = float(atmosphere.get("haze", 0.3))
-        warm = max(0.0, min(1.0, (12.0 - math.degrees(elevation)) / 18.0))
-        color = (0.055 + warm * 0.22, 0.10 + warm * 0.11, 0.20 + (1.0 - haze) * 0.23, 1.0)
-        background.inputs["Color"].default_value = color
+        elevation_degrees = float(sun.get("elevation", 7.0))
+        haze = max(0.0, min(1.0, float(atmosphere.get("haze", 0.3))))
+        warm = max(0.0, min(1.0, (12.0 - elevation_degrees) / 18.0))
+        background.inputs["Color"].default_value = (
+            0.055 + warm * 0.22,
+            0.10 + warm * 0.11,
+            0.20 + (1.0 - haze) * 0.23,
+            1.0,
+        )
 
     background.inputs["Strength"].default_value = max(0.0, float(payload.get("strength", 1.0)))
     mapping.inputs["Rotation"].default_value[2] = math.radians(float(payload.get("rotation", 0.0)))
@@ -153,7 +174,6 @@ def _apply_world(payload):
     world["skyforge_project"] = project.get("name", "Untitled Sky")
     world["skyforge_sync_time"] = payload.get("sentAt", "")
     scene["skyforge_color_space"] = (payload.get("color") or {}).get("workingSpace", "ACEScg")
-    scene.view_settings.look = "Medium High Contrast" if "Medium High Contrast" in [item.name for item in bpy.types.ColorManagedViewSettings.bl_rna.properties["look"].enum_items] else scene.view_settings.look
     scene.view_settings.exposure = float((payload.get("color") or {}).get("exposure", 0.0))
 
 
@@ -197,7 +217,7 @@ def start_server():
     global _SERVER, _THREAD
     if _SERVER:
         return
-    _SERVER = ThreadingHTTPServer((BRIDGE_HOST, BRIDGE_PORT), SkyForgeRequestHandler)
+    _SERVER = ReusableThreadingHTTPServer((BRIDGE_HOST, BRIDGE_PORT), SkyForgeRequestHandler)
     _THREAD = threading.Thread(target=_SERVER.serve_forever, name="SkyForgeBridge", daemon=True)
     _THREAD.start()
     if not bpy.app.timers.is_registered(_drain_queue):
@@ -218,6 +238,7 @@ def stop_server():
 class SKYFORGE_OT_start_bridge(bpy.types.Operator):
     bl_idname = "skyforge.start_bridge"
     bl_label = "Start Bridge"
+    bl_description = "Start the local SkyForge listener on port 8765"
     bl_options = {"REGISTER"}
 
     def execute(self, context):
@@ -227,6 +248,8 @@ class SKYFORGE_OT_start_bridge(bpy.types.Operator):
             context.scene.skyforge_bridge_last_status = f"Listening on {BRIDGE_HOST}:{BRIDGE_PORT}"
             return {"FINISHED"}
         except Exception as error:
+            context.scene.skyforge_bridge_running = False
+            context.scene.skyforge_bridge_last_status = f"Error: {error}"
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
 
@@ -234,6 +257,7 @@ class SKYFORGE_OT_start_bridge(bpy.types.Operator):
 class SKYFORGE_OT_stop_bridge(bpy.types.Operator):
     bl_idname = "skyforge.stop_bridge"
     bl_label = "Stop Bridge"
+    bl_description = "Stop the local SkyForge listener"
 
     def execute(self, context):
         stop_server()
@@ -244,7 +268,8 @@ class SKYFORGE_OT_stop_bridge(bpy.types.Operator):
 
 class SKYFORGE_OT_load_payload(bpy.types.Operator):
     bl_idname = "skyforge.load_payload"
-    bl_label = "Load Queued Payload"
+    bl_label = "Load SkyForge Payload"
+    bl_description = "Load a SkyForge JSON payload manually"
 
     filepath: StringProperty(subtype="FILE_PATH")
 
@@ -262,26 +287,57 @@ class SKYFORGE_OT_load_payload(bpy.types.Operator):
         return {"RUNNING_MODAL"}
 
 
-class SKYFORGE_PT_bridge(bpy.types.Panel):
+def _draw_bridge_panel(layout, scene):
+    header = layout.row(align=True)
+    header.label(
+        text="Online" if scene.skyforge_bridge_running else "Offline",
+        icon="CHECKMARK" if scene.skyforge_bridge_running else "RADIOBUT_OFF",
+    )
+    header.label(text=f"{BRIDGE_HOST}:{BRIDGE_PORT}")
+
+    row = layout.row(align=True)
+    start_row = row.row(align=True)
+    start_row.enabled = not scene.skyforge_bridge_running
+    start_row.operator("skyforge.start_bridge", icon="PLAY")
+    stop_row = row.row(align=True)
+    stop_row.enabled = scene.skyforge_bridge_running
+    stop_row.operator("skyforge.stop_bridge", icon="PAUSE")
+
+    layout.operator("skyforge.load_payload", icon="FILE_FOLDER")
+    box = layout.box()
+    box.label(text=scene.skyforge_bridge_last_status or "Ready")
+    box.label(text="SkyForge > CORE > Blender Bridge", icon="INFO")
+
+
+class SKYFORGE_PT_bridge_sidebar(bpy.types.Panel):
     bl_label = "SkyForge Bridge"
-    bl_idname = "SKYFORGE_PT_bridge"
+    bl_idname = "SKYFORGE_PT_bridge_sidebar"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "SkyForge"
+
+    def draw(self, context):
+        _draw_bridge_panel(self.layout, context.scene)
+
+
+class SKYFORGE_PT_bridge_world(bpy.types.Panel):
+    bl_label = "SkyForge Bridge"
+    bl_idname = "SKYFORGE_PT_bridge_world"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
 
     def draw(self, context):
-        layout = self.layout
-        scene = context.scene
-        row = layout.row(align=True)
-        row.operator("skyforge.start_bridge", icon="PLAY")
-        row.operator("skyforge.stop_bridge", icon="PAUSE")
-        layout.operator("skyforge.load_payload", icon="FILE_FOLDER")
-        box = layout.box()
-        box.label(text=f"127.0.0.1:{BRIDGE_PORT}")
-        box.label(text=scene.skyforge_bridge_last_status or "Ready")
+        _draw_bridge_panel(self.layout, context.scene)
 
 
-_CLASSES = (SKYFORGE_OT_start_bridge, SKYFORGE_OT_stop_bridge, SKYFORGE_OT_load_payload, SKYFORGE_PT_bridge)
+_CLASSES = (
+    SKYFORGE_OT_start_bridge,
+    SKYFORGE_OT_stop_bridge,
+    SKYFORGE_OT_load_payload,
+    SKYFORGE_PT_bridge_sidebar,
+    SKYFORGE_PT_bridge_world,
+)
 
 
 def register():
@@ -289,7 +345,9 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.Scene.skyforge_bridge_running = BoolProperty(default=False)
     bpy.types.Scene.skyforge_bridge_port = IntProperty(default=BRIDGE_PORT)
-    bpy.types.Scene.skyforge_bridge_last_status = StringProperty(default="Ready")
+    bpy.types.Scene.skyforge_bridge_last_status = StringProperty(
+        default="Ready — press Start Bridge",
+    )
 
 
 def unregister():
