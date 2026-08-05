@@ -1,0 +1,46 @@
+name: SkyForge Core v11
+
+on:
+  push:
+    branches:
+      - feature/skyforge-core-v11
+  pull_request:
+    branches:
+      - feature/natural-light-engine
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core-v11:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run full test suite
+        run: npm test
+      - name: Validate gateway
+        run: node --check server-natural-light.js
+      - name: Validate Blender addon syntax
+        run: python -m py_compile integrations/blender/skyforge_bridge_addon.py
+      - name: Smoke test Core gateway
+        run: |
+          npm start > /tmp/skyforge-core.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true; cat /tmp/skyforge-core.log' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/core/health > /tmp/core-health.json; then break; fi
+            sleep 0.25
+          done
+          node -e "const h=require('/tmp/core-health.json'); if(!h.ok||h.appVersion!=='v11'||h.build!=='CORE11') process.exit(1)"
+          curl -fsS http://127.0.0.1:3000/ > /tmp/home.html
+          grep -q 'skyforge-core-v11.css' /tmp/home.html
+          grep -q 'src/client/core/bootstrap.js' /tmp/home.html
+          curl -fsS http://127.0.0.1:3000/src/client/core/bootstrap.js | grep -q 'SkyForgeCore'
+          curl -fsS http://127.0.0.1:3000/api/bridge/blender/health > /tmp/blender-health.json
+          node -e "const h=require('/tmp/blender-health.json'); if(typeof h.connected!=='boolean') process.exit(1)"

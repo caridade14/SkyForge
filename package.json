@@ -1,8 +1,8 @@
 {
   "name": "skyforge-backend",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "SkyForge backend with gas-aware multiple-scattering Natural Light rendering.",
+  "description": "SkyForge Core v11 with physical Natural Light, project state, timeline, nodes, render queue and Blender bridge.",
   "scripts": {
     "start": "node server-natural-light.js",
     "dev": "node server-natural-light.js",
@@ -11,6 +11,7 @@
     "start:lighting": "node server-natural-light.js",
     "dev:lighting": "node server-natural-light.js",
     "test": "node --test",
+    "test:core": "node --test tests/core-v11.test.js",
     "test:natural-light": "node --test tests/natural-light.test.js tests/multiple-scattering.test.js tests/natural-light-preview.test.js"
   },
   "engines": {
