@@ -1,3 +1,4 @@
+import "./performance-guard.js";
 import { createSkyForgeStore } from "./state-store.js";
 import { TimelineEngine } from "./timeline-engine.js";
 import { NodeGraph } from "./node-graph.js";
@@ -60,6 +61,7 @@ function boot() {
     lighting,
     render,
     ui,
+    performance: globalThis.__skyforgePerformanceGuard || null,
     openHub: (section) => ui.openHub(section),
     save: () => projects.download(),
     open: () => projects.openPicker(),
@@ -74,6 +76,7 @@ function boot() {
       timeline.dispose();
       ui.dispose();
       store.destroy();
+      globalThis.__skyforgePerformanceGuard?.dispose?.();
       delete globalThis.SkyForgeCore;
     }
   };
