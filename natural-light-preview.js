@@ -660,7 +660,7 @@
   function installFunctionHooks() {
     wrapAfter("drawSky", () => {
       renderPhysicalPreview();
-      scheduleRefresh(220, false);
+      scheduleRefresh(420, false);
     });
 
     [
@@ -671,7 +671,7 @@
       "sfLocationClockUseCityTime",
       "syncLocationLook",
       "sfApplySunAtmosphereMenu"
-    ].forEach((name) => wrapAfter(name, () => scheduleRefresh(160, true)));
+    ].forEach((name) => wrapAfter(name, () => scheduleRefresh(220, false)));
 
     wrapAfter("setSeg", (args) => {
       const label = String(args[0]?.textContent || "").toLowerCase();
@@ -680,7 +680,7 @@
       if (label.includes("hybrid")) {
         state.enabled = true;
         setOverlayOpacity(0.5);
-        scheduleRefresh(0, true);
+        scheduleRefresh(0, false);
       }
     });
 
@@ -708,7 +708,7 @@
         const naturalLight = candidate?.lighting?.naturalLight;
         if (naturalLight) {
           applySceneStateToControls(naturalLight);
-          scheduleRefresh(40, true);
+          scheduleRefresh(120, false);
         }
         return result;
       }
@@ -728,7 +728,7 @@
       setBadge("off", "PHYS 4 · OFF", "Physical preview disabled; procedural SkyForge preview remains active");
     } else {
       setBadge("loading", "PHYS 4 · SOLVING", "Physical preview enabled");
-      scheduleRefresh(0, true);
+      scheduleRefresh(0, false);
     }
     emit("skyforge:natural-light-status", { status: state.enabled ? "enabled" : "disabled" });
     return state.enabled;
@@ -743,7 +743,7 @@
     }
     state.overrides = { ...state.overrides, ...sanitized };
     if (root) root.SkyForgeNaturalLightOverrides = { ...state.overrides };
-    if (options.refresh !== false) scheduleRefresh(options.delay ?? 80, true);
+    if (options.refresh !== false) scheduleRefresh(options.delay ?? 120, false);
     emit("skyforge:natural-light-controls", getState());
     return { ...state.overrides };
   }
@@ -771,7 +771,7 @@
       target.closest?.("#sec-scene-location") ||
       target.closest?.("#sec-sun")
     ) {
-      scheduleRefresh(event.type === "input" ? 260 : 80, true);
+      scheduleRefresh(event.type === "input" ? 320 : 120, false);
     }
   }
 
