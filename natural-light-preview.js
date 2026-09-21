@@ -19,12 +19,13 @@
 
   const API_ENDPOINT = "/api/lighting/preview";
   const CLIENT_VERSION = "0.4.0";
-  const LUT_WIDTH = 96;
-  const LUT_HEIGHT = 48;
-  const TRANSMITTANCE_LUT_WIDTH = 32;
-  const TRANSMITTANCE_LUT_HEIGHT = 16;
-  const MULTIPLE_SCATTERING_LUT_WIDTH = 24;
-  const MULTIPLE_SCATTERING_LUT_HEIGHT = 12;
+  // Interactive preview quality: deliberately lower than final/export quality so the UI remains responsive on Intel Macs.
+  const LUT_WIDTH = 64;
+  const LUT_HEIGHT = 32;
+  const TRANSMITTANCE_LUT_WIDTH = 24;
+  const TRANSMITTANCE_LUT_HEIGHT = 12;
+  const MULTIPLE_SCATTERING_LUT_WIDTH = 12;
+  const MULTIPLE_SCATTERING_LUT_HEIGHT = 6;
   const VISUALIZATION_MODES = new Set(["sky", "transmittance", "multiple-scattering"]);
   const OVERRIDE_LIMITS = Object.freeze({
     groundAlbedo: [0, 1],
