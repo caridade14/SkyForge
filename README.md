@@ -1,80 +1,120 @@
-# SkyForge Backend
+# SkyForge Core v11
 
-Backend local para o prototipo SkyForge. A persistencia principal usa SQLite em `data/skyforge.db`.
+SkyForge é uma workstation local para criação de céus físicos, atmosfera, HDRI, animação de iluminação e integração com aplicações 3D. O projeto utiliza Node.js sem frameworks externos e mantém a persistência principal em SQLite (`data/skyforge.db`).
 
-## Como rodar
+## O que mudou no Core v11
 
-```powershell
-cd "D:\CARY PC\SF"
-npm run dev
+A build v11 preserva a UI SF30, mas adiciona uma camada modular e não destrutiva carregada pelo gateway Natural Light:
+
+- estado central único para projeto, Sol, atmosfera, nuvens, câmara, cor, render, timeline, nodes e bridges;
+- Undo/Redo com histórico de alterações;
+- autosave e recuperação local;
+- ficheiro `.skyforge` versão 3 com checksum;
+- timeline com keyframes, interpolação, play, pause, loop e scrub;
+- node graph tipado com Sun, Atmosphere, Clouds, Sky Scene, Color Grade e Output;
+- sincronização automática da UI com o motor físico Natural Light;
+- Command Center profissional, aberto com `Ctrl+Shift+H`;
+- splash screen antigo desativado por padrão;
+- render preview e render queue integrados ao estado central;
+- Blender Bridge real por localhost, com fallback para payload em disco;
+- testes de sintaxe e comportamento dos módulos principais.
+
+## Executar no Windows com Node.js portátil
+
+No CMD:
+
+```cmd
+set "PATH=C:\Users\c.tango\nodejs;%PATH%"
+cd /d "C:\Users\c.tango\SkyForge\SkyForge-feature-natural-light-engine"
+npm install
+npm start
 ```
 
-Depois abre:
+Abre:
 
 ```text
-http://localhost:3000/SF30.html
+http://localhost:3000
 ```
 
-## Endpoints principais
+O `npm start` executa `server-natural-light.js`, que inicia o backend principal numa porta interna e serve a aplicação pública na porta 3000.
 
-- `GET /api/health` verifica se a API esta online.
-- `GET /api/stats` mostra contadores gerais da aplicacao.
-- `GET /api/activity` mostra atividade recente de renders e versoes.
-- `GET /api/settings` carrega preferencias da aplicacao.
-- `PUT /api/settings` salva preferencias da aplicacao.
-- `POST /api/preview` gera um preview PNG da cena atual sem criar job de render.
-- `POST /api/scene/analyze` analisa sol/nuvens/output e devolve sugestoes para a UI.
-- `GET /api/projects` lista projetos salvos.
-- `POST /api/projects` cria um projeto.
-- `POST /api/projects/import` importa ficheiros `.skyforge` e bundles JSON antigos.
-- `GET /api/projects/:id` carrega um projeto.
-- `PUT /api/projects/:id` salva/substitui a cena de um projeto.
-- `DELETE /api/projects/:id` apaga um projeto, exceto `default`.
-- `POST /api/projects/:id/duplicate` duplica um projeto.
-- `GET /api/projects/:id/export` exporta o payload usado pelo ficheiro `.skyforge`.
-- `GET /api/projects/:id/versions` lista versoes/checkpoints do projeto.
-- `POST /api/projects/:id/versions` cria uma versao/checkpoint manual.
-- `POST /api/projects/:id/versions/:version/restore` restaura uma versao.
-- `GET /api/renders` lista a fila de render. Aceita `projectId` e `status` como query params.
-- `GET /api/renders/:id` carrega um job especifico.
-- `GET /api/renders/:id/artifacts` lista artefatos gerados.
-- `GET /api/renders/:id/logs` lista logs do worker para o job.
-- `POST /api/renders` cria um job de render.
-- `PATCH /api/renders/:id` atualiza status/progresso do job.
-- `POST /api/renders/:id/retry` recria um render com os mesmos settings.
-- `DELETE /api/renders/:id` remove um job da fila/historico.
-- `POST /api/renders/:id/cancel` cancela um job.
-- `GET /api/worker` mostra o estado do render worker local.
-- `GET /api/assets` lista assets.
-- `POST /api/assets` cria um asset.
-- `GET /api/assets/:id` carrega um asset.
-- `PUT /api/assets/:id` atualiza um asset.
-- `DELETE /api/assets/:id` apaga um asset.
-- `GET /api/users` lista usuarios locais.
-- `POST /api/users` cria um usuario local.
+## Atalhos do Core v11
 
-## Dados locais
+- `Ctrl+Shift+H`: abrir o Command Center;
+- `Ctrl+S`: exportar o projeto `.skyforge`;
+- `Ctrl+O`: abrir um projeto;
+- `Ctrl+N`: criar um projeto vazio;
+- `Ctrl+Z`: Undo;
+- `Ctrl+Shift+Z`: Redo;
+- `Space`: Play/Pause da timeline, quando o foco não está num campo de texto.
 
-Os dados principais ficam em:
+## Blender Bridge
 
-- `data/skyforge.db`
-- `data/outputs/*`
+O addon está em:
 
-Os JSON antigos em `data/projects/*.json` e `data/renders.json` sao migrados automaticamente para SQLite na primeira inicializacao do novo backend.
+```text
+integrations/blender/skyforge_bridge_addon.py
+```
 
-## Formato SkyForge
+Instala no Blender 4+ em **Edit > Preferences > Add-ons > Install from Disk**. Depois abre **World Properties > SkyForge Bridge** e pressiona **Start Bridge**.
 
-O botao Export guarda projetos como `nome-do-projeto.skyforge`. O ficheiro e JSON estruturado com assinatura `SkyForge Project File`, versao de formato, metadados da aplicacao, checksum simples e o payload do projeto. A importacao continua compativel com `.json` e `.skyforge.json` antigos.
+O addon escuta apenas em `127.0.0.1:8765`. O SkyForge envia:
 
-## Render worker
+- HDRI e rotação do Environment;
+- força do World;
+- elevação, azimute, intensidade, temperatura e diâmetro do Sol;
+- metadados ACEScg e exposição;
+- nome e estado do projeto.
 
-O backend tem um worker local simples que processa jobs `queued` automaticamente, atualiza progresso em SQLite e escreve um artefato/manifesto em `data/outputs`.
+Se o Blender estiver fechado, o payload mais recente fica em:
 
-Para cada render concluido ele grava:
+```text
+data/bridge/blender-world-latest.json
+```
 
-- `*.png` quando o formato pedido e PNG Preview.
-- `*.exr`, `*.hdr` ou `*.tiff` como artefato de prototipo quando estes formatos sao pedidos.
-- `*.render.json` manifesto com cena, settings e caminhos.
-- `*.preview.png` preview raster procedural do ceu.
+## Endpoints do Core v11
 
-Nesta fase o arquivo `.exr` ainda e um artefato de prototipo, nao um EXR/HDRI real. A ideia e validar a fila e o pipeline end-to-end antes de ligar o renderer de imagem.
+- `GET /api/core/health` — estado do Core v11;
+- `GET /api/lighting/health` — estado do motor Natural Light;
+- `POST /api/lighting/evaluate` — avaliação física;
+- `POST /api/lighting/preview` — preview com LUTs;
+- `GET /api/bridge/blender/health` — testa o addon Blender;
+- `POST /api/bridge/blender/send` — envia ou guarda o World payload.
+
+Os endpoints antigos de projetos, versões, assets, render queue e worker continuam disponíveis através do backend principal.
+
+## Testes
+
+```cmd
+npm test
+```
+
+Apenas os testes do Core v11:
+
+```cmd
+npm run test:core
+```
+
+## Estrutura adicionada
+
+```text
+src/client/core/
+├── bootstrap.js
+├── state-store.js
+├── timeline-engine.js
+├── node-graph.js
+├── project-service.js
+├── render-service.js
+├── lighting-sync.js
+├── blender-bridge.js
+├── ui-bridge.js
+└── skyforge-core-v11.css
+
+integrations/blender/
+├── skyforge_bridge_addon.py
+└── README.md
+```
+
+## Estado do render
+
+O pipeline atual valida projetos, fila, preview, worker, artefatos e bridge end-to-end. A geração EXR/HDR física definitiva ainda deve ser ligada a um renderer panorâmico de alta precisão; os artefatos EXR/HDR existentes continuam protótipos de pipeline.
