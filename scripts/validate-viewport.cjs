@@ -54,7 +54,10 @@ fs.mkdirSync(out,{recursive:true});
   // Rendering must sleep while idle, even when the legacy UI polls bridge/status.
   const frames=await page.evaluate(()=>SkyForgeCore.viewport.renderer.frames);await page.waitForTimeout(300);
   assert.equal(await page.evaluate(()=>SkyForgeCore.viewport.renderer.frames),frames,'no permanent render loop');
-  await page.locator('[data-vp=sun]').click();await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>SkyForgeCore.viewport.renderer.usingLut),true);
+  await page.locator('[data-vp=sun]').click();
+  // Wait for the actual GPU frame, not an arbitrary 150 ms on software renderers.
+  await page.waitForFunction(()=>SkyForgeCore.viewport.renderer.usingLut===true,{}, {timeout:10000});
+  assert.equal(await page.evaluate(()=>SkyForgeCore.viewport.renderer.usingLut),true);
   await page.screenshot({path:path.join(out,'viewport-physical-lut.png')});
   await page.locator('[data-vp=mode]').click();assert.equal(await page.evaluate(()=>SkyForgeCore.viewport.active),false);
   assert.equal(await page.locator('#vp-canvas').isVisible(),true,'legacy renderer still available');
@@ -74,6 +77,6 @@ fs.mkdirSync(out,{recursive:true});
   assert.match(await fallback.locator('.sf-3d-message').innerText(),/WebGL unavailable/);await fallback.close();
   assert.ok(!errors.some(e=>/Shader|WebGL.*INVALID|viewport\/|SkyViewportRenderer/.test(e)),errors.join('\n'));
   console.log('PASS: real WebGL, navigation, state, undo, LUT, idle rendering, no physical requests, fallback, context recovery and dispose');
- }catch(error){console.error('Browser diagnostics',errors);await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});throw error;}
+ }catch(error){console.error('Browser diagnostics',errors);console.error('Viewport state',await page.evaluate(()=>({active:globalThis.SkyForgeCore?.viewport?.active,error:globalThis.SkyForgeCore?.viewport?.error,sun:globalThis.SkyForgeCore?.store?.get('sun'),solar:globalThis.SkyForgeCore?.viewport?.payload?.evaluation?.solarPosition,usingLut:globalThis.SkyForgeCore?.viewport?.renderer?.usingLut,frame:globalThis.SkyForgeCore?.viewport?.frame})).catch(()=>null));await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});throw error;}
  finally{fs.writeFileSync(path.join(out,'browser-errors.json'),JSON.stringify(errors,null,2));await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
