@@ -47,12 +47,18 @@ export class SkyForgeUIBridge {
 
   disableLegacySplash() {
     try { localStorage.setItem("skyforge.startupSplash.hidden.v1", "1"); } catch {}
-    const hide = () => document.getElementById("sf-startup-ov")?.classList.remove("show");
+    const hide = () => {
+      const splash = document.getElementById("sf-startup-ov");
+      if (splash?.classList.contains("show")) splash.classList.remove("show");
+    };
     hide();
     globalThis.sfCloseStartupSplash = hide;
     globalThis.sfShowStartupSplash = (force) => { hide(); if (force) this.openHub(); };
     const splash = document.getElementById("sf-startup-ov");
-    if (splash) new MutationObserver(hide).observe(splash, { attributes: true, attributeFilter: ["class"] });
+    if (splash) {
+      this.splashObserver = new MutationObserver(hide);
+      this.splashObserver.observe(splash, { attributes: true, attributeFilter: ["class"] });
+    }
   }
 
   upgradeBranding() {
@@ -196,5 +202,6 @@ export class SkyForgeUIBridge {
     if (log && change.type) log.textContent = `[${new Date().toLocaleTimeString()}] ${change.label || change.type}\nSun ${state.sun?.elevation}° / ${state.sun?.azimuth}°\n${state.render?.width}×${state.render?.height} ${state.render?.format} ${state.render?.bitDepth}-bit`;
   }
 
-  dispose() { this.unsubscribe?.(); this.observer?.disconnect(); this.hub?.remove(); this.status?.remove(); this.toasts?.remove(); }
+  dispose() { this.unsubscribe?.(); this.observer?.disconnect(); this.splashObserver?.disconnect(); this.hub?.remove(); this.status?.remove(); this.toasts?.remove(); }
 }
+

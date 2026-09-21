@@ -22,6 +22,7 @@ const BLENDER_PORT = Number(process.env.SKYFORGE_BLENDER_PORT || 8765);
 const BRIDGE_DIR = path.join(__dirname, "data", "bridge");
 const BLENDER_SPOOL_FILE = path.join(BRIDGE_DIR, "blender-world-latest.json");
 const CLIENT_TAGS = [
+  '<link rel="stylesheet" href="/src/client/viewport/viewport.css">',
   '<link rel="stylesheet" href="/natural-light-ergonomics.css">',
   '<link rel="stylesheet" href="/src/client/core/skyforge-core-v11.css">',
   '<script src="/natural-light-preview.js" defer></script>',
@@ -361,3 +362,4 @@ start().catch((error) => {
   if (backendProcess && !backendProcess.killed) backendProcess.kill();
   process.exit(1);
 });
+

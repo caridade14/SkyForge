@@ -1,0 +1,56 @@
+name: Real 3D Viewport
+on:
+  push:
+    branches: [feature/real-3d-viewport]
+  pull_request:
+    branches: [feature/natural-light-engine, main]
+permissions:
+  contents: read
+concurrency:
+  group: viewport-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  portable-core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
+      - run: node --check server-natural-light.js
+  webgl-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser test tools outside the project
+        run: |
+          npm install --prefix "$RUNNER_TEMP/skyforge-browser" --no-save --package-lock=false playwright@1.58.2
+          "$RUNNER_TEMP/skyforge-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Test actual gateway and WebGL viewport
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/skyforge-browser/node_modules/playwright
+          SKYFORGE_TEST_OUTPUT: ${{ runner.temp }}/viewport-results
+        run: |
+          npm start > "$RUNNER_TEMP/skyforge-server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true; cat "$RUNNER_TEMP/skyforge-server.log"' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/core/health > /dev/null; then break; fi
+            sleep 0.5
+          done
+          node scripts/validate-viewport.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: viewport-browser-results
+          path: ${{ runner.temp }}/viewport-results
