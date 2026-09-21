@@ -29,7 +29,7 @@ export function installPreviewFetchScheduler(root = globalThis) {
 
   const originalFetch = root.fetch.bind(root);
   const inFlight = new Map();
-  let queue = Promise.resolve();
+  let active = null;
 
   function scheduledFetch(input, init = {}) {
     if (!isPreviewRequest(input)) return originalFetch(input, init);
@@ -38,14 +38,26 @@ export function installPreviewFetchScheduler(root = globalThis) {
     const existing = inFlight.get(key);
     if (existing) return existing.then((response) => response.clone());
 
-    const task = queue
-      .catch(() => undefined)
-      .then(() => originalFetch(input, init));
+    if (active && active.key !== key) {
+      active.controller?.abort();
+      active = null;
+    }
 
-    queue = task.then(() => undefined, () => undefined);
+    const controller = typeof root.AbortController === "function" ? new root.AbortController() : null;
+    const callerSignal = init.signal;
+    if (controller && callerSignal) {
+      if (callerSignal.aborted) controller.abort();
+      else callerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+
+    const requestInit = controller ? { ...init, signal: controller.signal } : init;
+    const task = originalFetch(input, requestInit);
+    active = { key, controller, task };
     inFlight.set(key, task);
+
     task.finally(() => {
       if (inFlight.get(key) === task) inFlight.delete(key);
+      if (active?.task === task) active = null;
     });
 
     return task.then((response) => response.clone());
@@ -53,11 +65,13 @@ export function installPreviewFetchScheduler(root = globalThis) {
 
   root.fetch = scheduledFetch;
   const api = {
-    version: "1.0.0",
+    version: "1.1.0",
     originalFetch,
     inFlightCount: () => inFlight.size,
     restore() {
       if (root.fetch === scheduledFetch) root.fetch = originalFetch;
+      active?.controller?.abort();
+      active = null;
       inFlight.clear();
       delete root.__skyforgePreviewFetchScheduler;
     }
@@ -111,7 +125,7 @@ export function installPerformanceGuard(root = globalThis, options = {}) {
   root.document?.addEventListener?.("visibilitychange", visibilityHandler);
 
   const api = {
-    version: "1.0.0",
+    version: "1.1.0",
     drawFps: fps,
     fetchScheduler,
     dispose() {
