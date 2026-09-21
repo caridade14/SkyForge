@@ -169,5 +169,5 @@ export class SkyViewportRenderer {
     }
     this.uniform(this.mesh,'uLines','uniform1f',lines?1:0);g.drawArrays(mode,0,count);enabled.forEach(a=>g.disableVertexAttribArray(a));
   }
-  dispose(){const g=this.gl;if(!g)return;this.resources.forEach(b=>g.deleteBuffer(b));this.resources=[];if(this.texture)g.deleteTexture(this.texture);if(this.sky)g.deleteProgram(this.sky);if(this.mesh)g.deleteProgram(this.mesh);}
+  dispose(){const g=this.gl;if(!g||g.isContextLost()){this.resources=[];return;}this.resources.forEach(b=>g.deleteBuffer(b));this.resources=[];if(this.texture)g.deleteTexture(this.texture);if(this.sky)g.deleteProgram(this.sky);if(this.mesh)g.deleteProgram(this.mesh);}
 }

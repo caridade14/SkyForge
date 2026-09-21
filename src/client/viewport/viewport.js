@@ -34,11 +34,14 @@ export class SkyForgeViewport {
     this.on(doc,'visibilitychange',()=>{if(doc.hidden)this.cancelFrame();else this.invalidate();});
     this.on(this.canvas,'webglcontextlost',e=>{
       e.preventDefault();this.restoreActive=this.active;this.lost=true;this.navigation.finish(true);this.setActive(false,false);
+      // All handles are invalidated by context loss. Release JS ownership now,
+      // never issue deletes against stale handles after restoration.
+      this.renderer?.dispose();this.renderer=null;
       this.message.textContent='Graphics context lost. Legacy view is available while recovering.';
     });
     this.on(this.canvas,'webglcontextrestored',()=>{
       if(this.disposed)return;
-      try{this.renderer?.dispose();this.createRenderer();this.lost=false;this.error=null;this.setLut(this.payload);this.setActive(this.restoreActive,false);}
+      try{this.createRenderer();this.lost=false;this.error=null;this.setLut(this.payload);this.setActive(this.restoreActive,false);}
       catch(error){this.error=error.message;this.message.textContent=error.message;}
     });
     if(this.root.ResizeObserver){this.observer=new this.root.ResizeObserver(()=>this.invalidate());this.observer.observe(this.container);}
