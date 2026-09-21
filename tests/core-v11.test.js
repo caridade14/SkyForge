@@ -101,6 +101,13 @@ test("Performance guard throttles the legacy drawSky loop", async () => {
   assert.equal(calls, 2);
 });
 
+test("Automatic Natural Light hooks do not force repeated evaluations", () => {
+  const preview = read("natural-light-preview.js");
+  assert.doesNotMatch(preview, /scheduleRefresh\([^\n]*,\s*true\)/);
+  assert.match(preview, /const LUT_WIDTH = 64;/);
+  assert.match(preview, /const MULTIPLE_SCATTERING_LUT_WIDTH = 12;/);
+});
+
 test("Natural-light gateway injects Core v11 and exposes Blender bridge routes", () => {
   const server = read("server-natural-light.js");
   assert.match(server, /skyforge-core-v11\.css/);
