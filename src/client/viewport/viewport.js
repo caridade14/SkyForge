@@ -74,6 +74,7 @@ export class SkyForgeViewport {
     active=Boolean(active&&this.renderer&&!this.lost&&!this.error);
     if(!active){this.navigation?.finish(true);this.cancelFrame();}
     this.active=active;this.root.SF_VIEWPORT_3D_ACTIVE=active;
+    this.container.parentElement?.classList.toggle('sf-3d-workspace',active);
     this.container.classList.toggle('sf-3d-active',active);this.host.hidden=!active;
     this.bar.querySelector('[data-vp="mode"]').textContent=active?'Legacy View':'3D View';
     this.bar.querySelector('.sf-3d-tools').hidden=!active;
@@ -121,7 +122,7 @@ export class SkyForgeViewport {
   dispose(){
     this.disposed=true;this.unsubscribe?.();this.navigation?.dispose();this.cancelFrame();this.observer?.disconnect();
     this.listeners.forEach(([t,n,f])=>t.removeEventListener(n,f));this.listeners=[];this.renderer?.dispose();
-    this.root.SF_VIEWPORT_3D_ACTIVE=false;this.container?.classList.remove('sf-3d-active');this.host?.remove();this.bar?.remove();
+    this.root.SF_VIEWPORT_3D_ACTIVE=false;this.container?.parentElement?.classList.remove('sf-3d-workspace');this.container?.classList.remove('sf-3d-active');this.host?.remove();this.bar?.remove();
     this.root.drawSky?.();
   }
 }

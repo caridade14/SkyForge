@@ -1,3 +1,4 @@
+.sf-3d-workspace > .vp-bar{display:none}
 #vp.sf-3d-active > :not(.sf-3d-host):not(.sf-3d-toolbar){display:none!important}
 .sf-3d-host{position:absolute;inset:0;z-index:150;background:#101722}
 .sf-3d-host[hidden],.sf-3d-toolbar [hidden]{display:none!important}

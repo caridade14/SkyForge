@@ -9,6 +9,7 @@ fs.mkdirSync(out,{recursive:true});
 (async()=>{
  const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ page.setDefaultTimeout(15000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  const requests=[];page.on('request',r=>{if(r.url().includes('/api/lighting/preview'))requests.push(r.postData());});
@@ -20,10 +21,10 @@ fs.mkdirSync(out,{recursive:true});
   const canvas=page.locator('.sf-3d-canvas'),box=await canvas.boundingBox();assert.ok(box&&box.width>0);
   const cx=box.x+box.width*0.5,cy=box.y+box.height*0.55;
   const read=()=>page.evaluate(()=>SkyForgeCore.store.get('viewport.camera'));
-  const original=await read();
+  const original=await read();console.log('Viewport initialized',box);
   const before=await canvas.screenshot();await page.screenshot({path:path.join(out,'viewport-initial.png')});
   await page.mouse.move(cx,cy);await page.mouse.down({button:'middle'});await page.mouse.move(cx+90,cy+30,{steps:6});await page.mouse.up({button:'middle'});
-  const orbited=await read();assert.notEqual(orbited.yaw,original.yaw,'MMB orbits');
+  const orbited=await read();console.log('Orbit completed');assert.notEqual(orbited.yaw,original.yaw,'MMB orbits');
   await page.evaluate(()=>SkyForgeCore.store.undo());assert.deepEqual(await read(),original,'one gesture = one undo step');
   await page.evaluate(()=>SkyForgeCore.store.redo());assert.deepEqual(await read(),orbited);
   await page.keyboard.down('Shift');await page.mouse.move(cx,cy);await page.mouse.down({button:'middle'});await page.mouse.move(cx+35,cy-25,{steps:4});await page.mouse.up({button:'middle'});await page.keyboard.up('Shift');
@@ -64,7 +65,7 @@ fs.mkdirSync(out,{recursive:true});
   await page.evaluate(()=>testLoss.restoreContext());await page.waitForFunction(()=>SkyForgeCore.viewport.active);
   await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>SkyForgeCore.viewport.renderer.gl.getError()),0);
   await page.evaluate(()=>{SkyForgeCore.store.set('viewport.camera',{...SkyForgeCore.store.get('viewport.camera'),yaw:1.234});SkyForgeCore.store.persist();});
-  await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>SkyForgeCore?.viewport?.active);assert.equal((await read()).yaw,1.234,'autosave restores camera after reload');
+  await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>globalThis.SkyForgeCore?.viewport?.active);assert.equal((await read()).yaw,1.234,'autosave restores camera after reload');
   await page.evaluate(()=>SkyForgeCore.viewport.dispose());assert.equal(await page.locator('.sf-3d-host').count(),0);assert.equal(await page.evaluate(()=>SF_VIEWPORT_3D_ACTIVE),false);
   const fallback=await browser.newPage({viewport:{width:1280,height:900}});
   await fallback.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){if(type==='webgl'||type==='webgl2')return null;return original.call(this,type,...args);};});
@@ -73,6 +74,6 @@ fs.mkdirSync(out,{recursive:true});
   assert.match(await fallback.locator('.sf-3d-message').innerText(),/WebGL unavailable/);await fallback.close();
   assert.ok(!errors.some(e=>/Shader|WebGL.*INVALID|viewport\/|SkyViewportRenderer/.test(e)),errors.join('\n'));
   console.log('PASS: real WebGL, navigation, state, undo, LUT, idle rendering, no physical requests, fallback, context recovery and dispose');
- }catch(error){await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});throw error;}
+ }catch(error){console.error('Browser diagnostics',errors);await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});throw error;}
  finally{fs.writeFileSync(path.join(out,'browser-errors.json'),JSON.stringify(errors,null,2));await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

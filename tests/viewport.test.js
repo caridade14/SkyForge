@@ -78,3 +78,13 @@ test('old projects without viewport state get camera defaults without mutating t
  const m=await camera();const old={camera:{exposure:2},sun:{elevation:20}};const before=JSON.stringify(old);
  assert.deepEqual(m.normalizeCamera(old.viewport?.camera),m.normalizeCamera());assert.equal(JSON.stringify(old),before);
 });
+
+test('splash observer is idempotent and cannot starve viewport animation frames',async()=>{
+ const {SkyForgeUIBridge}=await import(url(source('src/client/core/ui-bridge.js')));
+ const previous={document:global.document,MutationObserver:global.MutationObserver,close:global.sfCloseStartupSplash,show:global.sfShowStartupSplash};
+ let showing=true,removes=0,callback;
+ const splash={classList:{contains:()=>showing,remove:()=>{removes++;showing=false;}}};
+ global.document={getElementById:()=>splash};global.MutationObserver=class{constructor(fn){callback=fn;}observe(){}};
+ try{const ui=new SkyForgeUIBridge({});ui.disableLegacySplash();for(let i=0;i<5;i++)callback();assert.equal(removes,1);showing=true;callback();callback();assert.equal(removes,2);}
+ finally{global.document=previous.document;global.MutationObserver=previous.MutationObserver;global.sfCloseStartupSplash=previous.close;global.sfShowStartupSplash=previous.show;}
+});

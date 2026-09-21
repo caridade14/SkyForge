@@ -9,8 +9,9 @@ export const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b
 export const unit = a => mul(a, 1 / Math.max(1e-12, Math.hypot(...a)));
 export function normalizeCamera(value = {}) {
   const d = DEFAULT_CAMERA;
+  const yaw = finite(value.yaw, d.yaw);
   return {
-    yaw: ((finite(value.yaw, d.yaw) + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI,
+    yaw: yaw >= -Math.PI && yaw <= Math.PI ? yaw : ((yaw + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI,
     pitch: clamp(finite(value.pitch, d.pitch), -Math.PI/2 + 0.001, Math.PI/2 - 0.001),
     distance: clamp(finite(value.distance, d.distance), 0.25, 100000),
     target: [0,1,2].map(i => clamp(finite(value.target?.[i], d.target[i]), -1e6, 1e6)),
