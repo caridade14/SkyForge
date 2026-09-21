@@ -1,4 +1,5 @@
 import "./performance-guard.js";
+import { SkyForgeViewport } from "../viewport/viewport.js";
 import { createSkyForgeStore } from "./state-store.js";
 import { TimelineEngine } from "./timeline-engine.js";
 import { NodeGraph } from "./node-graph.js";
@@ -42,6 +43,7 @@ function boot() {
   });
 
   ui.init();
+  const viewport = new SkyForgeViewport(store).init();
   lighting.schedule();
   blender.startPolling(8000);
   store.batch("Finish SkyForge Core boot", (draft) => {
@@ -61,6 +63,7 @@ function boot() {
     lighting,
     render,
     ui,
+    viewport,
     performance: globalThis.__skyforgePerformanceGuard || null,
     openHub: (section) => ui.openHub(section),
     save: () => projects.download(),
@@ -71,6 +74,7 @@ function boot() {
     sendToBlender: (options) => blender.send(options),
     queueRender: (options) => render.queue(options),
     dispose() {
+      viewport.dispose();
       blender.stopPolling();
       lighting.dispose();
       timeline.dispose();
@@ -90,3 +94,4 @@ if (document.readyState === "loading") document.addEventListener("DOMContentLoad
 else boot();
 
 export { boot };
+

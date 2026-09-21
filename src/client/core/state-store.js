@@ -99,6 +99,13 @@ export const DEFAULT_SKYFORGE_STATE = Object.freeze({
     exposure: 1,
     mode: "Perspective"
   },
+  viewport: {
+    mode: "webgl",
+    camera: { yaw: 0.55, pitch: 0.22, distance: 12, target: [0, 0, 1.5], projection: "perspective" },
+    grid: true,
+    overlays: true,
+    referenceSphere: true
+  },
   color: {
     workingSpace: "ACEScg",
     displayTransform: "ACES 1.3",
@@ -372,3 +379,4 @@ export class SkyForgeStore {
 export function createSkyForgeStore(options = {}) {
   return new SkyForgeStore(options);
 }
+

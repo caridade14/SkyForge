@@ -12500,6 +12500,8 @@ function sfSceneHasSunAtmosphere(sceneObjects){
   });
 }
 function drawSky(){
+  // The isolated GPU viewport owns drawing while active; legacy scene tools remain intact.
+  if(window.SF_VIEWPORT_3D_ACTIVE)return;
   var box=sfEnsureViewportCanvas();if(!box)return;
   var w=box.w,h=box.h;
   var serverImg=document.getElementById('server-preview-img');
