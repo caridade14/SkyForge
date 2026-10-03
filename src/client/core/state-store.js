@@ -21,6 +21,40 @@ function normalizePath(path) {
   return String(path).split(".").filter(Boolean);
 }
 
+function pathsOverlap(a, b) {
+  const length = Math.min(a.length, b.length);
+  return a.slice(0, length).every((key, index) => key === b[index]);
+}
+
+function pathPresence(object, keys) {
+  let cursor = object;
+  return keys.map((key) => {
+    const exists = cursor != null && Object.prototype.hasOwnProperty.call(cursor, key);
+    cursor = exists ? cursor[key] : undefined;
+    return exists;
+  });
+}
+
+function restoreEditValue(object, edit) {
+  if (!edit.keys.length) return cloneValue(edit.before);
+  if (edit.presence.at(-1)) return setAtPath(object, edit.keys, edit.before);
+
+  const parents = [];
+  let cursor = object;
+  for (const key of edit.keys.slice(0, -1)) {
+    if (!cursor || typeof cursor !== "object" || !cursor[key] || typeof cursor[key] !== "object") return object;
+    parents.push([cursor, key]);
+    cursor = cursor[key];
+  }
+  if (cursor && typeof cursor === "object") delete cursor[edit.keys.at(-1)];
+  for (let index = parents.length - 1; index >= 0; index -= 1) {
+    const [parent, key] = parents[index];
+    if (edit.presence[index] || Object.keys(parent[key]).length) break;
+    delete parent[key];
+  }
+  return object;
+}
+
 export function getAtPath(object, path) {
   return normalizePath(path).reduce((value, key) => value?.[key], object);
 }
@@ -187,6 +221,7 @@ export class SkyForgeStore {
     this.history = [];
     this.future = [];
     this.autosaveTimer = null;
+    this.activeEdit = null;
     this.storage = options.storage === undefined ? getStorage() : options.storage;
   }
 
@@ -194,8 +229,9 @@ export class SkyForgeStore {
     return cloneValue(getAtPath(this.state, path));
   }
 
-  snapshot() {
-    return cloneValue(this.state);
+  snapshot(options = {}) {
+    const snapshot = cloneValue(this.state);
+    return options.committed && this.activeEdit ? restoreEditValue(snapshot, this.activeEdit) : snapshot;
   }
 
   subscribe(listener) {
@@ -215,8 +251,69 @@ export class SkyForgeStore {
     }
   }
 
+  beginEdit(path, options = {}) {
+    this.cancelEdit();
+    const store = this;
+    const keys = normalizePath(path);
+    const edit = {
+      keys,
+      path: keys.join("."),
+      label: options.label || `Change ${keys.join(".") || "project"}`,
+      before: cloneValue(keys.length ? getAtPath(this.state, keys) : this.state),
+      presence: pathPresence(this.state, keys)
+    };
+    const api = {
+      get active() { return store.activeEdit === edit; },
+      preview: (value) => {
+        if (!api.active) return false;
+        const before = keys.length ? getAtPath(this.state, keys) : this.state;
+        if (deepEqual(before, value)) return false;
+        if (keys.length) setAtPath(this.state, keys, value);
+        else this.state = cloneValue(value);
+        this.notify({ type: "set", path: edit.path, label: edit.label, before: cloneValue(before), after: cloneValue(value), transient: true });
+        return true;
+      },
+      commit: () => {
+        if (!api.active) return false;
+        const value = cloneValue(keys.length ? getAtPath(this.state, keys) : this.state);
+        this.activeEdit = null;
+        if (deepEqual(edit.before, value)) return false;
+        this.touchProject(keys);
+        const change = {
+          type: "set", path: edit.path, label: edit.label,
+          before: cloneValue(edit.before),
+          after: cloneValue(keys.length ? getAtPath(this.state, keys) : this.state),
+          transient: false
+        };
+        this.pushHistory(change);
+        this.scheduleAutosave();
+        this.notify(change);
+        return true;
+      },
+      cancel: () => {
+        if (!api.active) return false;
+        this.activeEdit = null;
+        const changed = !deepEqual(keys.length ? getAtPath(this.state, keys) : this.state, edit.before);
+        this.state = restoreEditValue(this.state, edit);
+        if (changed) this.notify({ type: "cancel", path: edit.path, label: edit.label, transient: true });
+        return true;
+      }
+    };
+    edit.api = api;
+    this.activeEdit = edit;
+    return api;
+  }
+
+  cancelEdit(path) {
+    if (this.activeEdit && (path === undefined || pathsOverlap(this.activeEdit.keys, normalizePath(path)))) {
+      return this.activeEdit.api.cancel();
+    }
+    return false;
+  }
+
   set(path, value, options = {}) {
     const normalizedPath = normalizePath(path);
+    this.cancelEdit(normalizedPath);
     const before = normalizedPath.length ? getAtPath(this.state, normalizedPath) : this.state;
     if (deepEqual(before, value)) return false;
 
@@ -252,11 +349,23 @@ export class SkyForgeStore {
 
   batch(label, mutator, options = {}) {
     if (typeof mutator !== "function") throw new TypeError("mutator must be a function");
-    const before = this.snapshot();
-    const draft = this.snapshot();
+    // Mutators start from committed values so an external sun update never
+    // incorporates a half-finished gesture. Unrelated engine batches keep it live.
+    const before = this.snapshot({ committed: true });
+    const draft = cloneValue(before);
     mutator(draft);
     if (deepEqual(before, draft)) return false;
+    const edit = this.activeEdit;
+    let previewValue;
+    if (edit) {
+      if (!deepEqual(getAtPath(before, edit.keys), getAtPath(draft, edit.keys))) this.cancelEdit();
+      else previewValue = cloneValue(getAtPath(this.state, edit.keys));
+    }
     this.state = draft;
+    if (edit && this.activeEdit === edit) {
+      if (edit.keys.length) setAtPath(this.state, edit.keys, previewValue);
+      else this.state = cloneValue(previewValue);
+    }
     if (!options.transient) {
       this.touchProject([]);
       if (options.record !== false) {
@@ -265,13 +374,13 @@ export class SkyForgeStore {
           path: "",
           label: label || "Batch change",
           before,
-          after: this.snapshot(),
+          after: this.snapshot({ committed: true }),
           transient: false
         });
       }
       this.scheduleAutosave();
     }
-    this.notify({ type: "batch", path: "", label: label || "Batch change" });
+    this.notify({ type: "batch", path: "", label: label || "Batch change", transient: Boolean(options.transient) });
     return true;
   }
 
@@ -298,6 +407,7 @@ export class SkyForgeStore {
   }
 
   undo() {
+    this.cancelEdit();
     const change = this.history.pop();
     if (!change) return false;
     if (change.path) setAtPath(this.state, change.path, change.before);
@@ -309,6 +419,7 @@ export class SkyForgeStore {
   }
 
   redo() {
+    this.cancelEdit();
     const change = this.future.pop();
     if (!change) return false;
     if (change.path) setAtPath(this.state, change.path, change.after);
@@ -320,6 +431,7 @@ export class SkyForgeStore {
   }
 
   reset(options = {}) {
+    this.cancelEdit();
     this.history.length = 0;
     this.future.length = 0;
     this.state = cloneValue(options.state || createDefaultState());
@@ -344,7 +456,7 @@ export class SkyForgeStore {
   persist() {
     if (!this.storage) return false;
     try {
-      this.storage.setItem(this.storageKey, JSON.stringify(this.state));
+      this.storage.setItem(this.storageKey, JSON.stringify(this.snapshot({ committed: true })));
       return true;
     } catch (error) {
       console.warn("SkyForge autosave failed", error);
@@ -353,6 +465,7 @@ export class SkyForgeStore {
   }
 
   restore() {
+    this.cancelEdit();
     if (!this.storage) return false;
     try {
       const raw = this.storage.getItem(this.storageKey);
@@ -371,6 +484,7 @@ export class SkyForgeStore {
   }
 
   destroy() {
+    this.cancelEdit();
     clearTimeout(this.autosaveTimer);
     this.listeners.clear();
   }
@@ -379,4 +493,3 @@ export class SkyForgeStore {
 export function createSkyForgeStore(options = {}) {
   return new SkyForgeStore(options);
 }
-

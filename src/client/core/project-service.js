@@ -52,7 +52,7 @@ export class ProjectService {
   }
 
   createDocument() {
-    const state = this.store.snapshot();
+    const state = this.store.snapshot({ committed: true });
     if (this.timeline) state.timeline.keyframes = this.timeline.serializeKeyframes();
     if (this.nodeGraph) state.nodes = this.nodeGraph.serialize();
     const payloadText = JSON.stringify(state);

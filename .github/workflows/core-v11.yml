@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - feature/skyforge-core-v11
+      - feature/viewport-sun-gizmo
   pull_request:
     branches:
+      - feature/real-3d-viewport
       - feature/natural-light-engine
       - main
   workflow_dispatch:

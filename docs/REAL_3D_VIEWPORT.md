@@ -82,3 +82,50 @@ GPU resources. Dispose releases buffers, programs, texture, observers and listen
 For manual verification: launch with `npm start`, orbit/pan/dolly, use axis buttons,
 change Sun/cloud controls, save/reopen a project, switch to Legacy View and back.
 Verify native Mac trackpad feel and GPU performance on the actual target hardware.
+
+## Sun direction gizmo
+
+The gold **Sun** marker edits `sun.azimuth` and `sun.elevation` with a plain left
+drag. An arrow at the viewport edge represents a sun outside the current view;
+drag it into the view to place the manual direction. Alt/Option + left drag and
+middle mouse retain their existing orbit/pan/dolly behavior, including on the
+marker. Escape cancels. A click without movement creates no history entry.
+
+`sun-gizmo.js` projects the Z-up east/north/up direction using the camera basis and
+field of view. In perspective it agrees with the rendered sky ray; in orthographic
+it uses an orientation hemisphere around the view target. The marker is a small
+DOM overlay with canvas-based hit testing, so it adds no WebGL resources or runtime
+dependencies. It follows camera/scene invalidation and creates no animation loop.
+
+The Store's scoped `beginEdit` transaction publishes provisional sun values to
+rendering and the UI Bridge. Releasing the pointer commits one Undo entry containing
+both angles. Escape, lost capture, blur, context loss, switching view, disposal, or
+an overlapping external edit cancel the transaction. Other sun properties remain
+unchanged. Autosave and project export use committed snapshots during a gesture;
+previous project payloads need no new keys or schema migration. Undo/Redo and
+loading a project synchronize the marker and controls through the existing Store.
+
+The UI Bridge assigns sun controls and angle labels directly, without synthetic
+input events or legacy hooks. Elevation covers -90° to 90°; both sliders accept 0.1°
+steps while the Store retains the full evaluated physical precision. Gizmo edits
+use the analytic manual preview when they diverge from the cached physical sun.
+**Use physical sun** still restores the cached evaluated direction and LUT. The
+gizmo never calls the physical refresh API; existing deduplication and automatic
+Natural Light hooks remain in place.
+
+Validation includes projection/drag math, input priority, pointer cancellation,
+one Undo per gesture, focused-control blur, concurrent edits, autosave/export during
+a gesture and bidirectional controls. The browser gate also exercises the actual
+marker with WebGL, physical request counts, idle rendering, persistence and context
+recovery. For a separately installed Chrome on macOS, set `PLAYWRIGHT_CHANNEL=chrome`
+alongside `PLAYWRIGHT_MODULE`; CI uses the bundled Chromium.
+
+The complete gizmo browser gate also passed on macOS with native Chrome WebGL:
+ANGLE/Metal on Intel Iris Plus Graphics 645, with no WebGL errors. Artifacts include
+the GPU report and screenshots of the manual gizmo and restored physical LUT.
+
+To try on Mac: refresh the page at `http://127.0.0.1:3000`, select **3D View** if
+needed, drag the gold Sun marker with one finger click-and-drag, and watch the Sun
+angles update. Press Escape while holding the drag to cancel; use Cmd+Z / Cmd+Shift+Z
+to Undo/Redo a completed gesture. Option + drag still orbits, and Option + Shift +
+drag pans. Press **Use physical sun** to return to the evaluated direction.

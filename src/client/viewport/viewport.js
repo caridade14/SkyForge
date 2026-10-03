@@ -1,6 +1,7 @@
 import { normalizeCamera, axisView, cameraBasis } from './camera.js';
 import { ViewportNavigation } from './navigation.js';
 import { SkyViewportRenderer } from './renderer.js';
+import { SunGizmo } from './sun-gizmo.js';
 
 export class SkyForgeViewport {
   constructor(store, {root=globalThis, container=root.document?.getElementById('vp')}={}) {
@@ -10,7 +11,7 @@ export class SkyForgeViewport {
     if(!this.container)return this;
     const doc=this.root.document;
     this.host=doc.createElement('div');this.host.className='sf-3d-host';this.host.hidden=true;
-    this.host.innerHTML='<canvas class="sf-3d-canvas" tabindex="0" aria-label="3D sky viewport. Middle mouse or Alt drag to orbit. Shift to pan. Scroll to dolly."></canvas><div class="sf-3d-hud"></div><div class="sf-3d-axis" aria-label="View orientation"></div><div class="sf-3d-help">MMB / Alt drag: orbit · Shift: pan · Ctrl: dolly · Scroll: zoom · Numpad 1/3/7/5 · Home: reset</div>';
+    this.host.innerHTML='<canvas class="sf-3d-canvas" tabindex="0" aria-label="3D sky viewport. Left drag the sun marker to edit its direction; Escape cancels. Middle mouse or Alt drag to orbit. Shift to pan. Scroll to dolly."></canvas><div class="sf-3d-sun" role="img"><span>Sun</span></div><div class="sf-3d-hud"></div><div class="sf-3d-axis" aria-label="View orientation"></div><div class="sf-3d-help">LMB on Sun: direction · Escape: cancel · MMB / Alt drag: orbit · Shift: pan · Ctrl: dolly · Scroll: zoom · Numpad 1/3/7/5 · Home: reset</div>';
     this.canvas=this.host.querySelector('canvas');this.hud=this.host.querySelector('.sf-3d-hud');
     this.axes=this.host.querySelector('.sf-3d-axis');
     for(const [axis,view] of [['X','right'],['Y','front'],['Z','top']]){
@@ -24,6 +25,10 @@ export class SkyForgeViewport {
     this.container.append(this.host,this.bar);
     this.camera=this.getCamera();
     try{this.createRenderer();}catch(error){this.error=error.message;this.message.textContent=this.error;}
+    this.sunGizmo=new SunGizmo(this.canvas,this.host.querySelector('.sf-3d-sun'),{
+      store:this.store,root:this.root,getCamera:()=>this.camera,getFov:()=>Number(this.store.get('camera.fov'))||60,
+      isActive:()=>this.active,invalidate:()=>this.invalidate()
+    });
     this.navigation=new ViewportNavigation(this.canvas,{
       root:this.root,getCamera:()=>this.getCamera(),getFov:()=>Number(this.store.get('camera.fov'))||60,
       preview:c=>{this.camera=normalizeCamera(c);this.invalidate();},commit:(c,label)=>this.commit(c,label)
@@ -31,9 +36,9 @@ export class SkyForgeViewport {
     this.unsubscribe=this.store.subscribe((state)=>this.sync(state));
     this.on(this.root,'skyforge:natural-light-updated',e=>this.setLut(e.detail));
     this.on(this.root,'skyforge:lighting-preview',e=>this.setLut(e.detail));
-    this.on(doc,'visibilitychange',()=>{if(doc.hidden)this.cancelFrame();else this.invalidate();});
+    this.on(doc,'visibilitychange',()=>{if(doc.hidden){this.sunGizmo.finish(true);this.cancelFrame();}else this.invalidate();});
     this.on(this.canvas,'webglcontextlost',e=>{
-      e.preventDefault();this.restoreActive=this.active;this.lost=true;this.navigation.finish(true);this.setActive(false,false);
+      e.preventDefault();this.restoreActive=this.active;this.lost=true;this.sunGizmo.finish(true);this.navigation.finish(true);this.setActive(false,false);
       // All handles are invalidated by context loss. Release JS ownership now,
       // never issue deletes against stale handles after restoration.
       this.renderer?.dispose();this.renderer=null;
@@ -63,7 +68,7 @@ export class SkyForgeViewport {
     const nextCamera=normalizeCamera(state.viewport?.camera);
     if(JSON.stringify(nextCamera)!==this.committedCamera){
       this.committedCamera=JSON.stringify(nextCamera);
-      this.navigation?.finish(true);this.camera=nextCamera;
+      this.sunGizmo?.finish(true);this.navigation?.finish(true);this.camera=nextCamera;
     }
     const desired=state.viewport?.mode!=='legacy';
     if(desired!==this.active)this.setActive(desired,false);
@@ -75,7 +80,7 @@ export class SkyForgeViewport {
   }
   setActive(active,persist=true){
     active=Boolean(active&&this.renderer&&!this.lost&&!this.error);
-    if(!active){this.navigation?.finish(true);this.cancelFrame();}
+    if(!active){this.sunGizmo?.finish(true);this.navigation?.finish(true);this.cancelFrame();}
     this.active=active;this.root.SF_VIEWPORT_3D_ACTIVE=active;
     this.container.parentElement?.classList.toggle('sf-3d-workspace',active);
     this.container.classList.toggle('sf-3d-active',active);this.host.hidden=!active;
@@ -87,6 +92,7 @@ export class SkyForgeViewport {
   }
   action(action){
     if(!action)return;
+    this.sunGizmo.finish(true);
     if(action==='mode'){this.setActive(!this.active);return;}
     this.navigation.finish(true);
     if(action==='home')this.commit(axisView(this.getCamera(),'home'),'Reset viewport');
@@ -108,7 +114,9 @@ export class SkyForgeViewport {
       const r=this.container.getBoundingClientRect();if(r.width<1||r.height<1)return;
       try{
         this.renderer.resize(r.width,r.height,this.root.devicePixelRatio||1);
-        this.renderer.draw(this.store.snapshot(),this.camera);
+        const state=this.store.snapshot();
+        this.renderer.draw(state,this.camera);
+        this.sunGizmo.update(state.sun,this.camera,r.width,r.height,Number(state.camera?.fov)||60);
         this.hud.textContent=`WEBGL · ${this.camera.projection.toUpperCase()} · ${this.renderer.usingLut?'NATURAL LIGHT LUT':'ANALYTIC SKY PREVIEW'}\n${this.renderer.canvas.width} × ${this.renderer.canvas.height} · Clouds: procedural layer · Display preview`;
         this.updateAxes();
       }catch(error){this.error=`3D preview failed: ${error.message}`;this.setActive(false,false);}
@@ -123,7 +131,7 @@ export class SkyForgeViewport {
   }
   cancelFrame(){if(this.frame!==null)this.root.cancelAnimationFrame(this.frame);this.frame=null;}
   dispose(){
-    this.disposed=true;this.unsubscribe?.();this.navigation?.dispose();this.cancelFrame();this.observer?.disconnect();
+    this.disposed=true;this.unsubscribe?.();this.sunGizmo?.dispose();this.navigation?.dispose();this.cancelFrame();this.observer?.disconnect();
     this.listeners.forEach(([t,n,f])=>t.removeEventListener(n,f));this.listeners=[];this.renderer?.dispose();
     this.root.SF_VIEWPORT_3D_ACTIVE=false;this.container?.parentElement?.classList.remove('sf-3d-workspace');this.container?.classList.remove('sf-3d-active');this.host?.remove();this.bar?.remove();
     this.root.drawSky?.();

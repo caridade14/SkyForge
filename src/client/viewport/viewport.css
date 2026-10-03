@@ -5,6 +5,11 @@
 .sf-3d-canvas{width:100%;height:100%;display:block;touch-action:none;outline:none;cursor:grab}
 .sf-3d-canvas:focus-visible{outline:1px solid #e8812a;outline-offset:-2px}
 .sf-3d-canvas:active{cursor:grabbing}
+.sf-3d-sun{position:absolute;width:30px;height:30px;transform:translate(-50%,-50%);border:2px solid #ffd173;border-radius:50%;background:#36210cb3;box-shadow:0 0 0 3px #121923b3,0 0 14px #ffb54580;pointer-events:none;color:#ffe1a4}
+.sf-3d-sun::before{content:'';position:absolute;inset:7px;border-radius:50%;background:#ffd173}
+.sf-3d-sun span{position:absolute;top:32px;left:50%;transform:translateX(-50%);font:10px system-ui,sans-serif;text-shadow:0 1px 3px #000}
+.sf-3d-sun.sf-sun-dragging{border-color:#fff4d7;box-shadow:0 0 0 4px #ffb54560}
+.sf-3d-sun.sf-sun-offscreen::before{inset:8px;border-radius:0;background:none;border-top:2px solid #ffd173;border-right:2px solid #ffd173;transform:rotate(calc(var(--sf-sun-angle) + 45deg))}
 .sf-3d-toolbar{position:absolute;left:8px;right:8px;top:8px;z-index:151;display:flex;align-items:center;flex-wrap:wrap;gap:4px;pointer-events:none;font:10px system-ui,sans-serif}
 .sf-3d-toolbar button,.sf-3d-axis button{pointer-events:auto;color:#cdd4df;border:1px solid #3c4654;background:#18202ded;border-radius:4px;padding:5px 8px;cursor:pointer;font:10px system-ui,sans-serif}
 .sf-3d-toolbar button:hover,.sf-3d-axis button:hover{background:#334155;color:white}
