@@ -9,6 +9,12 @@ const CONTROL_BINDINGS = {
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (match) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[match]));
 const normalize = (value) => String(value || "").replace(/\s+/g, " ").replace(/[:：]$/, "").trim().toLowerCase();
 const editable = (target) => Boolean(target?.closest?.("input,textarea,select,[contenteditable='true']"));
+const SUN_CONTROL_SELECTOR = '[data-sf-core-path="sun.azimuth"],[data-sf-core-path="sun.elevation"]';
+const angleText = (value) => `${Number(value.toFixed(1))}°`;
+
+function matchingControls(root, selector) {
+  return [...(root.matches?.(selector) ? [root] : []), ...(root.querySelectorAll?.(selector) || [])];
+}
 
 function controlLabel(control) {
   return normalize(control.closest(".sl-wrap,.s-row,.tog-row,.prefs-field,.rp-sec")?.querySelector(".sl-name,.s-lbl,.tog-lbl,.prefs-lbl,.rp-title")?.textContent);
@@ -27,6 +33,8 @@ export class SkyForgeUIBridge {
     this.toasts = null;
     this.unsubscribe = null;
     this.observer = null;
+    this.disposed = false;
+    this.sunControlDocuments = new Map();
   }
 
   init() {
@@ -148,12 +156,13 @@ export class SkyForgeUIBridge {
   }
 
   bindControls(root) {
-    root.querySelectorAll?.("input,select").forEach((control) => {
+    matchingControls(root, "input,select").forEach((control) => {
       if (this.bound.has(control)) return;
       const [path, scale] = CONTROL_BINDINGS[controlLabel(control)] || [];
       if (!path) return;
       this.bound.add(control);
       control.dataset.sfCorePath = path;
+      if (path === "sun.azimuth" || path === "sun.elevation") this.bindSunControlEvents(control.ownerDocument || document);
       const commit = () => {
         const numeric = Number(control.value);
         const value = control.type === "checkbox" ? control.checked : Number.isFinite(numeric) ? numeric * scale : control.value;
@@ -164,6 +173,48 @@ export class SkyForgeUIBridge {
       const value = this.store.get(path);
       if (value !== undefined) control.type === "checkbox" ? control.checked = Boolean(value) : control.value = typeof value === "number" ? value / scale : value;
     });
+    this.syncSunControls(this.store.snapshot(), root);
+  }
+
+  bindSunControlEvents(documentRef) {
+    if (this.disposed || this.sunControlDocuments.has(documentRef)) return;
+    const sync = (event) => {
+      const path = event.target?.dataset?.sfCorePath;
+      // Document bubbling follows the late legacy listeners on the input itself.
+      if (!this.disposed && (path === "sun.azimuth" || path === "sun.elevation")) this.syncSunControls(this.store.snapshot(), documentRef);
+    };
+    documentRef.addEventListener("input", sync);
+    documentRef.addEventListener("change", sync);
+    this.sunControlDocuments.set(documentRef, sync);
+  }
+
+  syncSunControls(state, root = document) {
+    const documentRef = root.ownerDocument || (root.getElementById ? root : document);
+    matchingControls(root, SUN_CONTROL_SELECTOR).forEach((control) => {
+      const axis = control.dataset.sfCorePath.split(".")[1];
+      const value = state.sun?.[axis];
+      if (!Number.isFinite(value)) return;
+      if (control.type === "range") {
+        // The full elevation range also represents physical night-time directions.
+        control.min = axis === "elevation" ? "-90" : "0";
+        control.max = axis === "elevation" ? "90" : "360";
+        control.step = "0.1";
+      }
+      control.value = value;
+      const label = control.closest(".sl-wrap,.s-row,.tog-row,.prefs-field,.rp-sec")?.querySelector(".sl-val");
+      if (label) label.textContent = angleText(value);
+    });
+    const { azimuth, elevation } = state.sun || {};
+    for (const [id, value] of [["v-az", azimuth], ["v-elev", elevation]]) {
+      const label = documentRef.getElementById(id);
+      if (label && Number.isFinite(value)) label.textContent = angleText(value);
+    }
+    if (Number.isFinite(azimuth) && Number.isFinite(elevation)) {
+      for (const id of ["rp-sun", "ai-sun"]) {
+        const label = documentRef.getElementById(id);
+        if (label) label.textContent = `${angleText(azimuth)} / ${angleText(elevation)}`;
+      }
+    }
   }
 
   observe() {
@@ -186,6 +237,7 @@ export class SkyForgeUIBridge {
   }
 
   refresh(state, change = {}) {
+    this.syncSunControls(state);
     this.status.querySelector("span").textContent = stateSummary(state);
     this.status.dataset.tone = state.engine?.lighting?.status === "error" ? "error" : state.engine?.lighting?.status === "evaluating" ? "busy" : "ready";
     const set = (field, value) => { const element = this.hub.querySelector(`[data-field="${field}"]`); if (element) element.textContent = value; };
@@ -202,6 +254,13 @@ export class SkyForgeUIBridge {
     if (log && change.type) log.textContent = `[${new Date().toLocaleTimeString()}] ${change.label || change.type}\nSun ${state.sun?.elevation}° / ${state.sun?.azimuth}°\n${state.render?.width}×${state.render?.height} ${state.render?.format} ${state.render?.bitDepth}-bit`;
   }
 
-  dispose() { this.unsubscribe?.(); this.observer?.disconnect(); this.splashObserver?.disconnect(); this.hub?.remove(); this.status?.remove(); this.toasts?.remove(); }
+  dispose() {
+    this.disposed = true;
+    for (const [documentRef, sync] of this.sunControlDocuments) {
+      documentRef.removeEventListener("input", sync);
+      documentRef.removeEventListener("change", sync);
+    }
+    this.sunControlDocuments.clear();
+    this.unsubscribe?.(); this.observer?.disconnect(); this.splashObserver?.disconnect(); this.hub?.remove(); this.status?.remove(); this.toasts?.remove();
+  }
 }
-
