@@ -6,8 +6,9 @@ Inspected `feature/natural-light-engine` at `b7cbaa9` (PR #7). The live page is
 `SF30.html`, served by `server.js` through `server-natural-light.js`, which injects
 Core bootstrap and Natural Light scripts. `drawSky` renders into a **2D** canvas;
 `sfMakeCamera`, `sfProject3D` and multiple document-capture mouse controllers emulate
-perspective. Scene objects and selection still live in the legacy outliner/DOM.
-Core state and that legacy scene are only partially synchronized.
+perspective. Unsupported scene types retain the legacy outliner/DOM implementation. Editable
+reference sphere/cube/plane objects and their selection now live in the Core Store
+with an explicit adapter to those existing tools.
 
 The new `src/client/viewport/` boundary contains:
 
@@ -33,7 +34,8 @@ Natural Light hooks are preserved. The new canvas captures only its own events a
 window level before legacy document listeners. Other controls retain their input
 handlers. Existing viewport overlays are hidden only while the new viewport is
 active. **Legacy View** restores the scene editing tools and the original renderer.
-The navigation gizmo is a view-orientation gizmo, not an object transform gizmo.
+The corner navigation gizmo controls view orientation; a separate X/Y/Z gizmo
+controls the selected reference object.
 
 ## Natural Light and preview limits
 
@@ -58,8 +60,8 @@ The reference sphere is an optional viewport aid, not a scene object or export.
 This is a display preview with exposure, a simple Reinhard tone map and approximate
 gamma display conversion. It does not implement ACES/OCIO, professional HDR/EXR
 export, import legacy scene geometry, or replace the existing Blender bridge.
-Legacy object transforms, A/B capture, object selection, moon/stars/FX and old
-viewport screenshot/export tools remain in **Legacy View**. They do not capture
+Unsupported legacy object transforms, A/B capture, moon/stars/FX and old viewport
+screenshot/export tools remain in **Legacy View**. They do not capture
 or export this GPU viewport. This boundary must stay explicit until scene migration.
 
 Rendering is on demand, suspended in hidden tabs, limited to about one megapixel
@@ -129,3 +131,69 @@ needed, drag the gold Sun marker with one finger click-and-drag, and watch the S
 angles update. Press Escape while holding the drag to cancel; use Cmd+Z / Cmd+Shift+Z
 to Undo/Redo a completed gesture. Option + drag still orbits, and Option + Shift +
 drag pans. Press **Use physical sun** to return to the evaluated direction.
+
+
+## Editable reference geometry
+
+The existing **Object Builder** adds **SPHERE**, **CUBE** and **PLANE**, while keeping
+all previous types available. The WebGL renderer draws shared real triangle meshes
+with depth testing and the existing Sun direction/intensity/exposure. A sphere has
+a 1 m radius, a cube is 2 m across, and a two-sided plane is 4 m across in XY. Uniform
+scale is supported. Gold depth-tested edges highlight the selection. The original
+optional **Reference sphere** remains an independent, noneditable viewport aid.
+
+`scene.referenceObjects` maps stable IDs to `{id,type,name,position,scale,visible,
+locked}`. `scene.selectedReferenceId` stores selection. `scene-object-adapter.js`
+projects references into existing outliner rows and routes reference creation,
+selection, inspector, visibility, locking, duplication and deletion to the Core
+Store. Unsupported types keep their Legacy handlers. DOM updates are guarded and
+observer records are drained to prevent feedback loops. Hidden and locked objects
+remain in persistence; locking prevents editing but permits selection.
+
+Coordinates are metres. Legacy uses **X east / Y up / Z north**; WebGL uses **X east /
+Y north / Z up**. The explicit conversion is legacy `[x,y,z]` to viewport `[x,z,y]`,
+with no sign or unit change. This permutation changes handedness, so new meshes are
+generated directly in Z-up rather than permuting imported vertices. The inspector
+labels references as **metres · Z up** and retains fractional positions; nonreference
+objects keep their existing Y-up controls. Tests verify north/east/up against the
+existing physical Sun convention.
+
+Click a visible mesh to select the nearest surface, or click empty space to clear
+reference selection. Drag a colored axis with plain LMB to move only X, Y or Z.
+Option/Alt + drag and MMB keep navigation priority, including on the handles.
+**Frame selected**, the inspector's frame button, and **F** center the camera on the
+selected object. F is ignored in text/numeric inputs. Near view-parallel axes are
+hidden to avoid unstable movement; orbit slightly or use the numeric inspector.
+
+`reference-gizmo.js` captures a camera-facing drag plane containing the chosen
+axis and intersects real perspective/orthographic rays. A scoped
+`beginEdit(['scene','referenceObjects',id,'position'])` publishes previews, commits
+one Undo entry on release, and cancels on Escape, lost capture, blur, hidden tab,
+view/mode changes, locking, hiding, context loss and disposal. Core shortcuts have
+one owner in WebGL so Legacy and Core do not both process Undo/Redo.
+
+Core project files and autosave retain the object map and selection. Committed
+snapshots exclude provisional movement. Legacy collection likewise serializes
+committed reference transforms; explicit SPHERE/CUBE/PLANE rows survive Legacy
+save/restore. Old Core files without reference state open empty. Legacy object
+arrays migrate only explicit reference types; raw unsupported objects remain
+available for Legacy View and retain their data.
+
+Geometry and picking helpers are dependency-free. GPU buffers are allocated once
+per primitive and reused for all positions/scales. Only relevant state/view changes
+request a draw. Object edits do not schedule physical Natural Light evaluations,
+and manual/physical Sun preview behavior remains unchanged.
+
+This increment supports reference translation and uniform scale. Rotation is
+disabled for references; it does not import models, render volumetric clouds, cast
+object shadows, or add HDR/EXR export. Picking spheres uses their analytic surface
+(the display mesh is tessellated). Existing camera distance and coordinate limits
+apply, so extreme scales may exceed the framing range. Safari/Apple GPU validation
+remains separate from the local Intel Mac/Chrome gate and CI software WebGL gate.
+
+Validation includes unit tests for primitive normals/picking/projection, all axes
+and both projections, nearest/hidden/locked selection, cancellation, Undo/Redo,
+legacy coordinates, project/autosave persistence and GPU resource reuse/disposal.
+The real-browser gate adds actual Object Builder/inspector/outliner interactions,
+framebuffer geometry checks, reference gestures/shortcuts, project migration and
+reload, plus the existing Sun/navigation/context/idle/physical-request regressions.

@@ -5,8 +5,10 @@ on:
     branches:
       - feature/skyforge-core-v11
       - feature/viewport-sun-gizmo
+      - feature/viewport-reference-objects
   pull_request:
     branches:
+      - feature/viewport-sun-gizmo
       - feature/real-3d-viewport
       - feature/natural-light-engine
       - main

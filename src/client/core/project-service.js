@@ -1,4 +1,5 @@
 import { cloneValue } from "./state-store.js";
+import { prepareReferenceScene } from "./scene-object-adapter.js";
 
 const FILE_FORMAT = "SkyForge Project File";
 const FILE_KIND = "skyforge.project";
@@ -87,7 +88,7 @@ export class ProjectService {
   }
 
   loadDocument(document, options = {}) {
-    const payload = cloneValue(this.validateDocument(document));
+    const payload = prepareReferenceScene(cloneValue(this.validateDocument(document)));
     this.store.replace(payload, { label: options.label || "Open project", record: false });
     if (this.timeline) this.timeline.loadKeyframes(payload.timeline?.keyframes || {});
     if (this.nodeGraph) {

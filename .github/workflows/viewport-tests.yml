@@ -1,9 +1,9 @@
 name: Real 3D Viewport
 on:
   push:
-    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo]
+    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo, feature/viewport-reference-objects]
   pull_request:
-    branches: [feature/real-3d-viewport, feature/natural-light-engine, main]
+    branches: [feature/viewport-sun-gizmo, feature/real-3d-viewport, feature/natural-light-engine, main]
 permissions:
   contents: read
 concurrency:
