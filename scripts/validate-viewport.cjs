@@ -13,6 +13,7 @@ fs.mkdirSync(out, { recursive: true });
   // omits the software-GPU flags to exercise its native backend.
   const launch = { headless: true };
   if (process.env.PLAYWRIGHT_CHANNEL) launch.channel = process.env.PLAYWRIGHT_CHANNEL;
+  if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) launch.executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
   if (process.env.SKYFORGE_WEBGL_BACKEND !== 'native') launch.args = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
   const browser = await chromium.launch(launch);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -360,6 +361,15 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal((await readSun()).elevation, solar.apparentElevationDeg);
     await assertSunUI(await readSun());
     await page.screenshot({ path: path.join(out, 'viewport-physical-lut.png') });
+
+    // Geometry visibility needs a deterministic daytime fixture. The physical
+    // evaluation above follows the current date/time and can legitimately be
+    // dark at night; the preview/UI gate verifies that night behavior separately.
+    await mutateAndDraw(() => SkyForgeCore.store.set('sun', {
+      ...SkyForgeCore.store.get('sun'), azimuth: 215, elevation: 45,
+      intensity: 1.8, temperature: 6500
+    }, { record: false }));
+    assert.equal(await page.evaluate(() => SkyForgeCore.viewport.renderer.usingLut), false);
 
     // Reference geometry is created through the existing Object Builder, picked
     // with real pointer rays and translated through the visible XYZ handles.

@@ -199,12 +199,14 @@
 
   function buildInputFromDocument(documentRef, windowRef = root, explicitOverrides = null) {
     const now = new Date();
-    const dateString = elementValue(documentRef, "scene-date", now.toISOString().slice(0, 10));
+    // An unset Core date is represented by an empty HTML date input. Treat it
+    // as today's date, rather than sending an invalid ISO string beginning T.
+    const dateString = elementValue(documentRef, "scene-date", now.toISOString().slice(0, 10)) || now.toISOString().slice(0, 10);
     const timeString = elementValue(
       documentRef,
       "scene-time",
       `${pad2(now.getHours())}:${pad2(now.getMinutes())}`
-    );
+    ) || "12:00";
     const timezoneLabel = elementValue(documentRef, "city-tz", "");
     const browserOffsetMinutes = -(now.getTimezoneOffset?.() || 0);
     const timezoneOffsetMinutes = resolveTimezoneOffsetMinutes(
@@ -229,7 +231,7 @@
     return {
       latitude: clamp(parseFirstNumber(elementValue(documentRef, "city-lat", restored.latitude ?? 48.8566), 48.8566), -90, 90),
       longitude: clamp(parseFirstNumber(elementValue(documentRef, "city-lon", restored.longitude ?? 2.3522), 2.3522), -180, 180),
-      dateTime: `${dateString}T${timeString || "12:00"}:00${formatOffset(timezoneOffsetMinutes)}`,
+      dateTime: `${dateString}T${timeString.length === 5 ? `${timeString}:00` : timeString}${formatOffset(timezoneOffsetMinutes)}`,
       timezoneOffsetMinutes,
       altitudeMeters: clamp(finiteOr(restored.altitudeMeters, 35), -500, 20_000),
       pressureHpa: clamp(finiteOr(restored.pressureHpa, 1013.25), 100, 1100),

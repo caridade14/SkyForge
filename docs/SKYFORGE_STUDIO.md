@@ -4,6 +4,8 @@ Run `npm start` in the original project folder and open <http://127.0.0.1:3000>.
 
 The Sky, Animation and Nodes workspace presets use the same scene and services. Drag the panel separators, toggle Outliner/Inspector/Editors, or use Shift+Space to maximize the viewport. Layout preferences persist locally. **Legacy workspace**, **Legacy View** and **Core** keep the original tools accessible, including unsupported legacy object types and the Blender Bridge.
 
+Studio's File/Edit/View/Sky/Scene/Animation/Nodes/Help menus call those same Core services. Core opens Project; Reset Workspace restores the Studio panels without replacing the project or camera. Undo/Redo availability follows history. The N button opens the reference geometry menu in Studio; the original object builder and full original menubar remain in Legacy workspace.
+
 ## Scene editing
 
 Add a sphere, cube or plane below the outliner. Click an object in the viewport or outliner to select it. Use Move, Rotate and Scale in the toolbar (G/R/S with the canvas focused), then drag a colored X/Y/Z handle. Choose global or local orientation for movement and rotation; scaling always changes local dimensions. The Selection inspector edits position in metres, XYZ Euler rotation in degrees and independent scale factors. Names, visibility, locking, duplication and deletion use the existing outliner adapter.
@@ -22,7 +24,9 @@ In Animation, select an animatable property and insert a keyframe. Scrub or chan
 
 ## GPU cloud preview
 
-The viewport toolbar selects **GPU clouds** or the previous **Cloud layer** fallback, with Low, Medium and High quality. GPU clouds raymarch procedural 3D density, with coverage, density, altitude/thickness in metres, erosion, detail, wind speed/direction and timeline frame. Sun direction/intensity illuminate the volume with approximate self-shadowing. Unsupported fragment precision or a rejected shader automatically falls back to the cloud layer; the HUD reports the effective mode.
+The Sky inspector opens Sun/Atmosphere, Clouds and Location directly. Sun presets, cloud presets and cloud shape selections update project state and support Undo. Cumulus, Stratus, Cirrus, Cumulonimbus and Altostratus change the procedural density shape. Density correctly maps the existing 0–10 slider to 0–1; sliders and labels receive node, animation, project and history updates without dispatching legacy input handlers.
+
+The viewport toolbar selects **GPU clouds** or the previous **Cloud layer** fallback, with Low, Medium and High quality. GPU clouds raymarch procedural 3D density, with coverage, density, altitude/thickness in metres, erosion, detail, wind speed in km/h, wind direction and timeline frame. Wind is converted to metres per second inside the shader. Sun direction/intensity illuminate the volume with approximate self-shadowing. A two-sample Sun ray through the same density field attenuates direct light on reference meshes. The cloud-shadow program caches independently and returns to unshadowed references if a driver rejects it. Unsupported fragment precision or a rejected volume shader falls back to the cloud layer; the HUD reports the effective cloud mode.
 
 | Quality | Primary / shadow samples | Maximum pixels |
 | --- | ---: | ---: |
@@ -30,7 +34,9 @@ The viewport toolbar selects **GPU clouds** or the previous **Cloud layer** fall
 | Medium | 28 / 2 | 500,000 |
 | High | 44 / 3 | 900,000 |
 
-The budget also caps Retina resolution. Ray distance is limited to 12 km, with approximate lighting and procedural cloud shapes; there are no mesh-to-cloud shadows, volumetric imports or production render claims. Low is the default for integrated Intel GPUs. Timings in the validation document include GPU readback overhead and do not establish sustained playback FPS.
+The budget also caps Retina resolution. The cloud range is 65–220 km depending on altitude, allowing the unchanged startup camera to see the 2.4 km layer. Atmospheric distance softens the range boundary. This extends the interval without increasing the sample budget. Lighting and procedural cloud shapes remain approximate; mesh-to-cloud shadows and volumetric imports are not implemented. Low is the default for integrated Intel GPUs. Timings in the validation document include GPU readback overhead and do not establish sustained playback FPS.
+
+Manual sky directions use an RGB scattering approximation, with Rayleigh/Mie phase response, ozone absorption and solar air-mass extinction. Sun direction, intensity, sky fill and cloud lighting share the scene state; direct sunlight is suppressed below the horizon. A compatible Natural Light LUT takes precedence without applying another optical tint over its evaluated radiance. Its cosine-weighted hemisphere average supplies reference/cloud ambient fill. This is relative preview lighting, not calibrated irradiance or a replacement for the spectral engine.
 
 ## Projects and preview images
 

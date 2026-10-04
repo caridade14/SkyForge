@@ -16,6 +16,7 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
 (async () => {
   const launch = { headless: true };
   if (process.env.PLAYWRIGHT_CHANNEL) launch.channel = process.env.PLAYWRIGHT_CHANNEL;
+  if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) launch.executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
   if (process.env.SKYFORGE_WEBGL_BACKEND !== 'native') launch.args = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
   // Public BrowserServer ownership gives cleanup a precise fallback: terminate
   // only this gate's browser if native driver shutdown stalls.
@@ -39,7 +40,7 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
   const draw = async (fn, arg) => { const before = await frames(); await evaluate(fn, arg); await nextFrame(before); };
   const numeric = async (selector, value) => { const input = page.locator(selector); await input.fill(String(value)); await input.press('Tab'); };
   const controlValue = (selector, value) => page.locator(selector).first().evaluate((input, value) => {
-    const scale = { 'clouds.coverage': .01, 'clouds.density': .01, 'sun.intensity': .1, 'camera.exposure': .1 }[input.dataset.sfCorePath] || 1;
+    const scale = Number(input.dataset.sfCoreScale) || 1;
     input.value = String(value / scale); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
   }, value);
   const stage = label => { console.log(`Studio: ${label}`); results.stages.push(label); };

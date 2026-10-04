@@ -1,9 +1,9 @@
 name: Real 3D Viewport
 on:
   push:
-    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo, feature/viewport-reference-objects, feature/studio-editors, feature/studio-volumetric-preview]
+    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo, feature/viewport-reference-objects, feature/studio-editors, feature/studio-volumetric-preview, fix/studio-natural-preview-ui]
   pull_request:
-    branches: [feature/studio-editors, feature/viewport-reference-objects, feature/viewport-sun-gizmo, feature/real-3d-viewport, feature/natural-light-engine, main]
+    branches: [feature/studio-volumetric-preview, feature/studio-editors, feature/viewport-reference-objects, feature/viewport-sun-gizmo, feature/real-3d-viewport, feature/natural-light-engine, main]
 permissions:
   contents: read
 concurrency:
@@ -51,6 +51,7 @@ jobs:
           done
           node scripts/validate-viewport.cjs
           node scripts/validate-studio.cjs
+          node scripts/validate-preview-ui.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

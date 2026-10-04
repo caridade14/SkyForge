@@ -7,7 +7,7 @@ const SKY_VERTEX = `attribute vec2 aPosition; varying vec2 vNdc;
 void main(){vNdc=aPosition;gl_Position=vec4(aPosition,0.9999,1.0);}`;
 const SKY_CLOUD_LAYER = ` if(rd.z>0.01 && ro.z<uAltitude && uCoverage>0.001){
    vec2 p=(ro+rd*((uAltitude-ro.z)/rd.z)).xy/850.0;
-   p+=vec2(sin(uWindDirection),cos(uWindDirection))*uTime*uWindSpeed/850.0;
+   p+=vec2(sin(uWindDirection),cos(uWindDirection))*uTime*(uWindSpeed/3.6)/850.0;
    float n=fbm(p)-uErosion*0.18*noise(p*9.0);
    float cloud=smoothstep(1.0-uCoverage-0.12,1.0-uCoverage+0.12,n);
    cloud*=clamp(uDensity*1.4,0.0,1.0)*smoothstep(0.01,0.10,rd.z);
@@ -16,9 +16,9 @@ const SKY_CLOUD_LAYER = ` if(rd.z>0.01 && ro.z<uAltitude && uCoverage>0.001){
  }`;
 const SKY_FRAGMENT = `precision highp float;
 varying vec2 vNdc;
-uniform vec3 uEye,uForward,uRight,uUp,uSun,uSunTint;
+uniform vec3 uEye,uForward,uRight,uUp,uSun,uSunTint,uSkyAmbient;
 uniform float uAspect,uTan,uDistance,uOrtho,uExposure,uSunRadius,uIntensity;
-uniform float uCoverage,uDensity,uAltitude,uErosion,uDetail,uTime,uWindSpeed,uWindDirection,uHaze,uThickness,uContrast,uSaturation,uTurbidity,uRayleigh,uMie,uMieG,uOzone;
+uniform float uCoverage,uDensity,uAltitude,uErosion,uDetail,uCloudKind,uTime,uWindSpeed,uWindDirection,uHaze,uThickness,uCloudDistance,uContrast,uSaturation,uTurbidity,uRayleigh,uMie,uMieG,uOzone;
 uniform sampler2D uLut; uniform float uHasLut; uniform vec2 uLutSize;
 const float PI=3.14159265359;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
@@ -31,32 +31,62 @@ vec3 sampleSky(vec3 rd){
  vec2 i=floor(p),f=fract(p);
  return mix(mix(lutPixel(i),lutPixel(i+vec2(1,0)),f.x),mix(lutPixel(i+vec2(0,1)),lutPixel(i+vec2(1,1)),f.x),f.y);
 }
-vec3 display(vec3 c){c=max(c,vec3(0))*uExposure;c=c/(1.0+c);c=mix(vec3(dot(c,vec3(0.2126,0.7152,0.0722))),c,uSaturation);c=(c-0.5)*uContrast+0.5;return pow(max(c,vec3(0)),vec3(1.0/2.2));}
+vec3 display(vec3 c){c=max(c,vec3(0))*uExposure;c=c/(1.0+c);c=mix(vec3(dot(c,vec3(0.2126,0.7152,0.0722))),c,uSaturation);c=max((c-0.5)*uContrast+0.5,vec3(0));return mix(12.92*c,1.055*pow(c,vec3(1.0/2.4))-0.055,step(vec3(0.0031308),c));}
+vec3 scatteringPreview(vec3 rd,float daylight){
+ // RGB single-scattering approximation for interactive manual directions.
+ // The cached spectral LUT takes precedence when its inputs match the scene.
+ float mu=clamp(dot(rd,uSun),-1.0,1.0),g=clamp(uMieG,-0.95,0.95);
+ float phaseR=0.0596831*(1.0+mu*mu);
+ float phaseM=(1.0-g*g)/(4.0*PI*pow(max(0.01,1.0+g*g-2.0*g*mu),1.5));
+ vec3 ray=vec3(0.050,0.105,0.245)*max(0.0,uRayleigh/2.8);
+ vec3 aerosol=vec3(0.85,1.0,1.27)*max(0.001,(uTurbidity-1.0)*0.035+uMie*6.0);
+ vec3 gas=vec3(0.025,0.035,0.001)*max(0.0,uOzone/0.6);
+ float path=1.0/max(0.035,rd.z);
+ vec3 tau=ray+aerosol;
+ vec3 scatter=(1.0-exp(-tau*path))*(ray*phaseR+aerosol*phaseM)/max(tau,vec3(0.0001));
+ vec3 sunlight=sqrt(max(uSunTint,vec3(0)));
+ vec3 sky=scatter*sunlight*exp(-gas*path*0.5)*6.0*uIntensity;
+ // Bounded indirect-light approximation; not a multiple-scattering solver.
+ sky+=ray*daylight*(0.7+0.35*(1.0-max(0.0,rd.z)))*uIntensity;
+ sky=mix(sky,uSkyAmbient*2.0,clamp(uHaze*0.18,0.0,0.6));
+ return sky+vec3(0.001,0.002,0.006)*(1.0-daylight);
+}
 void main(){
  vec3 off=uRight*vNdc.x*uAspect*uTan+uUp*vNdc.y*uTan;
  vec3 ro=uEye+off*uDistance*uOrtho;
  vec3 rd=normalize(uForward+off*(1.0-uOrtho));
  float daylight=smoothstep(-0.15,0.15,uSun.z);
- vec3 horizon=mix(vec3(0.012,0.016,0.03),vec3(0.52,0.67,0.86),daylight);
- vec3 zenith=mix(vec3(0.001,0.002,0.009),vec3(0.055,0.19,0.48),daylight);
- vec3 sky=mix(horizon,zenith,pow(max(rd.z,0.0),0.45));
- sky=mix(sky,horizon,clamp(uHaze*0.25+(uTurbidity-2.4)*0.035,0.0,0.7));
- if(uHasLut>0.5&&rd.z>=0.0)sky=sampleSky(rd);
- // Interactive optical grading is an approximate preview, also over a cached LUT.
- sky*=mix(vec3(1.0),vec3(0.82,0.93,1.15),clamp((uRayleigh-2.8)/4.0,-0.5,1.0));
- sky*=vec3(1.0+(uTurbidity-2.4)*0.015,1.0,1.0-(uTurbidity-2.4)*0.025);
- sky*=vec3(1.0-(uOzone-0.6)*0.08,1.0-(uOzone-0.6)*0.04,1.0);
- sky+=uSunTint*pow(max(0.0,dot(rd,uSun)),max(1.0,2.0+uMieG*10.0))*uMie*8.0*daylight;
+ vec3 sky=scatteringPreview(rd,daylight);
+ // No extra Rayleigh/Mie/ozone tint is applied over the evaluated LUT.
+ if(uHasLut>0.5)sky=sampleSky(rd)*uIntensity;
  float disc=smoothstep(cos(uSunRadius*1.08),cos(uSunRadius*0.92),dot(rd,uSun));
  if(rd.z>=0.0&&uSun.z>=0.0)sky+=uSunTint*disc*uIntensity*8.0;
  ${SKY_CLOUD_LAYER}
- if(rd.z<0.0)sky=mix(vec3(0.025,0.03,0.04),horizon,exp(rd.z*12.0));
+ if(rd.z<0.0)sky=mix(uSkyAmbient*0.18,sky,exp(rd.z*12.0));
  gl_FragColor=vec4(display(sky),1.0);
 }`;
-const MESH_VERTEX = `attribute vec3 aPosition,aNormal,aColor;uniform mat4 uVP;uniform mat3 uRotation;uniform vec3 uOffset,uSize;varying vec3 vNormal,vColor;
-void main(){vNormal=uRotation*(aNormal/uSize);vColor=aColor;gl_Position=uVP*vec4(uRotation*(aPosition*uSize)+uOffset,1);}`;
-const MESH_FRAGMENT = `precision mediump float;varying vec3 vNormal,vColor;uniform vec3 uSun,uSunTint;uniform float uExposure,uIntensity,uLines,uContrast,uSaturation;
-void main(){vec3 normal=normalize(vNormal);if(!gl_FrontFacing)normal=-normal;float diffuse=max(0.0,dot(normal,uSun));vec3 c=vColor*(vec3(0.2)+diffuse*uIntensity*uSunTint*0.5);if(uLines>0.5)c=vColor;c=c*uExposure/(1.0+c*uExposure);c=mix(vec3(dot(c,vec3(0.2126,0.7152,0.0722))),c,uSaturation);c=(c-0.5)*uContrast+0.5;gl_FragColor=vec4(pow(max(c,vec3(0)),vec3(1.0/2.2)),1);}`;
+const MESH_VERTEX = `attribute vec3 aPosition,aNormal,aColor;uniform mat4 uVP;uniform mat3 uRotation;uniform vec3 uOffset,uSize;varying vec3 vNormal,vColor,vWorld;
+void main(){vNormal=uRotation*(aNormal/uSize);vColor=aColor;vWorld=uRotation*(aPosition*uSize)+uOffset;gl_Position=uVP*vec4(vWorld,1);}`;
+const MESH_FRAGMENT = `precision mediump float;varying vec3 vNormal,vColor,vWorld;uniform vec3 uSun,uSunTint,uSkyAmbient;uniform float uExposure,uIntensity,uLines,uContrast,uSaturation;
+void main(){vec3 normal=normalize(vNormal);if(!gl_FrontFacing)normal=-normal;float diffuse=max(0.0,dot(normal,uSun));float hemisphere=0.45+0.55*max(0.0,normal.z);vec3 c=vColor*(uSkyAmbient*hemisphere+diffuse*uIntensity*uSunTint*0.5);if(uLines>0.5)c=vColor;c=max(c,vec3(0))*uExposure/(1.0+max(c,vec3(0))*uExposure);c=mix(vec3(dot(c,vec3(0.2126,0.7152,0.0722))),c,uSaturation);c=max((c-0.5)*uContrast+0.5,vec3(0));gl_FragColor=vec4(mix(12.92*c,1.055*pow(c,vec3(1.0/2.4))-0.055,step(vec3(0.0031308),c)),1);}`;
+
+function cloudShadowFragment() {
+  // A two-sample Sun ray through the same animated density field. This is a
+  // bounded cloud-shadow preview, independent of quality and mesh complexity.
+  const density = volumetricCloudFunctions('low').split('vec3 marchClouds(')[0];
+  const shadow = `uniform float uCoverage,uDensity,uAltitude,uThickness,uErosion,uDetail,uCloudKind,uTime,uWindSpeed,uWindDirection,uCloudDistance;
+${density}
+float cloudShadow(vec3 point){
+ if(uSun.z<=0.001||uCoverage<0.001||uDensity<0.001||point.z>=uAltitude+uThickness)return 1.0;
+ float nearT=max(0.0,(uAltitude-point.z)/uSun.z),farT=min(uCloudDistance,(uAltitude+uThickness-point.z)/uSun.z);
+ if(farT<=nearT)return 1.0;
+ float stepSize=(farT-nearT)/2.0,depth=0.0;
+ for(int i=0;i<2;i++)depth+=cloudDensity(point+uSun*(nearT+(float(i)+0.5)*stepSize))*stepSize;
+ return exp(-depth*0.004);
+}
+`;
+  return MESH_FRAGMENT.replace('precision mediump float', 'precision highp float').replace('void main(){', shadow + '\nvoid main(){').replace('diffuse*uIntensity*uSunTint*0.5', 'diffuse*cloudShadow(vWorld)*uIntensity*uSunTint*0.5');
+}
 
 function volumeFragment(quality) {
   // Render the lower hemisphere first; an elevated camera may see clouds below.
@@ -131,10 +161,29 @@ export function lutMatchesAtmosphere(payload,atmosphere={},baseline=null){
   }
   return true;
 }
-function sunTint(temperature){
-  // Warm/cool RGB approximation for the preview; no spectral or OCIO claims.
-  const delta=clamp((finite(temperature,5200)-5200)/10000,-0.5,1.5);
-  return [clamp(1-delta*0.18,0.7,1),clamp(0.88+delta*0.05,0.4,1),clamp(0.65+delta*0.4,0.25,1)];
+export function previewSunTint(sun={},atmosphere={}){
+  // Relative RGB transport for preview lighting, not calibrated irradiance.
+  const elevation=clamp(finite(sun.elevation,7),-90,90);
+  if(elevation<=0)return [0,0,0];
+  const zenith=90-elevation,airMass=Math.min(40,1/(Math.sin(elevation*Math.PI/180)+0.50572*Math.pow(96.07995-zenith,-1.6364)));
+  const warm=clamp((6500-finite(sun.temperature,5200))/6500,-0.7,0.7);
+  const tint=[clamp(1+Math.min(0,warm)*0.2,0.5,1),clamp(1-Math.max(0,warm)*0.25,0.5,1),clamp(1-Math.max(0,warm)*0.7,0.35,1)];
+  const rayScale=clamp(finite(atmosphere.rayleigh,2.8)/2.8,0,4);
+  const aerosol=Math.max(0.001,(clamp(finite(atmosphere.turbidity,2.4),1,15)-1)*0.035+clamp(finite(atmosphere.mieCoefficient,0.005),0,0.1)*6);
+  const ozone=Math.max(0,finite(atmosphere.ozone,0.6)/0.6);
+  return tint.map((v,i)=>v*Math.exp(-airMass*([0.050,0.105,0.245][i]*rayScale+[0.85,1,1.27][i]*aerosol+[0.025,0.035,0.001][i]*ozone)));
+}
+export function skyAmbientFromLut(lut){
+  const width=Number(lut?.layout?.width),height=Number(lut?.layout?.height),pixels=lut?.pixels;
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||width>256||height>128||!Array.isArray(pixels))return null;
+  const stride=Array.isArray(lut.layout.channels)?lut.layout.channels.length:pixels.length/(width*height);
+  if(stride<3||!Number.isInteger(stride)||pixels.length<width*height*stride)return null;
+  const sum=[0,0,0];let total=0;
+  for(let y=0;y<height;y++){
+    const theta=(y+0.5)/height*Math.PI/2,weight=Math.sin(theta)*Math.cos(theta);
+    for(let x=0;x<width;x++){for(let c=0;c<3;c++)sum[c]+=Math.max(0,finite(pixels[(y*width+x)*stride+c],0))*weight;total+=weight;}
+  }
+  return sum.map(v=>v/total);
 }
 
 export class SkyViewportRenderer {
@@ -146,7 +195,7 @@ export class SkyViewportRenderer {
     try {
       const precision=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT);
       this.volumeSupported=Boolean(precision&&precision.precision>=16);
-      this.sky=program(gl,SKY_VERTEX,this.volumeSupported?SKY_FRAGMENT:SKY_FRAGMENT.replace('precision highp float','precision mediump float'));this.mesh=program(gl,MESH_VERTEX,MESH_FRAGMENT);
+      this.sky=program(gl,SKY_VERTEX,this.volumeSupported?SKY_FRAGMENT:SKY_FRAGMENT.replace('precision highp float','precision mediump float'));this.baseMesh=program(gl,MESH_VERTEX,MESH_FRAGMENT);this.mesh=this.baseMesh;
       if(!this.volumeSupported)this.cloudFallbackReason='Volumetric preview requires high precision fragment shaders. Showing the cloud layer.';
       this.floatTexture=Boolean(gl.getExtension('OES_texture_float'));
       this.quad=this.buffer(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]));
@@ -173,6 +222,13 @@ export class SkyViewportRenderer {
     if(loc===undefined){loc=this.gl.getUniformLocation(p,name);cache.set(name,loc);}
     this.gl[type](loc,value);
   }
+  shadowMesh() {
+    if (!this.cloudMesh && !this.shadowFailure) {
+      try { this.cloudMesh=program(this.gl,MESH_VERTEX,cloudShadowFragment()); }
+      catch (error) { this.shadowFailure=error.message || 'Cloud shadow shader unavailable'; }
+    }
+    return this.cloudMesh || this.baseMesh;
+  }
   cloudProgram(settings){
     if(settings.mode==='layer'){this.cloudFallbackReason=null;return this.sky;}
     if(!this.volumeSupported){this.cloudFallbackReason='Volumetric preview requires high precision fragment shaders. Showing the cloud layer.';return this.sky;}
@@ -189,6 +245,7 @@ export class SkyViewportRenderer {
   setLut(payload,atmosphere){
     const packed=packLut(payload?.skyViewLut,this.floatTexture);
     this.hasLut=Boolean(packed);this.payload=payload;this.lutAtmosphere=atmosphere?{...atmosphere}:this.lastAtmosphere?{...this.lastAtmosphere}:null;
+    this.lutAmbient=skyAmbientFromLut(payload?.skyViewLut);
     if(!packed)return;
     const g=this.gl;g.bindTexture(g.TEXTURE_2D,this.texture);
     g.texImage2D(g.TEXTURE_2D,0,g.RGBA,packed.width,packed.height,0,g.RGBA,this.floatTexture?g.FLOAT:g.UNSIGNED_BYTE,packed.data);
@@ -216,14 +273,19 @@ export class SkyViewportRenderer {
     gl.useProgram(skyProgram);gl.bindBuffer(gl.ARRAY_BUFFER,this.quad);
     const attr=gl.getAttribLocation(skyProgram,'aPosition');gl.enableVertexAttribArray(attr);gl.vertexAttribPointer(attr,2,gl.FLOAT,false,0,0);
     const u=(n,t,v)=>this.uniform(skyProgram,n,t,v);
-    for(const [n,v] of Object.entries({uEye:basis.eye,uForward:basis.forward,uRight:basis.right,uUp:basis.up,uSun:sun,uSunTint:sunTint(state.sun?.temperature)}))u(n,'uniform3fv',v);
     this.usingLut=this.hasLut&&lutMatchesSun(this.payload,state.sun)&&lutMatchesAtmosphere(this.payload,state.atmosphere,this.lutAtmosphere);
+    const direct=previewSunTint(state.sun,state.atmosphere);
+    const daylight=clamp((sun[2]+0.1)/0.2,0,1);
+    const ambient=this.usingLut&&this.lutAmbient?this.lutAmbient.map(value=>value*intensity):[0.12*daylight*intensity+0.001,0.19*daylight*intensity+0.002,0.32*daylight*intensity+0.004];
+    for(const [n,v] of Object.entries({uEye:basis.eye,uForward:basis.forward,uRight:basis.right,uUp:basis.up,uSun:sun,uSunTint:direct,uSkyAmbient:ambient}))u(n,'uniform3fv',v);
     for(const [n,v] of Object.entries({uAspect:aspect,uTan:Math.tan(clamp(fov,15,120)*Math.PI/360),uDistance:camera.distance,uOrtho:camera.projection==='orthographic'?1:0,uExposure:exposure,uContrast:contrast,uSaturation:saturation,uSunRadius:clamp(Number(state.sun?.angularDiameter)||0.53,0.01,10)*Math.PI/360,uIntensity:intensity,...cloudUniforms(state),uTurbidity:clamp(finite(state.atmosphere?.turbidity,2.4),1,15),uRayleigh:clamp(finite(state.atmosphere?.rayleigh,2.8),0,10),uMie:clamp(finite(state.atmosphere?.mieCoefficient,0.005),0,0.1),uMieG:clamp(finite(state.atmosphere?.mieDirectionalG,0.8),-0.99,0.99),uOzone:clamp(finite(state.atmosphere?.ozone,0.6),0,3),uHaze:Math.max(0,Number(state.atmosphere?.haze)||0),uHasLut:this.usingLut?1:0}))u(n,'uniform1f',v);
     u('uLutSize','uniform2fv',this.lutSize);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);u('uLut','uniform1i',0);
     gl.drawArrays(gl.TRIANGLES,0,6);gl.disableVertexAttribArray(attr);
+    this.mesh=skyProgram!==this.sky?this.shadowMesh():this.baseMesh;
     gl.enable(gl.DEPTH_TEST);gl.useProgram(this.mesh);
     gl.uniformMatrix4fv(gl.getUniformLocation(this.mesh,'uVP'),false,viewProjection(camera,aspect,fov));
-    this.uniform(this.mesh,'uSun','uniform3fv',sun);this.uniform(this.mesh,'uSunTint','uniform3fv',sunTint(state.sun?.temperature));this.uniform(this.mesh,'uExposure','uniform1f',exposure);this.uniform(this.mesh,'uIntensity','uniform1f',intensity);this.uniform(this.mesh,'uContrast','uniform1f',contrast);this.uniform(this.mesh,'uSaturation','uniform1f',saturation);
+    this.uniform(this.mesh,'uSun','uniform3fv',sun);this.uniform(this.mesh,'uSunTint','uniform3fv',direct);this.uniform(this.mesh,'uSkyAmbient','uniform3fv',ambient);this.uniform(this.mesh,'uExposure','uniform1f',exposure);this.uniform(this.mesh,'uIntensity','uniform1f',intensity);this.uniform(this.mesh,'uContrast','uniform1f',contrast);this.uniform(this.mesh,'uSaturation','uniform1f',saturation);
+    if(this.mesh===this.cloudMesh)for(const [name,value] of Object.entries(cloudUniforms(state)))this.uniform(this.mesh,name,'uniform1f',value);
     if(state.viewport?.grid!==false)this.drawMesh(this.grid,this.gridCount,gl.LINES,true);
     if(state.viewport?.referenceSphere!==false)this.drawMesh(this.sphere,this.sphereCount,gl.TRIANGLES,false);
     const objects=state.scene?.referenceObjects||{};
@@ -243,7 +305,7 @@ export class SkyViewportRenderer {
       gl.depthFunc(gl.LEQUAL);this.drawMesh(mesh.outline,mesh.outlineCount,gl.LINES,true,position,scale,rotation);gl.depthFunc(gl.LESS);
     }
     this.frameTimeMs=performance.now()-started;
-    this.cloudMetrics={mode:skyProgram===this.sky?'layer':'volumetric',quality:this.cloudSettings.quality,samples:skyProgram===this.sky?0:this.cloudSettings.samples,shadowSamples:skyProgram===this.sky?0:this.cloudSettings.shadowSamples,width:this.canvas.width,height:this.canvas.height,pixels:this.canvas.width*this.canvas.height,frameTimeMs:this.frameTimeMs};
+    this.cloudMetrics={mode:skyProgram===this.sky?'layer':'volumetric',quality:this.cloudSettings.quality,samples:skyProgram===this.sky?0:this.cloudSettings.samples,shadowSamples:skyProgram===this.sky?0:this.cloudSettings.shadowSamples,cloudShadows:this.mesh===this.cloudMesh,width:this.canvas.width,height:this.canvas.height,pixels:this.canvas.width*this.canvas.height,frameTimeMs:this.frameTimeMs};
   }
   drawMesh(buffer,count,mode,lines,offset=[0,0,0],scale=[1,1,1],rotation=identityRotation){
     const g=this.gl;g.bindBuffer(g.ARRAY_BUFFER,buffer);const enabled=[];
@@ -262,8 +324,8 @@ export class SkyViewportRenderer {
       if(this.texture)g.deleteTexture(this.texture);
       if(this.sky)g.deleteProgram(this.sky);
       for(const p of this.cloudPrograms.values())if(p)g.deleteProgram(p);
-      if(this.mesh)g.deleteProgram(this.mesh);
+      for(const p of new Set([this.baseMesh,this.cloudMesh]))if(p)g.deleteProgram(p);
     }
-    this.resources=[];this.cloudPrograms.clear();this.cloudFailures.clear();this.locations.clear();this.texture=null;this.sky=null;this.mesh=null;
+    this.resources=[];this.cloudPrograms.clear();this.cloudFailures.clear();this.locations.clear();this.texture=null;this.sky=null;this.mesh=null;this.baseMesh=null;this.cloudMesh=null;
   }
 }

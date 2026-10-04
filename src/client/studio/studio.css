@@ -1,4 +1,33 @@
 .sf-studio-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:42px;padding:5px 9px;border-bottom:1px solid var(--b1,#303137);background:var(--bg1,#15161a);color:var(--t1,#ddd);font:11px var(--fm,monospace);flex-shrink:0}
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .menubar .mb-menus,body.sf-studio-enabled:not(.sf-studio-legacy-layout) .menubar .mb-r{display:none!important}
+#sf-studio-menus{display:flex;align-items:center;gap:2px;flex:1;min-width:0}
+body.sf-studio-legacy-layout #sf-studio-menus{display:none}
+.sf-studio-menu{position:relative}
+.sf-studio-menu>button{border:0;background:transparent;color:var(--t1,#ddd);padding:7px 10px;font:12px var(--fd,system-ui);cursor:pointer;border-radius:4px}
+.sf-studio-menu>button:hover,.sf-studio-menu>button[aria-expanded=true]{background:var(--bg4,#282a30);color:var(--acc,#e8812a)}
+.sf-studio-dropdown{position:absolute;top:100%;left:0;min-width:230px;max-height:70vh;overflow:auto;background:var(--bg2,#202126);border:1px solid var(--b2,#45474d);border-radius:6px;padding:5px;box-shadow:0 10px 30px #0009;z-index:9500}
+.sf-studio-dropdown[hidden]{display:none!important}
+.sf-studio-dropdown button{display:block;text-align:left;width:100%;padding:8px 10px;background:transparent;border:0;border-radius:3px;font:12px var(--fd,system-ui);color:var(--t1,#ddd);cursor:pointer;white-space:nowrap}
+.sf-studio-dropdown button:hover,.sf-studio-dropdown button:focus-visible{background:var(--accd,#e8812a22);outline:1px solid var(--acc,#e8812a)}
+.sf-studio-dropdown button:disabled{opacity:.4;cursor:default}
+.sf-studio-sky-nav{display:flex;flex-wrap:wrap;gap:4px;padding:6px;border-bottom:1px solid var(--b1,#303137);flex-shrink:0}
+.sf-studio-sky-nav button,.sf-studio-cloud-presets button{color:var(--t1,#ddd);background:var(--bg2,#202126);border:1px solid var(--b1,#303137);border-radius:4px;font:11px var(--fd,system-ui);padding:6px;cursor:pointer}
+.sf-studio-sky-nav button[aria-pressed=true]{color:var(--acc,#e8812a);border-color:var(--acc,#e8812a)}
+.sf-studio-sky .s-tabrow,.sf-studio-sky [data-studio-legacy=true]{display:none!important}
+.sf-studio-sky .sf-sun-preview,.sf-studio-sky .sf-sun-presets,.sf-studio-sky [data-sun-live]{display:none!important}
+.sf-studio-sky .sl-wrap:has(#v-ray),.sf-studio-sky .sl-wrap:has(#v-albedo),.sf-studio-sky #sec-sun .s-btn-row,.sf-studio-sky #sec-clouds .s-btn-row{display:none!important}
+.sf-studio-sky .s-sec{display:none!important}
+.sf-studio-sky .s-sec.sf-studio-sky-section{display:block!important}
+.sf-studio-sky .s-sec.sf-studio-sky-section>.s-body-inner{display:block!important}
+.sf-studio-cloud-type{display:flex;align-items:center;justify-content:space-between;gap:5px;font:11px var(--fd,system-ui);margin-bottom:12px}
+.sf-studio-cloud-type select{max-width:155px;background:var(--bg3,#25262b);color:var(--t1,#ddd);border:1px solid var(--b1,#303137);border-radius:4px;padding:5px}
+.sf-studio-cloud-presets{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0}
+.sf-studio-preview-note{font:11px var(--fd,system-ui);color:var(--t3,#a4a7af);line-height:1.5}
+.sf-studio-grid .sf-studio-builder{display:none}
+.sf-studio-guide{color:#dce1e7;background:#20242b;border:1px solid #4f5864;border-radius:8px;max-width:560px;padding:24px;font:14px/1.6 system-ui}
+.sf-studio-guide::backdrop{background:#0009}
+.sf-studio-guide h2{margin:0 0 10px;font-size:20px}
+.sf-studio-guide button{background:#34404c;color:#fff;border:1px solid #64758a;border-radius:4px;padding:7px 18px;cursor:pointer}
 .sf-studio-toolbar strong{color:var(--acc,#e8812a);font:600 11px var(--fd,sans-serif);letter-spacing:.13em;padding-right:8px}
 .sf-studio-toolbar button,.sf-studio-panel-heading button,.sf-studio-add button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:28px;padding:4px 7px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--t2,#bbb);font:10px var(--fm,monospace);cursor:pointer;white-space:nowrap}
 .sf-studio-toolbar button:hover,.sf-studio-panel-heading button:hover,.sf-studio-add button:hover{background:var(--bg4,#282a30);color:var(--t0,#fff);border-color:var(--b2,#444)}
@@ -64,6 +93,6 @@ body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-recovery-banner{top:aut
 .sf-studio-resize-bottom{grid-column:3;grid-row:2;cursor:row-resize}
 .sf-studio-grid.sf-studio-maximized{grid-template-columns:0 0 minmax(0,1fr) 0 0;grid-template-rows:minmax(0,1fr) 0 0}
 body.sf-studio-legacy-layout .sf-studio-toolbar .sf-studio-tools,body.sf-studio-legacy-layout .sf-studio-toolbar [data-studio-action=left],body.sf-studio-legacy-layout .sf-studio-toolbar [data-studio-action=right],body.sf-studio-legacy-layout .sf-studio-toolbar [data-studio-action=bottom]{display:none}
-@media(max-width:1280px){.sf-studio-toolbar .sf-studio-file button span,.sf-studio-toolbar .sf-studio-view-actions button span{display:none}.sf-studio-toolbar .sf-studio-view-actions [data-studio-action=legacy] span{display:inline}.sf-studio-toolbar{gap:3px}}
+@media(max-width:1500px){.sf-studio-toolbar .sf-studio-file button span,.sf-studio-toolbar .sf-studio-view-actions button span{display:none}.sf-studio-toolbar .sf-studio-view-actions [data-studio-action=legacy] span{display:inline}.sf-studio-toolbar{gap:3px}}
 @media(max-width:1000px){.workspace.sf-studio-grid{grid-template-columns:minmax(0,var(--studio-left)) 4px minmax(160px,1fr) 4px minmax(0,var(--studio-right))}.sf-studio-toolbar .sf-studio-tools button span{display:none}.sf-studio-toolbar .sf-studio-view-actions [data-studio-action=legacy] span{display:none}.sf-studio-space{padding:0}.sf-studio-right .sf-field-grid.three{grid-template-columns:1fr}}
 @media(max-width:760px){.workspace.sf-studio-grid{position:relative;grid-template-columns:min(var(--studio-left),160px) 4px minmax(120px,1fr) 0 0}.sf-studio-grid .sf-studio-right{position:absolute;inset:0 0 0 auto;width:min(var(--studio-right),85vw);z-index:220;box-shadow:-12px 0 40px #0009}.sf-studio-grid .sf-studio-resize-right{display:none}.sf-studio-toolbar .sf-studio-space{display:none}.sf-studio-toolbar .sf-studio-presets button{padding:3px}.sf-studio-toolbar strong{font-size:9px}.sf-studio-grid.sf-studio-maximized{grid-template-columns:0 0 minmax(0,1fr) 0 0}}
