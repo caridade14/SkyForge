@@ -1,7 +1,10 @@
 import { cameraBasis, viewProjection, sunDirection, clamp } from './camera.js';
-import { REFERENCE_TYPES, shapeGeometry, outlineGeometry } from './reference-geometry.js';
+import { REFERENCE_TYPES, shapeGeometry, outlineGeometry, objectRadius } from './reference-geometry.js';
 import { rotationMatrix3, scaleVector } from './transform-math.js';
 import { cloudPreviewSettings, cloudUniforms, cloudPreviewResolution, volumetricCloudFunctions } from './volumetric-clouds.js';
+import { normalizeReferenceMaterial } from '../core/reference-material.js';
+import { ObjectShadowMap, OBJECT_SHADOW_GLSL } from './object-shadows.js';
+import { SkyReflectionProbe } from './sky-reflections.js';
 
 const SKY_VERTEX = `attribute vec2 aPosition; varying vec2 vNdc;
 void main(){vNdc=aPosition;gl_Position=vec4(aPosition,0.9999,1.0);}`;
@@ -67,8 +70,50 @@ void main(){
 }`;
 const MESH_VERTEX = `attribute vec3 aPosition,aNormal,aColor;uniform mat4 uVP;uniform mat3 uRotation;uniform vec3 uOffset,uSize;varying vec3 vNormal,vColor,vWorld;
 void main(){vNormal=uRotation*(aNormal/uSize);vColor=aColor;vWorld=uRotation*(aPosition*uSize)+uOffset;gl_Position=uVP*vec4(vWorld,1);}`;
-const MESH_FRAGMENT = `precision mediump float;varying vec3 vNormal,vColor,vWorld;uniform vec3 uSun,uSunTint,uSkyAmbient;uniform float uExposure,uIntensity,uLines,uContrast,uSaturation;
-void main(){vec3 normal=normalize(vNormal);if(!gl_FrontFacing)normal=-normal;float diffuse=max(0.0,dot(normal,uSun));float hemisphere=0.45+0.55*max(0.0,normal.z);vec3 c=vColor*(uSkyAmbient*hemisphere+diffuse*uIntensity*uSunTint*0.5);if(uLines>0.5)c=vColor;c=max(c,vec3(0))*uExposure/(1.0+max(c,vec3(0))*uExposure);c=mix(vec3(dot(c,vec3(0.2126,0.7152,0.0722))),c,uSaturation);c=max((c-0.5)*uContrast+0.5,vec3(0));gl_FragColor=vec4(mix(12.92*c,1.055*pow(c,vec3(1.0/2.4))-0.055,step(vec3(0.0031308),c)),1);}`;
+const MESH_SKY = SKY_FRAGMENT.slice(SKY_FRAGMENT.indexOf('const float PI='), SKY_FRAGMENT.indexOf('void main(){'));
+const MESH_FRAGMENT = `precision mediump float;varying vec3 vNormal,vColor,vWorld;
+uniform vec3 uSun,uSunTint,uSkyAmbient,uEye,uForward,uBaseColor;
+uniform float uExposure,uIntensity,uLines,uContrast,uSaturation,uRoughness,uMetalness,uOrtho;
+uniform float uHasLut,uRayleigh,uTurbidity,uMie,uMieG,uOzone,uHaze;uniform vec2 uLutSize;uniform sampler2D uLut;
+uniform sampler2D uReflectionProbe;uniform float uHasReflectionProbe;
+${MESH_SKY}
+${OBJECT_SHADOW_GLSL}
+vec3 environment(vec3 direction){
+ if(uHasReflectionProbe>0.5){
+  float az=mod(atan(direction.x,direction.y)+2.0*PI,2.0*PI);
+  vec4 color=texture2D(uReflectionProbe,vec2(az/(2.0*PI),0.5+asin(clamp(direction.z,-1.0,1.0))/PI));
+  return color.rgb*color.a*16.0;
+ }
+ if(direction.z<0.0)return uSkyAmbient*0.18;
+ return uHasLut>0.5?sampleSky(direction)*uIntensity:scatteringPreview(direction,smoothstep(-0.15,0.15,uSun.z));
+}
+vec3 environmentReflection(vec3 direction,vec3 normal,float roughness){
+ vec3 r=normalize(mix(direction,normal,roughness*roughness*0.45));
+ vec3 t=normalize(cross(r,abs(r.z)<0.9?vec3(0,0,1):vec3(0,1,0))),b=cross(r,t);
+ float spread=roughness*roughness*0.7;
+ return (environment(r)+environment(normalize(r+t*spread))+environment(normalize(r-t*spread))+environment(normalize(r+b*spread))+environment(normalize(r-b*spread)))*0.2;
+}
+void main(){
+ vec3 normal=normalize(vNormal);if(!gl_FrontFacing)normal=-normal;
+ vec3 view=normalize(mix(uEye-vWorld,-uForward,uOrtho)),halfVector=view+uSun;
+ vec3 halfway=halfVector/max(length(halfVector),0.001);
+ float noL=max(0.0,dot(normal,uSun)),noV=max(0.001,dot(normal,view)),noH=max(0.0,dot(normal,halfway));
+ float a=uRoughness*uRoughness,a2=a*a,denom=noH*noH*(a2-1.0)+1.0;
+ float distribution=a2/(PI*max(0.000001,denom*denom));
+ float visibility=1.0;
+ float smith=0.5/max(0.0001,noL*sqrt(noV*noV*(1.0-a2)+a2)+noV*sqrt(noL*noL*(1.0-a2)+a2));
+ vec3 f0=mix(vec3(0.04),uBaseColor,uMetalness),f=f0+(1.0-f0)*pow(1.0-max(0.0,dot(view,halfway)),5.0);
+ vec3 kd=(1.0-f)*(1.0-uMetalness);
+ vec3 direct=(kd*uBaseColor/PI+distribution*smith*f)*noL*uSunTint*uIntensity*1.5;
+ direct*=visibility*objectVisibility(vWorld,normal,noL);
+ float hemisphere=0.45+0.55*max(0.0,normal.z);
+ vec3 diffuse=(1.0-f0)*(1.0-uMetalness)*uBaseColor*uSkyAmbient*hemisphere;
+ vec3 envF=f0+(max(vec3(1.0-uRoughness),f0)-f0)*pow(1.0-noV,5.0);
+ vec3 specular=environmentReflection(reflect(-view,normal),normal,uRoughness)*envF;
+ vec3 c=diffuse+direct+specular;
+ if(uLines>0.5)c=vColor;
+ gl_FragColor=vec4(display(c),1);
+}`;
 
 function cloudShadowFragment() {
   // A two-sample Sun ray through the same animated density field. This is a
@@ -85,13 +130,20 @@ float cloudShadow(vec3 point){
  return exp(-depth*0.004);
 }
 `;
-  return MESH_FRAGMENT.replace('precision mediump float', 'precision highp float').replace('void main(){', shadow + '\nvoid main(){').replace('diffuse*uIntensity*uSunTint*0.5', 'diffuse*cloudShadow(vWorld)*uIntensity*uSunTint*0.5');
+  return MESH_FRAGMENT.replace('precision mediump float', 'precision highp float').replace('void main(){', shadow + '\nvoid main(){').replace('float visibility=1.0;', 'float visibility=cloudShadow(vWorld);');
 }
 
 function volumeFragment(quality) {
   // Render the lower hemisphere first; an elevated camera may see clouds below.
   const volume=SKY_FRAGMENT.replace(SKY_CLOUD_LAYER,'').replace('void main(){',volumetricCloudFunctions(quality)+'\nvoid main(){');
   return volume.replace('gl_FragColor=vec4(display(sky),1.0);','sky=marchClouds(sky,ro,rd,daylight);\n gl_FragColor=vec4(display(sky),1.0);');
+}
+function reflectionFragment(quality,mode){
+  const fragment=mode==='layer'?SKY_FRAGMENT:volumeFragment(quality);
+  return fragment.replace('vec3 ro=uEye+off*uDistance*uOrtho;', 'vec3 ro=uEye;')
+    .replace('vec3 rd=normalize(uForward+off*(1.0-uOrtho));', 'float az=(vNdc.x+1.0)*PI,el=vNdc.y*PI*0.5;vec3 rd=vec3(sin(az)*cos(el),cos(az)*cos(el),sin(el));')
+    .replace('if(rd.z>=0.0&&uSun.z>=0.0)sky+=uSunTint*disc*uIntensity*8.0;', '')
+    .replace('gl_FragColor=vec4(display(sky),1.0);', 'float m=clamp(ceil(max(max(sky.r,sky.g),sky.b)/16.0*255.0)/255.0,1.0/255.0,1.0);gl_FragColor=vec4(clamp(sky/(m*16.0),0.0,1.0),m);');
 }
 const identityRotation = new Float32Array([1,0,0,0,1,0,0,0,1]);
 const finite = (value,fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -195,7 +247,9 @@ export class SkyViewportRenderer {
     try {
       const precision=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT);
       this.volumeSupported=Boolean(precision&&precision.precision>=16);
-      this.sky=program(gl,SKY_VERTEX,this.volumeSupported?SKY_FRAGMENT:SKY_FRAGMENT.replace('precision highp float','precision mediump float'));this.baseMesh=program(gl,MESH_VERTEX,MESH_FRAGMENT);this.mesh=this.baseMesh;
+      this.sky=program(gl,SKY_VERTEX,this.volumeSupported?SKY_FRAGMENT:SKY_FRAGMENT.replace('precision highp float','precision mediump float'));this.baseMesh=program(gl,MESH_VERTEX,this.volumeSupported?MESH_FRAGMENT.replace('precision mediump float','precision highp float'):MESH_FRAGMENT);this.mesh=this.baseMesh;
+      this.objectShadows=new ObjectShadowMap(gl,program);
+      this.reflectionProbe=new SkyReflectionProbe(gl,program,reflectionFragment);
       if(!this.volumeSupported)this.cloudFallbackReason='Volumetric preview requires high precision fragment shaders. Showing the cloud layer.';
       this.floatTexture=Boolean(gl.getExtension('OES_texture_float'));
       this.quad=this.buffer(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]));
@@ -245,6 +299,7 @@ export class SkyViewportRenderer {
   setLut(payload,atmosphere){
     const packed=packLut(payload?.skyViewLut,this.floatTexture);
     this.hasLut=Boolean(packed);this.payload=payload;this.lutAtmosphere=atmosphere?{...atmosphere}:this.lastAtmosphere?{...this.lastAtmosphere}:null;
+    this.lutRevision=(this.lutRevision||0)+1;
     this.lutAmbient=skyAmbientFromLut(payload?.skyViewLut);
     if(!packed)return;
     const g=this.gl;g.bindTexture(g.TEXTURE_2D,this.texture);
@@ -269,6 +324,14 @@ export class SkyViewportRenderer {
     const basis=cameraBasis(camera),sun=sunDirection(state.sun);
     const exposure=clamp(finite(state.camera?.exposure,1)*Math.pow(2,clamp(finite(state.color?.exposure,0),-10,10)),0.001,1000), intensity=clamp(Number(state.sun?.intensity)||0,0,100);
     const contrast=clamp(finite(state.color?.contrast,1),0,4),saturation=clamp(finite(state.color?.saturation,1),0,4);
+    const objects=state.scene?.referenceObjects||{},casters=[];
+    if(state.viewport?.referenceSphere!==false)casters.push({id:'builtin-sphere',buffer:this.sphere,count:this.sphereCount,position:[0,0,0],scale:[1,1,1],rotation:identityRotation,center:[0,0,1.2],radius:1.2});
+    for(const object of Object.values(objects)){
+      const mesh=this.referenceMeshes.get(object?.type);if(!mesh||object.visible===false||!normalizeReferenceMaterial(object.material).castShadow)continue;
+      const position=[0,1,2].map(i=>finite(object.position?.[i],0));
+      casters.push({id:object.id,buffer:mesh.buffer,count:mesh.count,position,scale:scaleVector(object),rotation:rotationMatrix3(object.rotation),center:position,radius:objectRadius(object)});
+    }
+    this.objectShadows.update(casters,sun,{low:512,medium:768,high:1024}[this.cloudSettings.quality],this.volumeSupported&&state.viewport?.objectShadows!==false);
     gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.disable(gl.DEPTH_TEST);
     gl.useProgram(skyProgram);gl.bindBuffer(gl.ARRAY_BUFFER,this.quad);
     const attr=gl.getAttribLocation(skyProgram,'aPosition');gl.enableVertexAttribArray(attr);gl.vertexAttribPointer(attr,2,gl.FLOAT,false,0,0);
@@ -277,25 +340,38 @@ export class SkyViewportRenderer {
     const direct=previewSunTint(state.sun,state.atmosphere);
     const daylight=clamp((sun[2]+0.1)/0.2,0,1);
     const ambient=this.usingLut&&this.lutAmbient?this.lutAmbient.map(value=>value*intensity):[0.12*daylight*intensity+0.001,0.19*daylight*intensity+0.002,0.32*daylight*intensity+0.004];
-    for(const [n,v] of Object.entries({uEye:basis.eye,uForward:basis.forward,uRight:basis.right,uUp:basis.up,uSun:sun,uSunTint:direct,uSkyAmbient:ambient}))u(n,'uniform3fv',v);
-    for(const [n,v] of Object.entries({uAspect:aspect,uTan:Math.tan(clamp(fov,15,120)*Math.PI/360),uDistance:camera.distance,uOrtho:camera.projection==='orthographic'?1:0,uExposure:exposure,uContrast:contrast,uSaturation:saturation,uSunRadius:clamp(Number(state.sun?.angularDiameter)||0.53,0.01,10)*Math.PI/360,uIntensity:intensity,...cloudUniforms(state),uTurbidity:clamp(finite(state.atmosphere?.turbidity,2.4),1,15),uRayleigh:clamp(finite(state.atmosphere?.rayleigh,2.8),0,10),uMie:clamp(finite(state.atmosphere?.mieCoefficient,0.005),0,0.1),uMieG:clamp(finite(state.atmosphere?.mieDirectionalG,0.8),-0.99,0.99),uOzone:clamp(finite(state.atmosphere?.ozone,0.6),0,3),uHaze:Math.max(0,Number(state.atmosphere?.haze)||0),uHasLut:this.usingLut?1:0}))u(n,'uniform1f',v);
+    const skyVectors={uEye:basis.eye,uForward:basis.forward,uRight:basis.right,uUp:basis.up,uSun:sun,uSunTint:direct,uSkyAmbient:ambient};
+    const skyFloats={uAspect:aspect,uTan:Math.tan(clamp(fov,15,120)*Math.PI/360),uDistance:camera.distance,uOrtho:camera.projection==='orthographic'?1:0,uExposure:exposure,uContrast:contrast,uSaturation:saturation,uSunRadius:clamp(Number(state.sun?.angularDiameter)||0.53,0.01,10)*Math.PI/360,uIntensity:intensity,...cloudUniforms(state),uTurbidity:clamp(finite(state.atmosphere?.turbidity,2.4),1,15),uRayleigh:clamp(finite(state.atmosphere?.rayleigh,2.8),0,10),uMie:clamp(finite(state.atmosphere?.mieCoefficient,0.005),0,0.1),uMieG:clamp(finite(state.atmosphere?.mieDirectionalG,0.8),-0.99,0.99),uOzone:clamp(finite(state.atmosphere?.ozone,0.6),0,3),uHaze:Math.max(0,Number(state.atmosphere?.haze)||0),uHasLut:this.usingLut?1:0};
+    for(const [n,v] of Object.entries(skyVectors))u(n,'uniform3fv',v);
+    for(const [n,v] of Object.entries(skyFloats))u(n,'uniform1f',v);
     u('uLutSize','uniform2fv',this.lutSize);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);u('uLut','uniform1i',0);
     gl.drawArrays(gl.TRIANGLES,0,6);gl.disableVertexAttribArray(attr);
+    const probeOrigin=camera.target||[0,0,1.2];
+    this.reflectionProbe.update({key:JSON.stringify([state.sun,state.atmosphere,state.clouds,this.cloudSettings.quality,this.cloudSettings.mode,cloudUniforms(state).uTime,probeOrigin,this.usingLut?this.lutRevision:0]),quality:this.cloudSettings.quality,mode:skyProgram===this.sky?'layer':'volumetric',quad:this.quad,uniforms:p=>{
+      for(const [n,v] of Object.entries({...skyVectors,uEye:probeOrigin}))this.uniform(p,n,'uniform3fv',v);
+      for(const [n,v] of Object.entries(skyFloats))this.uniform(p,n,'uniform1f',v);
+      this.uniform(p,'uLutSize','uniform2fv',this.lutSize);this.uniform(p,'uLut','uniform1i',0);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);
+    }});
+    gl.viewport(0,0,this.canvas.width,this.canvas.height);
     this.mesh=skyProgram!==this.sky?this.shadowMesh():this.baseMesh;
     gl.enable(gl.DEPTH_TEST);gl.useProgram(this.mesh);
     gl.uniformMatrix4fv(gl.getUniformLocation(this.mesh,'uVP'),false,viewProjection(camera,aspect,fov));
     this.uniform(this.mesh,'uSun','uniform3fv',sun);this.uniform(this.mesh,'uSunTint','uniform3fv',direct);this.uniform(this.mesh,'uSkyAmbient','uniform3fv',ambient);this.uniform(this.mesh,'uExposure','uniform1f',exposure);this.uniform(this.mesh,'uIntensity','uniform1f',intensity);this.uniform(this.mesh,'uContrast','uniform1f',contrast);this.uniform(this.mesh,'uSaturation','uniform1f',saturation);
+    for(const [name,value] of Object.entries({uEye:basis.eye,uForward:basis.forward}))this.uniform(this.mesh,name,'uniform3fv',value);
+    for(const [name,value] of Object.entries({uOrtho:camera.projection==='orthographic'?1:0,uHasLut:this.usingLut?1:0,uTurbidity:clamp(finite(state.atmosphere?.turbidity,2.4),1,15),uRayleigh:clamp(finite(state.atmosphere?.rayleigh,2.8),0,10),uMie:clamp(finite(state.atmosphere?.mieCoefficient,0.005),0,0.1),uMieG:clamp(finite(state.atmosphere?.mieDirectionalG,0.8),-.99,.99),uOzone:clamp(finite(state.atmosphere?.ozone,.6),0,3),uHaze:Math.max(0,finite(state.atmosphere?.haze,0))}))this.uniform(this.mesh,name,'uniform1f',value);
+    this.uniform(this.mesh,'uLutSize','uniform2fv',this.lutSize);this.uniform(this.mesh,'uLut','uniform1i',0);
+    this.objectShadows.bind(this.mesh);
+    this.reflectionProbe.bind(this.mesh);
     if(this.mesh===this.cloudMesh)for(const [name,value] of Object.entries(cloudUniforms(state)))this.uniform(this.mesh,name,'uniform1f',value);
     if(state.viewport?.grid!==false)this.drawMesh(this.grid,this.gridCount,gl.LINES,true);
     if(state.viewport?.referenceSphere!==false)this.drawMesh(this.sphere,this.sphereCount,gl.TRIANGLES,false);
-    const objects=state.scene?.referenceObjects||{};
     for(const object of Object.values(objects)){
       const mesh=this.referenceMeshes.get(object?.type);if(!mesh||object.visible===false)continue;
       const position=[0,1,2].map(i=>Number.isFinite(Number(object.position?.[i]))?Number(object.position[i]):0);
       const scale=scaleVector(object),rotation=rotationMatrix3(object.rotation);
       // Fill offset keeps a coplanar selection outline stable at every scale.
       gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1,1);
-      this.drawMesh(mesh.buffer,mesh.count,gl.TRIANGLES,false,position,scale,rotation);
+      this.drawMesh(mesh.buffer,mesh.count,gl.TRIANGLES,false,position,scale,rotation,object.material);
       gl.disable(gl.POLYGON_OFFSET_FILL);
     }
     const selected=objects[state.scene?.selectedReferenceId],mesh=this.referenceMeshes.get(selected?.type);
@@ -306,17 +382,21 @@ export class SkyViewportRenderer {
     }
     this.frameTimeMs=performance.now()-started;
     this.cloudMetrics={mode:skyProgram===this.sky?'layer':'volumetric',quality:this.cloudSettings.quality,samples:skyProgram===this.sky?0:this.cloudSettings.samples,shadowSamples:skyProgram===this.sky?0:this.cloudSettings.shadowSamples,cloudShadows:this.mesh===this.cloudMesh,width:this.canvas.width,height:this.canvas.height,pixels:this.canvas.width*this.canvas.height,frameTimeMs:this.frameTimeMs};
+    this.lightingMetrics={objectShadows:this.objectShadows.active,shadowMapSize:this.objectShadows.resolution||0,shadowDraws:this.objectShadows.draws,shadowFallback:this.objectShadows.error||this.objectShadows.reason||null,skySource:this.usingLut?'physical LUT':'manual preview',reflectionSamples:5,reflectionProbe:this.reflectionProbe.active,reflectionSize:[this.reflectionProbe.width||0,this.reflectionProbe.height||0],reflectionDraws:this.reflectionProbe.draws,reflectionFallback:this.reflectionProbe.error||null};
   }
-  drawMesh(buffer,count,mode,lines,offset=[0,0,0],scale=[1,1,1],rotation=identityRotation){
+  drawMesh(buffer,count,mode,lines,offset=[0,0,0],scale=[1,1,1],rotation=identityRotation,material){
     const g=this.gl;g.bindBuffer(g.ARRAY_BUFFER,buffer);const enabled=[];
     for(const [i,n] of ['aPosition','aNormal','aColor'].entries()){
       const a=g.getAttribLocation(this.mesh,n);g.enableVertexAttribArray(a);g.vertexAttribPointer(a,3,g.FLOAT,false,36,i*12);enabled.push(a);
     }
     this.uniform(this.mesh,'uOffset','uniform3fv',offset);this.uniform(this.mesh,'uSize','uniform3fv',scale);g.uniformMatrix3fv(g.getUniformLocation(this.mesh,'uRotation'),false,rotation);
+    const surface=normalizeReferenceMaterial(material);this.uniform(this.mesh,'uBaseColor','uniform3fv',surface.baseColor);this.uniform(this.mesh,'uRoughness','uniform1f',surface.roughness);this.uniform(this.mesh,'uMetalness','uniform1f',surface.metalness);this.uniform(this.mesh,'uReceiveShadow','uniform1f',surface.receiveShadow?1:0);
     this.uniform(this.mesh,'uLines','uniform1f',lines?1:0);g.drawArrays(mode,0,count);enabled.forEach(a=>g.disableVertexAttribArray(a));
   }
   dispose(){
     const g=this.gl;
+    this.objectShadows?.dispose();
+    this.reflectionProbe?.dispose();
     if(g&&!g.isContextLost()){
       // A current program stays alive after deleteProgram until it is unbound.
       g.useProgram(null);

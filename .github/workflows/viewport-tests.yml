@@ -1,9 +1,9 @@
 name: Real 3D Viewport
 on:
   push:
-    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo, feature/viewport-reference-objects, feature/studio-editors, feature/studio-volumetric-preview, fix/studio-natural-preview-ui]
+    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo, feature/viewport-reference-objects, feature/studio-editors, feature/studio-volumetric-preview, fix/studio-natural-preview-ui, feature/lighting-workbench]
   pull_request:
-    branches: [feature/studio-volumetric-preview, feature/studio-editors, feature/viewport-reference-objects, feature/viewport-sun-gizmo, feature/real-3d-viewport, feature/natural-light-engine, main]
+    branches: [fix/studio-natural-preview-ui, feature/studio-volumetric-preview, feature/studio-editors, feature/viewport-reference-objects, feature/viewport-sun-gizmo, feature/real-3d-viewport, feature/natural-light-engine, main]
 permissions:
   contents: read
 concurrency:
@@ -26,7 +26,7 @@ jobs:
       - run: node --check server-natural-light.js
   webgl-integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,6 +52,7 @@ jobs:
           node scripts/validate-viewport.cjs
           node scripts/validate-studio.cjs
           node scripts/validate-preview-ui.cjs
+          node scripts/validate-lighting.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

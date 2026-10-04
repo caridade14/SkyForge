@@ -1,9 +1,10 @@
+const { clientSource } = require('./helpers/client-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const source = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
+const source = name => clientSource(name);
 const moduleUrl = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const storeUrl = moduleUrl(source('src/client/core/state-store.js'));
 const adapterUrl = moduleUrl(source('src/client/core/scene-object-adapter.js'));

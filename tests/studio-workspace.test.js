@@ -1,8 +1,9 @@
+const { clientSource } = require('./helpers/client-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '../src/client/studio/workspace.js'), 'utf8');
+const source = clientSource('src/client/studio/workspace.js');
 const moduleURL = 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 const load = () => import(moduleURL);
 

@@ -14,6 +14,12 @@ F or Frame frames the selected object. Option+left drag or middle mouse orbits, 
 
 Viewport coordinates are east X, north Y, up Z. Legacy coordinates are east X, up Y, north Z; the adapter exchanges Y/Z without changing units. Native meshes are generated in Z-up. Legacy project records keep canonical transform metadata so nonuniform scales and 3D rotations roundtrip. The fixed reference sphere remains a separate visual aid.
 
+## Lighting bench and materials
+
+Open **Sky → Lighting bench** or **Scene → Add lighting reference bench** to add gray, chrome and white reference spheres plus a ground plane. Existing objects and sky settings remain in the project; one Undo restores the scene and camera. The Selection inspector edits each reference material's base color, roughness, metalness and cast/receive Sun-shadow flags. The color picker stores linear RGB, presets include Gray 18%, Chrome, White, Gold and Red matte, and locked objects refuse edits.
+
+Objects cast real filtered Sun shadows on other reference meshes. Materials reflect a bounded GPU probe of the actual sky and animated clouds, with a rough-reflection approximation. Low/Medium/High cap the extra shadow/probe buffers. Camera/material-only changes reuse cached passes; edits, cancellation, project persistence and duplication use the existing Core state. **View → Toggle object Sun shadows** and the Lighting inspector operate the same flag. Lighting is relative preview illumination; these materials do not establish a calibrated HDR renderer or object-to-object reflections. See [LIGHTING_WORKBENCH.md](LIGHTING_WORKBENCH.md) for architecture and limits.
+
 ## Nodes and animation
 
 In Nodes, select a card to edit its implemented parameters. Drag its title to reposition it, connect an output socket to a compatible input socket, select a wire to delete it, drag empty space to pan, scroll to zoom and press F in the editor to frame the graph. Sun, Atmosphere, Clouds, SkyScene, ColorGrade and Output are functional. Invalid socket types and cycles are rejected before changing the graph.

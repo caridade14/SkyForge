@@ -1,3 +1,4 @@
+import { LightingWorkbench } from './lighting-workbench.js';
 const STORAGE_KEY = 'skyforge.studio.layout.v1';
 const PRESETS = Object.freeze({
   Sky: { left: 240, right: 292, bottom: 190, editor: 'timeline', inspector: 'sky', bottomCollapsed: true },
@@ -11,9 +12,9 @@ const bounded = (value, min, max, fallback) => Number.isFinite(Number(value)) ? 
 const MENUS = {
   File: [['new', 'New project'], ['open', 'Open .skyforge…'], ['save', 'Save .skyforge'], ['capture', 'Save preview PNG…']],
   Edit: [['undo', 'Undo'], ['redo', 'Redo'], ['duplicate', 'Duplicate selected reference'], ['delete', 'Delete selected reference']],
-  View: [['home', 'Reset camera'], ['projection', 'Perspective / Orthographic'], ['grid', 'Toggle grid'], ['overlays', 'Toggle overlays'], ['left', 'Outliner'], ['right', 'Inspector'], ['bottom', 'Editors'], ['maximize', 'Maximize viewport'], ['reset', 'Reset workspace'], ['legacy', 'Legacy workspace']],
-  Sky: [['sky-sun', 'Sun & atmosphere'], ['sky-clouds', 'Clouds'], ['sky-location', 'Location'], ['physical', 'Use evaluated physical sun'], ['engine', 'Physical engine status']],
-  Scene: [['add-sphere', 'Add sphere'], ['add-cube', 'Add cube'], ['add-plane', 'Add plane'], ['frame', 'Frame selection']],
+  View: [['home', 'Reset camera'], ['projection', 'Perspective / Orthographic'], ['grid', 'Toggle grid'], ['shadows', 'Toggle object Sun shadows'], ['overlays', 'Toggle overlays'], ['left', 'Outliner'], ['right', 'Inspector'], ['bottom', 'Editors'], ['maximize', 'Maximize viewport'], ['reset', 'Reset workspace'], ['legacy', 'Legacy workspace']],
+  Sky: [['sky-sun', 'Sun & atmosphere'], ['sky-clouds', 'Clouds'], ['sky-location', 'Location'], ['sky-lighting', 'Lighting bench'], ['physical', 'Use evaluated physical sun'], ['engine', 'Physical engine status']],
+  Scene: [['add-sphere', 'Add sphere'], ['add-cube', 'Add cube'], ['add-plane', 'Add plane'], ['lookdev', 'Add lighting reference bench'], ['frame', 'Frame selection']],
   Animation: [['timeline', 'Open timeline'], ['play', 'Play / pause'], ['add-key', 'Insert key for active track'], ['previous-key', 'Previous keyframe'], ['next-key', 'Next keyframe'], ['delete-keys', 'Delete selected keys']],
   Nodes: [['nodes', 'Open node editor'], ['frame-graph', 'Frame graph'], ['from-controls', 'Copy sky controls to graph'], ['direct', 'Use direct controls'], ['graph', 'Use node graph'], ['default-graph', 'Create default graph']],
   Help: [['hub', 'Core Command Center'], ['bridge', 'Blender Bridge'], ['help', 'Navigation & preview guide'], ['legacy', 'Legacy workspace']]
@@ -130,7 +131,7 @@ export class StudioWorkspace {
     this.move(this.builder, this.left.querySelector('.sf-studio-builder'));
     this.move(this.rpanel, this.right.querySelector('.sf-studio-selection'));
     this.move(this.sidebar, this.right.querySelector('.sf-studio-sky'));
-    this.initMenus(); this.initSkyControls();
+    this.initMenus(); this.initSkyControls(); this.lightingBench = new LightingWorkbench(this.api, this).init();
     this.outlinerNew = this.outliner?.querySelector('[onclick="sfCreateSceneObject()"]');
     this.outlinerNewTitle = this.outlinerNew?.title;
     this.on(this.root, 'click', event => {
@@ -219,7 +220,7 @@ export class StudioWorkspace {
   initSkyControls() {
     if (!this.sidebar) return;
     this.skyNav = this.document.createElement('nav'); this.skyNav.className = 'sf-studio-sky-nav'; this.skyNav.setAttribute('aria-label', 'Sky inspector sections');
-    this.skyNav.innerHTML = [['sun', 'Sun / Atmosphere'], ['clouds', 'Clouds'], ['location', 'Location']].map(([name, label]) => `<button type="button" data-studio-sky="${name}">${label}</button>`).join('');
+    this.skyNav.innerHTML = [['sun', 'Sun / Atmosphere'], ['clouds', 'Clouds'], ['location', 'Location'], ['lighting', 'Lighting']].map(([name, label]) => `<button type="button" data-studio-sky="${name}">${label}</button>`).join('');
     this.sidebar.before(this.skyNav);
     this.on(this.skyNav, 'click', event => { const tab = event.target.closest('[data-studio-sky]'); if (tab) this.showSky(tab.dataset.studioSky); });
     // Unsupported legacy rigs stay available in their workspace; the Studio
@@ -260,7 +261,7 @@ export class StudioWorkspace {
     this.showSky('sun', false);
   }
   showSky(name = 'sun', reveal = true) {
-    const id = { sun: 'sec-sun', clouds: 'sec-clouds', location: 'sec-scene-location' }[name] || 'sec-sun';
+    const id = { sun: 'sec-sun', clouds: 'sec-clouds', location: 'sec-scene-location', lighting: 'sec-sf-lighting' }[name] || 'sec-sun';
     for (const section of this.sidebar?.querySelectorAll('.s-sec') || []) section.classList.toggle('sf-studio-sky-section', section.id === id);
     this.document.getElementById(id)?.classList.remove('closed');
     for (const tab of this.skyNav?.querySelectorAll('button') || []) tab.setAttribute('aria-pressed', String(tab.dataset.studioSky === name));
@@ -366,6 +367,8 @@ export class StudioWorkspace {
       if (this.studioStatus) this.studioStatus.textContent = `Preview PNG: ${error.message || 'Capture unavailable'}`;
       return null;
     });
+    if (action === 'lookdev') return this.lightingBench.addBench();
+    if (action === 'shadows') return this.api.store.set('viewport.objectShadows', this.api.store.get('viewport.objectShadows') === false, { label: 'Toggle object Sun shadows' });
     if (action === 'hub') return this.api.openHub?.('project');
     if (action === 'bridge' || action === 'engine') return this.api.openHub?.(action);
     if (action === 'reset') return this.resetLayout();
@@ -444,7 +447,7 @@ export class StudioWorkspace {
     }
   }
   dispose() {
-    this.finishResize(true); this.finishExposure(true); this.unsubscribe?.();
+    this.finishResize(true); this.finishExposure(true); this.lightingBench?.dispose(); this.unsubscribe?.();
     for (const [target, type, listener, capture] of this.listeners) target?.removeEventListener(type, listener, capture);
     for (const { node, marker } of this.moves) { marker.after(node); marker.remove(); }
     if (this.statusbar) { this.statusbar.append(...this.statusChildren); this.legacyStatus.remove(); this.studioStatus.remove(); }

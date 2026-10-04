@@ -37,6 +37,16 @@ The repair passed all 169 unit tests and all three browser gates using real WebG
 
 Low retained its 250,000-pixel and 16-step budget. The existing Studio gate also passed Medium and High, graph/timeline rendering, navigation, persistence, context recovery and resource disposal. Native Intel/Apple Silicon GPU performance for the repair still requires a target-machine run. No production HDR/EXR or OCIO output is certified by these checks.
 
+## Lighting workbench validation
+
+The lighting increment passed all 176 portable unit tests and the four real gateway/WebGL browser gates on Linux through ANGLE SwiftShader. Run `scripts/validate-lighting.cjs` with the same Playwright environment above. It adds the real reference bench through the menus, checks one Undo for the scene/camera transaction, edits presets and linear albedo, tests roughness preview/commit/cancellation and locking, downloads/reopens a project and duplicates its materials. It verifies actual shadow/probe pixels, cached passes and deletion of their GPU resources.
+
+At Low quality, the bench used a 512 × 512 depth map and a 128 × 64 sky/cloud probe while retaining the existing 250,000 viewport-pixel cap. Toggling object shadows changed 0.96% of the whole viewport readback; the sampled unoccluded ground patch was identical with shadows enabled and disabled, guarding against self-shadow stripes. Overcast changed 48.44% of probe pixels and 73.83% of the sampled 16 × 16 chrome-sphere region. Clearing only the GPU probe, with Sun, cloud shadows and material fixed, changed all pixels in that chrome region. This isolates a real environment contribution rather than attributing all cloud-induced mesh changes to reflections.
+
+Unchanged sky/scene draws and ordinary material edits reused the probe and depth map. Cloud edits rebuilt the probe and kept the object depth map; geometry edits rebuilt the depth map. The existing browser gates passed navigation, LUT/manual separation, idle rendering, context recovery, Legacy access, menus, graph/timeline editing, project/autosave and all three cloud quality modes. The Studio quality readbacks also record lighting target dimensions and require the GPU probe, with 128/192/256 width and bounded shadow-map sizes.
+
+The measurements verify state ownership and visible rendered behavior. They do not certify physical radiometry, native Intel/Apple Silicon GPU performance, a GGX-prefiltered environment, production HDR/OpenEXR or OCIO. See [LIGHTING_WORKBENCH.md](LIGHTING_WORKBENCH.md) for the material/probe limits. Earlier native timings below belong to the earlier implementation.
+
 ## Historical native results — before the preview/UI repair
 
 The measurements below belong to the published volumetric implementation at `8066cea8fa98e3fc9404c0164d913f5fab8a113f`. They do not certify the repaired shaders on native Intel or Apple Silicon GPUs. Re-run the gates on the target Mac to measure the new version.

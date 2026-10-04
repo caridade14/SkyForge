@@ -1,3 +1,4 @@
+const { clientSource } = require('./helpers/client-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -53,7 +54,7 @@ test('volumetric quality uses constant WebGL1 loop bounds and 3D density with bo
 
 const root = path.join(__dirname, '..');
 const dataUrl = text => 'data:text/javascript;base64,' + Buffer.from(text).toString('base64');
-const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const read = name => clientSource(name);
 const rendererModule = async () => {
   const camera = dataUrl(read('src/client/viewport/camera.js'));
   const transform = dataUrl(read('src/client/viewport/transform-math.js').replace("'./camera.js'", JSON.stringify(camera)));
