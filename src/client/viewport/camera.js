@@ -54,6 +54,18 @@ export function sunDirection(sun = {}) {
   const a = finite(sun.azimuth, 215)*Math.PI/180, e = clamp(finite(sun.elevation,7),-90,90)*Math.PI/180;
   return [Math.cos(e)*Math.sin(a),Math.cos(e)*Math.cos(a),Math.sin(e)];
 }
+// Aim at a direction in the sky from the current observer position. Changing an
+// orbit's pitch alone swings its eye under the ground when looking upward.
+export function frameSky(camera, azimuth, elevation) {
+  const current = normalizeCamera(camera), eye = cameraBasis(current).eye;
+  eye[2] = Math.max(1.7, eye[2]);
+  const aimed = normalizeCamera({ ...current,
+    yaw: -finite(azimuth, -current.yaw*180/Math.PI)*Math.PI/180,
+    pitch: -finite(elevation, -current.pitch*180/Math.PI)*Math.PI/180,
+    projection: 'perspective'
+  });
+  return normalizeCamera({ ...aimed, target: add(eye, mul(cameraBasis(aimed).forward, aimed.distance)) });
+}
 // Column-major matrices for WebGL geometry; sky rays use the same camera basis.
 export function viewProjection(camera, aspect, fov = 60) {
   const {eye, right:r, up:u, forward:f} = cameraBasis(camera);

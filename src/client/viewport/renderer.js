@@ -7,6 +7,7 @@ import { ObjectShadowMap, OBJECT_SHADOW_GLSL } from './object-shadows.js';
 import { SkyReflectionProbe } from './sky-reflections.js';
 import { AtmosphereTransport, blackbodyTint, encodeAtmosphereRGBM, opticalDepth } from './atmosphere-transport.js';
 import { makeCloudNoise } from './cloud-noise.js';
+import { CloudRenderPass, CLOUD_COMPOSITE_GLSL, DISPLAY_BUDGET } from './cloud-pass.js';
 import { CELESTIAL_UNIFORMS, CELESTIAL_GLSL, celestialUniforms, normalizeCelestial, starField } from './celestial-effects.js';
 
 
@@ -36,9 +37,9 @@ vec3 integratedSky(vec3 rd){
 `;
 const SKY_FRAGMENT = `precision highp float;
 varying vec2 vNdc;
-uniform vec3 uEye,uForward,uRight,uUp,uSun,uSunTint,uSkyAmbient;
+uniform vec3 uEye,uForward,uRight,uUp,uSun,uSunTint,uCloudSunTint,uSkyAmbient;
 uniform float uAspect,uTan,uDistance,uOrtho,uExposure,uSunRadius,uIntensity;
-uniform float uCoverage,uDensity,uAltitude,uErosion,uDetail,uCloudKind,uTime,uWindSpeed,uWindDirection,uHaze,uThickness,uCloudDistance,uContrast,uSaturation,uTurbidity,uRayleigh,uMie,uMieG,uOzone;
+uniform float uCoverage,uDensity,uAltitude,uErosion,uDetail,uCloudKind,uTime,uWindSpeed,uWindDirection,uHaze,uThickness,uCloudScale,uCloudDistance,uContrast,uSaturation,uTurbidity,uRayleigh,uMie,uMieG,uOzone;
 uniform sampler2D uLut; uniform float uHasLut; uniform vec2 uLutSize;
 ${TRANSPORT_UNIFORMS}
 ${CELESTIAL_UNIFORMS}
@@ -96,7 +97,7 @@ const MESH_VERTEX = `attribute vec3 aPosition,aNormal,aColor;uniform mat4 uVP;un
 void main(){vNormal=uRotation*(aNormal/uSize);vColor=aColor;vWorld=uRotation*(aPosition*uSize)+uOffset;gl_Position=uVP*vec4(vWorld,1);}`;
 const MESH_SKY = SKY_FRAGMENT.slice(SKY_FRAGMENT.indexOf('const float PI='), SKY_FRAGMENT.indexOf('vec3 celestialTransmission'));
 const MESH_FRAGMENT = `precision mediump float;varying vec3 vNormal,vColor,vWorld;
-uniform vec3 uSun,uSunTint,uSkyAmbient,uEye,uForward,uBaseColor;
+uniform vec3 uSun,uSunTint,uCloudSunTint,uSkyAmbient,uEye,uForward,uBaseColor;
 uniform float uExposure,uIntensity,uLines,uContrast,uSaturation,uRoughness,uMetalness,uOrtho;
 uniform vec3 uMoonAmbient,uAerialExtinction;uniform float uAerialStrength;
 uniform float uHasLut,uRayleigh,uTurbidity,uMie,uMieG,uOzone,uHaze;uniform vec2 uLutSize;uniform sampler2D uLut;
@@ -149,7 +150,7 @@ function cloudShadowFragment() {
   // A two-sample Sun ray through the same animated density field. This is a
   // bounded cloud-shadow preview, independent of quality and mesh complexity.
   const density = volumetricCloudFunctions('low').split('vec3 marchClouds(')[0];
-  const shadow = `uniform float uCoverage,uDensity,uAltitude,uThickness,uErosion,uDetail,uCloudKind,uTime,uWindSpeed,uWindDirection,uCloudDistance;
+  const shadow = `uniform float uCoverage,uDensity,uAltitude,uThickness,uCloudScale,uErosion,uDetail,uCloudKind,uTime,uWindSpeed,uWindDirection,uCloudDistance;
 ${density}
 float cloudShadow(vec3 point){
  if(uSun.z<=0.001||uCoverage<0.001||uDensity<0.001||point.z>=uAltitude+uThickness)return 1.0;
@@ -165,8 +166,8 @@ float cloudShadow(vec3 point){
 
 function volumeFragment(quality) {
   // Render the lower hemisphere first; an elevated camera may see clouds below.
-  const volume=SKY_FRAGMENT.replace(SKY_CLOUD_LAYER,'').replace('void main(){',volumetricCloudFunctions(quality)+'\nvoid main(){');
-  return volume.replace('sky=addRainbow(sky,rd);','sky=marchClouds(sky,ro,rd,daylight);\n sky=addRainbow(sky,rd);');
+  const volume=SKY_FRAGMENT.replace(SKY_CLOUD_LAYER,'').replace('void main(){',volumetricCloudFunctions(quality)+'\n'+CLOUD_COMPOSITE_GLSL+'\nvoid main(){');
+  return volume.replace('sky=addRainbow(sky,rd);','if(uUseCloudBuffer>.5){vec4 cloud=reconstructedCloud(vNdc*.5+.5);sky=sky*cloud.a+cloud.rgb;}else sky=marchClouds(sky,ro,rd,daylight);\n sky=addRainbow(sky,rd);');
 }
 function reflectionFragment(quality,mode){
   const fragment=mode==='layer'?SKY_FRAGMENT:volumeFragment(quality);
@@ -277,7 +278,8 @@ export class SkyViewportRenderer {
     try {
       const precision=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT);
       this.volumeSupported=Boolean(precision&&precision.precision>=16);
-      this.sky=program(gl,SKY_VERTEX,this.volumeSupported?SKY_FRAGMENT:SKY_FRAGMENT.replace('precision highp float','precision mediump float'));this.baseMesh=program(gl,MESH_VERTEX,this.volumeSupported?MESH_FRAGMENT.replace('precision mediump float','precision highp float'):MESH_FRAGMENT);this.mesh=this.baseMesh;
+      this.geometricReceivers=Boolean(gl.getExtension('OES_standard_derivatives'));
+      this.sky=program(gl,SKY_VERTEX,this.volumeSupported?SKY_FRAGMENT:SKY_FRAGMENT.replace('precision highp float','precision mediump float'));this.baseMesh=this.compileMesh(this.volumeSupported?MESH_FRAGMENT.replace('precision mediump float','precision highp float'):MESH_FRAGMENT);this.mesh=this.baseMesh;
       this.objectShadows=new ObjectShadowMap(gl,program);
       this.reflectionProbe=new SkyReflectionProbe(gl,program,reflectionFragment);
       if(!this.volumeSupported)this.cloudFallbackReason='Volumetric preview requires high precision fragment shaders. Showing the cloud layer.';
@@ -298,6 +300,7 @@ export class SkyViewportRenderer {
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,255]));
       this.lutSize=[1,1];
       this.transport=new AtmosphereTransport();
+      this.cloudPass=new CloudRenderPass(gl,program,(...args)=>this.uniform(...args),p=>this.bindTransport(p));
       this.integratedTexture=this.createTexture();this.noiseTexture=this.createTexture(true);this.starTexture=this.createTexture(true,true);gl.bindTexture(gl.TEXTURE_2D,this.starTexture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     }catch(error){this.dispose();throw error;}
   }
@@ -340,9 +343,14 @@ export class SkyViewportRenderer {
     if(loc===undefined){loc=this.gl.getUniformLocation(p,name);cache.set(name,loc);}
     this.gl[type](loc,value);
   }
+  compileMesh(source){
+    if(!this.geometricReceivers)return program(this.gl,MESH_VERTEX,source);
+    try{return program(this.gl,MESH_VERTEX,'#extension GL_OES_standard_derivatives : enable\n#define SF_GEOMETRIC_RECEIVER\n'+source);}
+    catch(error){this.geometricReceivers=false;return program(this.gl,MESH_VERTEX,source);}
+  }
   shadowMesh() {
     if (!this.cloudMesh && !this.shadowFailure) {
-      try { this.cloudMesh=program(this.gl,MESH_VERTEX,cloudShadowFragment()); }
+      try { this.cloudMesh=this.compileMesh(cloudShadowFragment()); }
       catch (error) { this.shadowFailure=error.message || 'Cloud shadow shader unavailable'; }
     }
     return this.cloudMesh || this.baseMesh;
@@ -372,7 +380,7 @@ export class SkyViewportRenderer {
   }
   resize(width,height,dpr=1){
     this.cssSize={width,height,dpr};
-    const settings=this.cloudSettings.mode==='layer'?{maxPixels:1e6,maxDpr:1.5}:this.cloudSettings;
+    const settings=this.cloudSettings.mode==='layer'||this.cloudPass?.supported?DISPLAY_BUDGET:this.cloudSettings;
     const size=cloudPreviewResolution(width,height,dpr,settings);
     if(this.canvas.width!==size.width)this.canvas.width=size.width;
     if(this.canvas.height!==size.height)this.canvas.height=size.height;
@@ -385,7 +393,7 @@ export class SkyViewportRenderer {
     this.lastAtmosphere={...(state.atmosphere||{})};if(this.hasLut&&!this.lutAtmosphere)this.lutAtmosphere={...this.lastAtmosphere};
     if(this.cssSize)this.resize(this.cssSize.width,this.cssSize.height,this.cssSize.dpr);
     const skyProgram=this.cloudProgram(this.cloudSettings);
-    const aspect=this.canvas.width/this.canvas.height, fov=Number(state.camera?.fov)||60;
+    let aspect=this.canvas.width/this.canvas.height;const fov=Number(state.camera?.fov)||60;
     const basis=cameraBasis(camera),sun=sunDirection(state.sun);
     const exposure=clamp(finite(state.camera?.exposure,1)*Math.pow(2,clamp(finite(state.color?.exposure,0),-10,10)),0.001,1000), intensity=clamp(Number(state.sun?.intensity)||0,0,100);
     const contrast=clamp(finite(state.color?.contrast,1),0,4),saturation=clamp(finite(state.color?.saturation,1),0,4);
@@ -397,21 +405,32 @@ export class SkyViewportRenderer {
       casters.push({id:object.id,buffer:mesh.buffer,count:mesh.count,position,scale:scaleVector(object),rotation:rotationMatrix3(object.rotation),center:position,radius:objectRadius(object)});
     }
     this.objectShadows.update(casters,sun,{low:512,medium:768,high:1024}[this.cloudSettings.quality],this.volumeSupported&&state.viewport?.objectShadows!==false);
-    gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.disable(gl.DEPTH_TEST);
-    gl.useProgram(skyProgram);gl.bindBuffer(gl.ARRAY_BUFFER,this.quad);
-    const attr=gl.getAttribLocation(skyProgram,'aPosition');gl.enableVertexAttribArray(attr);gl.vertexAttribPointer(attr,2,gl.FLOAT,false,0,0);
-    const u=(n,t,v)=>this.uniform(skyProgram,n,t,v);
     this.usingLut=state.viewport?.skySource==='backend'&&this.hasLut&&lutMatchesSun(this.payload,state.sun)&&lutMatchesAtmosphere(this.payload,state.atmosphere,this.lutAtmosphere);
     const sourceColor=blackbodyTint(state.sun?.temperature),celestial=celestialUniforms(state);
     const direct=physical.direct.map((v,i)=>v*sourceColor[i]*4);
+    const cloudParameters=cloudUniforms(state),cloudSunAltitude=cloudParameters.uAltitude+cloudParameters.uThickness*.5;
+    const cloudSunTransmission=this.transport.sunTransmission(cloudSunAltitude,state.sun?.elevation);
+    const cloudDirect=cloudSunTransmission.map((v,i)=>v*sourceColor[i]*4);
     const daylight=clamp((sun[2]+0.1)/0.2,0,1);
     const ambient=this.usingLut&&this.lutAmbient?this.lutAmbient.map(value=>value*intensity):physical.ambient.map((v,i)=>v*sourceColor[i]*intensity+[.000015,.000025,.00006][i]*(1-daylight));
-    const skyVectors={uEye:basis.eye,uForward:basis.forward,uRight:basis.right,uUp:basis.up,uSun:sun,uSunTint:direct,uSkyAmbient:ambient,uSunSourceColor:sourceColor,uZenithOpticalDepth:opticalDepth(physical.parameters,.02,1),...celestial.vectors};
+    const skyVectors={uEye:basis.eye,uForward:basis.forward,uRight:basis.right,uUp:basis.up,uSun:sun,uSunTint:direct,uCloudSunTint:cloudDirect,uSkyAmbient:ambient,uSunSourceColor:sourceColor,uZenithOpticalDepth:opticalDepth(physical.parameters,.02,1),...celestial.vectors};
     const skyFloats={uHasIntegrated:1,uIntegratedEncoded:this.floatTexture?0:1,uSunAzimuth:finite(state.sun?.azimuth,215)*Math.PI/180,uHasCloudNoise:1,uPixelAngle:2*Math.tan(fov*Math.PI/360)/this.canvas.height,...celestial.floats,uAspect:aspect,uTan:Math.tan(clamp(fov,15,120)*Math.PI/360),uDistance:camera.distance,uOrtho:camera.projection==='orthographic'?1:0,uExposure:exposure,uContrast:contrast,uSaturation:saturation,uSunRadius:clamp(Number(state.sun?.angularDiameter)||0.53,0.01,10)*Math.PI/360,uIntensity:intensity,...cloudUniforms(state),uTurbidity:clamp(finite(state.atmosphere?.turbidity,2.4),1,15),uRayleigh:clamp(finite(state.atmosphere?.rayleigh,2.8),0,10),uMie:clamp(finite(state.atmosphere?.mieCoefficient,0.005),0,0.1),uMieG:clamp(finite(state.atmosphere?.mieDirectionalG,0.8),-0.99,0.99),uOzone:clamp(finite(state.atmosphere?.ozone,0.6),0,3),uHaze:Math.max(0,Number(state.atmosphere?.haze)||0),uHasLut:this.usingLut?1:0};
+    skyFloats.uUseCloudBuffer=0;
+    const size=this.cssSize?this.cloudPass.size(this.cssSize.width,this.cssSize.height,this.cssSize.dpr,this.cloudSettings):{width:this.canvas.width,height:this.canvas.height};
+    const cloudVectors=Object.fromEntries(['uEye','uForward','uRight','uUp','uSun','uCloudSunTint','uSkyAmbient','uMoonAmbient'].map(n=>[n,skyVectors[n]]));
+    const cloudFloats={...cloudUniforms(state),uHasCloudNoise:1,uAspect:aspect,uTan:skyFloats.uTan,uDistance:camera.distance,uOrtho:skyFloats.uOrtho,uIntensity:intensity,uHaze:skyFloats.uHaze};
+    if(!cloudFloats.uWindSpeed)cloudFloats.uTime=0;
+    const separate=skyProgram!==this.sky&&this.cloudPass.update({size,quality:this.cloudSettings.quality,key:JSON.stringify([size,this.cloudSettings.quality,cloudVectors,cloudFloats,this.noiseSeed]),quad:this.quad,vectors:cloudVectors,floats:cloudFloats});
+    if(skyProgram!==this.sky&&!separate&&this.cssSize){this.resize(this.cssSize.width,this.cssSize.height,this.cssSize.dpr);aspect=this.canvas.width/this.canvas.height;skyFloats.uAspect=aspect;skyFloats.uPixelAngle=2*skyFloats.uTan/this.canvas.height;}
+    gl.bindFramebuffer?.(gl.FRAMEBUFFER,null);gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.disable(gl.DEPTH_TEST);
+    gl.useProgram(skyProgram);gl.bindBuffer(gl.ARRAY_BUFFER,this.quad);
+    const attr=gl.getAttribLocation(skyProgram,'aPosition');gl.enableVertexAttribArray(attr);gl.vertexAttribPointer(attr,2,gl.FLOAT,false,0,0);
+    const u=(n,t,v)=>this.uniform(skyProgram,n,t,v);
     for(const [n,v] of Object.entries(skyVectors))u(n,'uniform3fv',v);
     for(const [n,v] of Object.entries(skyFloats))u(n,'uniform1f',v);
     u('uIntegratedSize','uniform2fv',[physical.width,physical.height]);this.bindTransport(skyProgram);
     u('uLutSize','uniform2fv',this.lutSize);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);u('uLut','uniform1i',0);
+    if(separate)this.cloudPass.bind(skyProgram);
     gl.drawArrays(gl.TRIANGLES,0,6);gl.disableVertexAttribArray(attr);
     const probeOrigin=camera.target||[0,0,1.2];
     this.reflectionProbe.update({key:JSON.stringify([state.sun,state.atmosphere,state.clouds,state.moon,state.stars,state.aurora,state.rainbow,this.cloudSettings.quality,this.cloudSettings.mode,cloudUniforms(state).uTime,probeOrigin,this.usingLut?this.lutRevision:0]),quality:this.cloudSettings.quality,mode:skyProgram===this.sky?'layer':'volumetric',quad:this.quad,uniforms:p=>{
@@ -452,8 +471,9 @@ export class SkyViewportRenderer {
       gl.depthFunc(gl.LEQUAL);this.drawMesh(mesh.outline,mesh.outlineCount,gl.LINES,true,position,scale,rotation);gl.depthFunc(gl.LESS);
     }
     this.frameTimeMs=performance.now()-started;
-    this.cloudMetrics={mode:skyProgram===this.sky?'layer':'volumetric',quality:this.cloudSettings.quality,samples:skyProgram===this.sky?0:this.cloudSettings.samples,shadowSamples:skyProgram===this.sky?0:this.cloudSettings.shadowSamples,cloudShadows:this.mesh===this.cloudMesh,width:this.canvas.width,height:this.canvas.height,pixels:this.canvas.width*this.canvas.height,frameTimeMs:this.frameTimeMs};
-    this.lightingMetrics={objectShadows:this.objectShadows.active,shadowMapSize:this.objectShadows.resolution||0,shadowDraws:this.objectShadows.draws,shadowFallback:this.objectShadows.error||this.objectShadows.reason||null,skySource:this.usingLut?'backend relative LUT':'integrated atmosphere',atmosphereBuilds:this.transport.builds,opticalBuilds:this.transport.opticalBuilds,atmosphereSize:[physical.width,physical.height],celestial:normalizeCelestial(state),reflectionSamples:5,reflectionProbe:this.reflectionProbe.active,reflectionSize:[this.reflectionProbe.width||0,this.reflectionProbe.height||0],reflectionDraws:this.reflectionProbe.draws,reflectionFallback:this.reflectionProbe.error||null};
+    const cloudSize=separate?size:{width:this.canvas.width,height:this.canvas.height};
+    this.cloudMetrics={mode:skyProgram===this.sky?'layer':'volumetric',quality:this.cloudSettings.quality,samples:skyProgram===this.sky?0:this.cloudSettings.samples,shadowSamples:skyProgram===this.sky?0:this.cloudSettings.shadowSamples,cloudShadows:this.mesh===this.cloudMesh,...cloudSize,pixels:cloudSize.width*cloudSize.height,pipeline:separate?'separate':'full-frame',displayWidth:this.canvas.width,displayHeight:this.canvas.height,displayPixels:this.canvas.width*this.canvas.height,bufferFormat:separate?this.cloudPass.format:null,cloudDraws:this.cloudPass.draws,bufferFallback:this.cloudPass.error||null,frameTimeMs:this.frameTimeMs};
+    this.lightingMetrics={objectShadows:this.objectShadows.active,shadowMapSize:this.objectShadows.resolution||0,shadowDraws:this.objectShadows.draws,shadowFallback:this.objectShadows.error||this.objectShadows.reason||null,cloudSunAltitudeMetres:cloudSunAltitude,cloudSunTransmission,geometricShadowReceivers:this.geometricReceivers,skySource:this.usingLut?'backend relative LUT':'integrated atmosphere',atmosphereBuilds:this.transport.builds,opticalBuilds:this.transport.opticalBuilds,atmosphereSize:[physical.width,physical.height],celestial:normalizeCelestial(state),reflectionSamples:5,reflectionProbe:this.reflectionProbe.active,reflectionSize:[this.reflectionProbe.width||0,this.reflectionProbe.height||0],reflectionDraws:this.reflectionProbe.draws,reflectionFallback:this.reflectionProbe.error||null};
   }
   drawMesh(buffer,count,mode,lines,offset=[0,0,0],scale=[1,1,1],rotation=identityRotation,material){
     const g=this.gl;g.bindBuffer(g.ARRAY_BUFFER,buffer);const enabled=[];
@@ -468,6 +488,7 @@ export class SkyViewportRenderer {
     const g=this.gl;
     this.objectShadows?.dispose();
     this.reflectionProbe?.dispose();
+    this.cloudPass?.dispose();
     if(g&&!g.isContextLost()){
       // A current program stays alive after deleteProgram until it is unbound.
       g.useProgram(null);

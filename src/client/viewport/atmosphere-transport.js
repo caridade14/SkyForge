@@ -169,6 +169,12 @@ export function encodeAtmosphereRGBM(data) {
 }
 export class AtmosphereTransport {
   constructor(){this.builds=0;this.opticalBuilds=0;}
+  // Cloud layer lighting samples the existing optical table at its own altitude.
+  // Metres enter here; the spherical transport table uses kilometres.
+  sunTransmission(altitudeMetres=20,elevation=7) {
+    if(!this.tables)throw new Error('Update atmosphere transport before sampling sunlight.');
+    return this.tables.transmittance(clamp(finite(altitudeMetres,20)*.001,.001,99.99),Math.sin(clamp(finite(elevation,7),-90,90)*PI/180));
+  }
   update(atmosphere={},sun={},quality='low') {
     const params=atmosphereParameters(atmosphere), opticalKey=JSON.stringify(params);
     if(opticalKey!==this.opticalKey) { this.tables=new OpticalTables(params);this.opticalKey=opticalKey;this.opticalBuilds++;this.skyKey=null; }

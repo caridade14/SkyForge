@@ -26,7 +26,7 @@ const base=process.env.SKYFORGE_TEST_URL||'http://127.0.0.1:3000';
         }catch(e){clearTimeout(timer);reject(e);}
       });
     }));
-    assert.equal(result.error,0);assert.equal(result.clouds.mode,'volumetric');assert.ok(result.w*result.h<=({low:250000,medium:500000,high:900000}[result.clouds.quality]));
+    assert.equal(result.error,0);assert.equal(result.clouds.mode,'volumetric');assert.ok(result.clouds.pixels<=({low:250000,medium:500000,high:900000}[result.clouds.quality]));assert.ok(result.w*result.h<=2000000);
     if(name)await page.screenshot({path:path.join(out,`celestial-${name}.png`)});return result;
   };
   const diff=(a,b)=>{assert.equal(a.length,b.length);let sum=0,changed=0,max=0;for(let i=0;i<a.length;i+=3){const delta=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);sum+=delta/3;max=Math.max(max,delta/3);if(delta>18)changed++;}return{mean:sum/(a.length/3),changed,max};};

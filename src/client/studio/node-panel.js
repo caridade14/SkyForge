@@ -4,7 +4,7 @@ const TYPES = ["Sun", "Atmosphere", "Clouds", "Moon", "Stars", "Aurora", "Rainbo
 const PARAMS = {
   Sun: { azimuth: [0, 360, 1], elevation: [-90, 90, 1], intensity: [0, 20, 0.05] },
   Atmosphere: { turbidity: [1, 10, 0.1], rayleigh: [0, 10, 0.1], haze: [0, 1, 0.01], ozone: [0, 1, 0.01] },
-  Clouds: { coverage: [0, 1, 0.01], density: [0, 2, 0.01], altitude: [0, 15000, 10], thickness: [10, 10000, 10], erosion: [0, 1, 0.01], detail: [0, 1, 0.01], windSpeed: [0, 100, 0.1], windDirection: [0, 360, 1] },
+  Clouds: { coverage: [0, 1, 0.01], density: [0, 1, 0.01], altitude: [1, 15000, 10], thickness: [50, 10000, 10], scale: [250, 6000, 10], erosion: [0, 1, 0.01], detail: [0, 1, 0.01], windSpeed: [0, 100, 0.1], windDirection: [0, 360, 1] },
   Moon: { enabled: [0,1,1], azimuth: [0,360,.1], elevation: [-90,90,.1], phase: [0,1,.01], angularDiameter: [.1,5,.01], brightness: [0,8,.1] },
   Stars: { enabled: [0,1,1], count: [0,12000,1], brightness: [0,8,.1], rotation: [-360,360,.1], seed: [0,2147483647,1] },
   Aurora: { enabled: [0,1,1], intensity: [0,8,.1], azimuth: [0,360,.1], altitude: [80,200,1], height: [20,400,1], width: [1,50,.1], curtains: [1,3,1], speed: [0,2,.01] },

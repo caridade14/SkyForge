@@ -23,6 +23,14 @@ export function shadowMatrix({ center, radius }, sunlight) {
 export const OBJECT_SHADOW_GLSL = `
 uniform sampler2D uObjectShadow; uniform mat4 uShadowVP; uniform float uHasObjectShadow,uShadowTexel,uReceiveShadow;
 float objectVisibility(vec3 point,vec3 normal,float noL){
+#ifdef SF_GEOMETRIC_RECEIVER
+ // The depth pass rasterizes triangles, so its receiver plane must use the
+ // geometric triangle normal, not the interpolated smooth shading normal.
+ // Evaluate derivatives before any per-fragment early return.
+ vec3 planeNormal=cross(dFdx(point),dFdy(point));
+ if(dot(planeNormal,normal)<0.0)planeNormal=-planeNormal;
+ normal=normalize(planeNormal);
+#endif
  if(uHasObjectShadow<0.5||uReceiveShadow<0.5||noL<=0.0)return 1.0;
  vec3 p=(uShadowVP*vec4(point,1.0)).xyz*0.5+0.5;
  if(p.x<=0.0||p.x>=1.0||p.y<=0.0||p.y>=1.0||p.z<=0.0||p.z>=1.0)return 1.0;
@@ -31,6 +39,10 @@ float objectVisibility(vec3 point,vec3 normal,float noL){
  vec3 lightNormal=mat3(uShadowVP)*normal;
  vec2 gradient=lightNormal.xy/(4.0*max(0.00001,-lightNormal.z));
  float bias=0.0001+uShadowTexel*0.05+0.00015*(1.0-noL),sum=0.0;
+#ifndef SF_GEOMETRIC_RECEIVER
+ // Older contexts retain a conservative bounded bias for smooth surfaces.
+ bias+=uShadowTexel*0.45;
+#endif
  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){
   vec2 uv=(floor(p.xy/uShadowTexel)+vec2(float(x),float(y))+0.5)*uShadowTexel;
   vec2 depth=texture2D(uObjectShadow,uv).rg;
