@@ -2,6 +2,13 @@
 
 SkyForge é uma workstation local para criação de céus físicos, atmosfera, HDRI, animação de iluminação e integração com aplicações 3D. O projeto utiliza Node.js sem frameworks externos e mantém a persistência principal em SQLite (`data/skyforge.db`).
 
+O **Studio R15** acrescenta seis looks completos com Undo, dimensão das nuvens em
+metros, render de nuvens separado da resolução da viewport, correções de sombras
+e enquadramento, ativação dos efeitos a partir do Legacy e diagnóstico gráfico.
+Ver [controlos, arquitetura e validação](docs/STUDIO_RENDER_REFINEMENT.md).
+O preview continua a usar iluminação RGB relativa; o renderer HDR/EXR profissional
+e ACES/OCIO permanecem milestones separados.
+
 ## O que mudou no Core v11
 
 A build v11 preserva a UI SF30, mas adiciona uma camada modular e não destrutiva carregada pelo gateway Natural Light:

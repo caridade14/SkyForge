@@ -127,6 +127,7 @@ export const DEFAULT_SKYFORGE_STATE = Object.freeze({
   clouds: {
     type: "Cumulus",
     coverage: 0.62,
+    scale: 1200,
     density: 0.7,
     altitude: 2400,
     thickness: 800,

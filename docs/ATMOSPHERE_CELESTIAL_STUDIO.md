@@ -4,6 +4,11 @@ This milestone extends `feature/lighting-workbench`. It preserves Core v11,
 the Natural Light service, the existing canvas renderer, Blender Bridge,
 reference geometry, projects, history, graph composition and animation.
 
+[Studio R15](STUDIO_RENDER_REFINEMENT.md) subsequently separates the cloud target
+from display resolution, adds complete sky looks/cloud size, and repairs Legacy
+layer activation, sky framing and smooth receiver shadow artifacts. The cloud
+budgets below continue to apply to the cloud pass.
+
 ## Use the implemented controls
 
 - Open **Sky → Stars / Moon / Aurora / Rainbow**, or click a sky layer in the

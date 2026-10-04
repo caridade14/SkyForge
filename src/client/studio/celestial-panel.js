@@ -1,5 +1,6 @@
 import { normalizeCelestial } from '../core/celestial-state.js';
 import { moonIlluminatedFraction } from '../viewport/celestial-effects.js';
+import { frameSky } from '../viewport/camera.js';
 
 const FIELDS={
   stars:[['count','Count',0,12000,100],['brightness','Brightness',0,8,.1],['rotation','Rotation °',-360,360,1],['seed','Seed',0,2147483647,1]],
@@ -25,7 +26,10 @@ export class CelestialPanel {
     });
     for(const input of this.section.querySelectorAll('input[data-celestial-path]')){
       const path=input.dataset.celestialPath;
-      if(input.type==='checkbox')this.on(input,'change',()=>this.api.store.set(path,input.checked,{label:`Toggle ${path}`}));
+      if(input.type==='checkbox')this.on(input,'change',()=>{
+        this.api.store.batch(`Toggle ${path}`,draft=>{const [root,key]=path.split('.');draft[root][key]=input.checked;if(key==='enabled'&&input.checked)draft.viewport.mode='webgl';});
+        if(path.endsWith('.enabled')&&input.checked){this.api.viewport.open3D();this.workspace.showSky('effects');}
+      });
       else{
         this.on(input,'focus',()=>{this.finish(true);this.edit={input,session:this.api.store.beginEdit(path,{label:`Edit ${path}`})};});
         this.on(input,'input',()=>{
@@ -58,7 +62,7 @@ export class CelestialPanel {
   finish(cancel){const edit=this.edit;if(!edit)return;this.edit=null;cancel?edit.session.cancel():edit.session.commit();this.sync(this.api.store.snapshot());}
   add(root){
     if(!FIELDS[root])return;
-    this.finish(false);this.api.store.set(`${root}.enabled`,true,{label:`Add ${LABELS[root]} sky layer`});this.workspace.showSky('effects');
+    this.finish(false);this.api.store.batch(`Add ${LABELS[root]} sky layer`,draft=>{draft[root].enabled=true;draft.viewport.mode='webgl';});this.api.viewport.open3D();this.workspace.showSky('effects');
     this.section.querySelector(`[data-effect="${root}"]`)?.scrollIntoView({block:'nearest'});
   }
   frame(root){
@@ -67,12 +71,14 @@ export class CelestialPanel {
     else if(root==='aurora'){azimuth=state.aurora.azimuth;elevation=34;}
     else if(root==='rainbow'){azimuth=(state.sun.azimuth+180)%360;elevation=Math.max(4,42-state.sun.elevation);}
     else return;
-    this.api.viewport.commit({...this.api.viewport.getCamera(),yaw:-azimuth*Math.PI/180,pitch:-elevation*Math.PI/180,projection:'perspective'},`Frame ${root}`);
+    this.api.store.batch(`Frame ${root}`,draft=>{draft.viewport.camera=frameSky(draft.viewport.camera,azimuth,elevation);draft.viewport.mode='webgl';});
+    this.api.viewport.open3D();
   }
   preset(name){
     this.finish(false);
     this.api.store.batch(`Sky effects preset ${name}`,draft=>{
       draft.viewport.skySource='integrated';
+      draft.viewport.mode='webgl';draft.viewport.cloudMode='volumetric';
       if(name==='Sunshower'){
         Object.assign(draft.sun,{elevation:12,intensity:1.8,temperature:5778});draft.camera.exposure=1;
         Object.assign(draft.clouds,{type:'Cumulus',coverage:.35,density:.65,precipitation:.6});Object.assign(draft.rainbow,{enabled:true,rainAmount:.5,intensity:1});
@@ -85,8 +91,9 @@ export class CelestialPanel {
       const root=name==='Sunshower'?'rainbow':name==='Aurora night'?'aurora':'moon';
       const az=root==='rainbow'?(draft.sun.azimuth+180)%360:draft[root].azimuth;
       const el=root==='rainbow'?30:root==='aurora'?34:draft.moon.elevation;
-      Object.assign(draft.viewport.camera,{yaw:-az*Math.PI/180,pitch:-el*Math.PI/180,projection:'perspective'});
+      draft.viewport.camera=frameSky(draft.viewport.camera,az,el);
     });
+    this.api.viewport.open3D();this.workspace.showSky('effects');
   }
   dispose(){this.finish(true);this.unsubscribe?.();for(const [target,type,fn]of this.listeners)target.removeEventListener(type,fn);this.listeners=[];this.section?.remove();this.quick?.remove();}
 }

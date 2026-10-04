@@ -30,7 +30,9 @@ export class SkyForgeViewport {
     this.bar.onclick=e=>this.action(e.target.closest('button[data-vp]')?.dataset.vp);
     this.bar.onchange=e=>this.action(e.target.dataset.vp,e.target.value);
     this.message=this.bar.querySelector('.sf-3d-message');
-    this.container.append(this.host,this.bar);
+    this.alert=doc.createElement('aside');this.alert.className='sf-3d-alert';this.alert.setAttribute('role','status');
+    this.alert.innerHTML='<span></span><button type="button">Open 3D View</button>';this.alert.querySelector('button').onclick=()=>this.open3D();
+    this.container.append(this.host,this.bar,this.alert);
     this.camera=this.getCamera();
     try{this.createRenderer();}catch(error){this.error=error.message;this.message.textContent=this.error;}
     this.objectAdapter=new SceneObjectAdapter(this.store,{root:this.root,onFrame:()=>this.referenceGizmo?.frameSelected()}).init();
@@ -60,8 +62,9 @@ export class SkyForgeViewport {
     });
     this.on(this.canvas,'webglcontextrestored',()=>{
       if(this.disposed)return;
-      try{this.createRenderer();this.lost=false;this.error=null;this.setLut(this.payload);this.setActive(this.restoreActive,false);}
-      catch(error){this.error=error.message;this.message.textContent=error.message;}
+      this.lost=false;
+      try{this.createRenderer();this.error=null;this.setLut(this.payload);this.setActive(this.restoreActive,false);}
+      catch(error){this.error=error.message;this.setActive(false,false);}
     });
     if(this.root.ResizeObserver){this.observer=new this.root.ResizeObserver(()=>this.invalidate());this.observer.observe(this.container);}
     else this.on(this.root,'resize',()=>this.invalidate());
@@ -71,6 +74,22 @@ export class SkyForgeViewport {
   }
   on(target,type,fn){target.addEventListener(type,fn);this.listeners.push([target,type,fn]);}
   createRenderer(){this.renderer=new SkyViewportRenderer(this.canvas);this.error=null;}
+  open3D(){
+    if(this.disposed||this.lost)return false;
+    if(!this.renderer||this.error){
+      try{this.renderer?.dispose();this.createRenderer();this.setLut(this.payload);}
+      catch(error){this.error=error.message;this.updateRecovery();return false;}
+    }
+    this.store.set('viewport.mode','webgl',{label:'Open 3D View'});this.sync(this.store.snapshot());this.updateRecovery();return this.active;
+  }
+  updateRecovery(){
+    if(!this.alert)return;
+    this.alert.hidden=this.active&&!this.error&&!this.lost;
+    this.alert.querySelector('span').textContent=this.lost?'The graphics context was lost. Waiting for browser recovery.':this.error?`3D View could not render: ${this.error}`:'Legacy canvas is active. Open 3D View to use Studio sky layers.';
+    const button=this.alert.querySelector('button');button.textContent=this.error?'Retry 3D View':'Open 3D View';button.disabled=Boolean(this.lost);
+    const status=JSON.stringify([this.active,Boolean(this.lost),this.error||null]);
+    if(status!==this.graphicsStatus){this.graphicsStatus=status;if(typeof this.root.CustomEvent==='function')this.root.dispatchEvent(new this.root.CustomEvent('skyforge:viewport-status',{detail:{active:this.active,lost:Boolean(this.lost),error:this.error||null}}));}
+  }
   getCamera(){return normalizeCamera(this.store.get('viewport.camera'));}
   commit(camera,label){
     this.camera=normalizeCamera(camera);
@@ -101,6 +120,7 @@ export class SkyForgeViewport {
       b.disabled=action==='undo'?!this.store.canUndo():action==='frame'?!state.scene?.referenceObjects?.[state.scene?.selectedReferenceId]:false;
     }
     this.host.classList.toggle('sf-3d-no-overlays',state.viewport?.overlays===false);
+    this.updateRecovery();
   }
   setActive(active,persist=true){
     active=Boolean(active&&this.renderer&&!this.lost&&!this.error);
@@ -108,11 +128,13 @@ export class SkyForgeViewport {
     this.active=active;this.root.SF_VIEWPORT_3D_ACTIVE=active;
     this.container.parentElement?.classList.toggle('sf-3d-workspace',active);
     this.container.classList.toggle('sf-3d-active',active);this.host.hidden=!active;
-    this.bar.querySelector('[data-vp="mode"]').textContent=active?'Legacy View':'3D View';
+    const mode=this.bar.querySelector('[data-vp="mode"]');mode.textContent=active?'3D View':'Legacy View';
+    mode.title=active?'3D View is active. Click to switch to the Legacy canvas.':'Legacy canvas is active. Click to open 3D View.';mode.setAttribute('aria-pressed',String(active));
     this.bar.querySelector('.sf-3d-tools').hidden=!active;
     this.message.textContent=this.error||(active?'Reference geometry · sky layers · render on demand':'Legacy scene tools');
     if(persist)this.store.set('viewport.mode',active?'webgl':'legacy',{label:'Switch viewport renderer'});
     if(active)this.invalidate();else this.root.drawSky?.();
+    this.updateRecovery();
   }
   railAction(action){
     if(!action)return;this.sunGizmo.finish(true);this.referenceGizmo.finish(true);this.navigation.finish(true);
@@ -179,12 +201,12 @@ export class SkyForgeViewport {
         this.referenceGizmo.update(this.camera,r.width,r.height,Number(state.camera?.fov)||60);
         this.sunGizmo.update(state.sun,this.camera,r.width,r.height,Number(state.camera?.fov)||60);
         const cloud=this.renderer.cloudMetrics;
-        const cloudLabel=cloud?.mode==='volumetric'?`GPU volume · ${cloud.quality} · ${cloud.samples} steps`:'procedural layer';
+        const cloudLabel=cloud?.mode==='volumetric'?`GPU volume · ${cloud.quality} · ${cloud.samples} steps · ${cloud.width} × ${cloud.height}`:'procedural layer';
         this.hud.textContent=`WEBGL · ${this.camera.projection.toUpperCase()} · ${this.renderer.usingLut?'NATURAL LIGHT LUT':'INTEGRATED ATMOSPHERE'}\n${this.renderer.canvas.width} × ${this.renderer.canvas.height} · Clouds: ${cloudLabel} · Display preview`;
         this.message.textContent=this.renderer.cloudFallbackReason||'Reference geometry · sky layers · render on demand';
         this.message.title=this.renderer.cloudFallbackReason||'';
         this.updateAxes();
-      }catch(error){this.error=`3D preview failed: ${error.message}`;this.setActive(false,false);}
+      }catch(error){this.error=`3D preview failed: ${error.message}`;this.setActive(false,false);this.updateRecovery();}
     });
   }
   updateAxes(){
@@ -200,7 +222,7 @@ export class SkyForgeViewport {
     this.disposed=true;this.unsubscribe?.();this.referenceGizmo?.dispose();this.objectAdapter?.dispose();this.sunGizmo?.dispose();this.navigation?.dispose();this.cancelFrame();this.observer?.disconnect();
     this.cancelCaptures('Viewport closed before capture.');
     this.listeners.forEach(([t,n,f])=>t.removeEventListener(n,f));this.listeners=[];this.renderer?.dispose();
-    this.root.SF_VIEWPORT_3D_ACTIVE=false;this.container?.parentElement?.classList.remove('sf-3d-workspace');this.container?.classList.remove('sf-3d-active');this.host?.remove();this.bar?.remove();
+    this.root.SF_VIEWPORT_3D_ACTIVE=false;this.container?.parentElement?.classList.remove('sf-3d-workspace');this.container?.classList.remove('sf-3d-active');this.host?.remove();this.bar?.remove();this.alert?.remove();
     this.root.drawSky?.();
   }
 }

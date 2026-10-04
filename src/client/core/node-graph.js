@@ -270,7 +270,7 @@ export function registerDefaultNodeTypes(graph) {
     .registerType("Clouds", {
       category: "Atmosphere",
       outputs: { clouds: { type: "clouds" } },
-      defaults: { type: "Cumulus", coverage: 0.62, density: 0.7, altitude: 2400, thickness: 800, erosion: 0.45, detail: 0.6, windSpeed: 8, windDirection: 220 },
+      defaults: { type: "Cumulus", coverage: 0.62, density: 0.7, altitude: 2400, thickness: 800, scale: 1200, erosion: 0.45, detail: 0.6, windSpeed: 8, windDirection: 220 },
       evaluate: ({ params, context }) => ({ clouds: { ...(context.state?.clouds || {}), ...params } })
     })
     .registerType("SkyScene", {

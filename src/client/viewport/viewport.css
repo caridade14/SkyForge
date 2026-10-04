@@ -40,3 +40,8 @@
 @media(max-height:750px){.sf-3d-rail{top:8px;bottom:76px}.sf-3d-rail button{min-height:26px}}
 
 .sf-3d-toolbar{left:56px}
+.sf-3d-alert{position:absolute;left:60px;right:16px;bottom:58px;z-index:153;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #9c7441;border-radius:6px;background:#17222eef;color:#dce5ed;font:12px/1.5 system-ui;box-shadow:0 4px 18px #0007}
+.sf-3d-alert[hidden]{display:none!important}
+.sf-3d-alert span{min-width:0;max-height:100px;overflow:auto;flex:1}
+.sf-3d-alert button{flex-shrink:0;border:1px solid #b78043;background:#55432e;color:#ffe2b7;border-radius:4px;padding:8px;cursor:pointer}
+.sf-3d-alert button:disabled{opacity:.5;cursor:default}

@@ -11,8 +11,10 @@ on:
       - fix/studio-natural-preview-ui
       - feature/lighting-workbench
       - feature/atmosphere-celestial-studio
+      - feature/studio-render-refinement
   pull_request:
     branches:
+      - feature/atmosphere-celestial-studio
       - feature/lighting-workbench
       - fix/studio-natural-preview-ui
       - feature/studio-volumetric-preview

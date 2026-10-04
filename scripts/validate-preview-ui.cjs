@@ -51,7 +51,7 @@ fs.mkdirSync(out, { recursive: true });
     stage('clouds visible in the unchanged startup camera, within Low budget');
     const camera = await read('viewport.camera');
     const clouds = await pixels();
-    assert.equal(clouds.error, 0); assert.equal(clouds.metrics.mode, 'volumetric'); assert.equal(clouds.metrics.samples, 16); assert.ok(clouds.w * clouds.h <= 250000);
+    assert.equal(clouds.error, 0); assert.equal(clouds.metrics.mode, 'volumetric'); assert.equal(clouds.metrics.samples, 16); assert.ok(clouds.metrics.pixels <= 250000); assert.ok(clouds.w * clouds.h <= 2000000);
     await page.screenshot({ path: path.join(out, 'preview-ui-startup.png') });
     await page.evaluate(() => SkyForgeCore.store.set('clouds.coverage', 0)); const clear = await pixels();
     results.metrics.startupClouds = difference(clouds.sky, clear.sky);

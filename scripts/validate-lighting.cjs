@@ -43,7 +43,7 @@ const out=process.env.SKYFORGE_TEST_OUTPUT||'/tmp/skyforge-lighting';fs.mkdirSyn
     await command('Sky','sky-sun');await page.locator('[data-studio-sun-preset="Noon"]').click();await command('Sky','sky-clouds');await page.locator('[data-cloud-preset="Clear"]').click();
     await page.evaluate(()=>{SkyForgeCore.store.set('viewport.grid',false,{record:false});SkyForgeCore.store.set('viewport.overlays',false,{record:false});});
     stage('object shadows change real framebuffer pixels and reuse the cached depth pass');
-    const shaded=await frame();assert.equal(shaded.error,0);assert.equal(shaded.lighting.objectShadows,true);assert.equal(shaded.lighting.shadowMapSize,512);assert.ok(shaded.w*shaded.h<=250000);
+    const shaded=await frame();assert.equal(shaded.error,0);assert.equal(shaded.lighting.objectShadows,true);assert.equal(shaded.lighting.shadowMapSize,512);assert.ok(shaded.clouds.pixels<=250000);assert.ok(shaded.w*shaded.h<=2000000);
     await page.screenshot({path:path.join(out,'lighting-bench.png')});
     const repeated=await frame();assert.equal(repeated.lighting.shadowDraws,shaded.lighting.shadowDraws,'unchanged scene reuses its depth map');
     assert.equal(shaded.lighting.reflectionProbe,true,shaded.lighting.reflectionFallback);assert.deepEqual(shaded.lighting.reflectionSize,[128,64]);

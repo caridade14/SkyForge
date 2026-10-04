@@ -1,5 +1,6 @@
 import { CelestialPanel } from './celestial-panel.js';
 import { LightingWorkbench } from './lighting-workbench.js';
+import { STUDIO_VERSION, SCENE_LOOKS, applySceneLook, graphicsReport } from './scene-looks.js';
 const STORAGE_KEY = 'skyforge.studio.layout.v1';
 const PRESETS = Object.freeze({
   Sky: { left: 240, right: 292, bottom: 190, editor: 'timeline', inspector: 'sky', bottomCollapsed: true },
@@ -14,11 +15,11 @@ const MENUS = {
   File: [['new', 'New project'], ['open', 'Open .skyforge…'], ['save', 'Save .skyforge'], ['capture', 'Save preview PNG…']],
   Edit: [['undo', 'Undo'], ['redo', 'Redo'], ['duplicate', 'Duplicate selected reference'], ['delete', 'Delete selected reference']],
   View: [['home', 'Reset camera'], ['projection', 'Perspective / Orthographic'], ['grid', 'Toggle grid'], ['shadows', 'Toggle object Sun shadows'], ['overlays', 'Toggle overlays'], ['left', 'Outliner'], ['right', 'Inspector'], ['bottom', 'Editors'], ['maximize', 'Maximize viewport'], ['reset', 'Reset workspace'], ['legacy', 'Legacy workspace']],
-  Sky: [['sky-sun', 'Sun & atmosphere'], ['sky-clouds', 'Clouds'], ['sky-location', 'Location'], ['sky-lighting', 'Lighting bench'], ['sky-effects', 'Stars / Moon / Aurora / Rainbow'], ['physical', 'Use evaluated physical sun'], ['engine', 'Physical engine status']],
+  Sky: [['looks', 'Sky looks'], ['sky-sun', 'Sun & atmosphere'], ['sky-clouds', 'Clouds'], ['sky-location', 'Location'], ['sky-lighting', 'Lighting bench'], ['sky-effects', 'Stars / Moon / Aurora / Rainbow'], ['physical', 'Use evaluated physical sun'], ['engine', 'Physical engine status']],
   Scene: [['add-sphere', 'Add sphere'], ['add-cube', 'Add cube'], ['add-plane', 'Add plane'], ['lookdev', 'Add lighting reference bench'], ['add-stars', 'Add stars'], ['add-moon', 'Add Moon'], ['add-aurora', 'Add aurora'], ['add-rainbow', 'Add rainbow'], ['frame', 'Frame selection']],
   Animation: [['timeline', 'Open timeline'], ['play', 'Play / pause'], ['add-key', 'Insert key for active track'], ['previous-key', 'Previous keyframe'], ['next-key', 'Next keyframe'], ['delete-keys', 'Delete selected keys']],
   Nodes: [['nodes', 'Open node editor'], ['frame-graph', 'Frame graph'], ['from-controls', 'Copy sky controls to graph'], ['direct', 'Use direct controls'], ['graph', 'Use node graph'], ['default-graph', 'Create default graph']],
-  Help: [['hub', 'Core Command Center'], ['bridge', 'Blender Bridge'], ['help', 'Navigation & preview guide'], ['legacy', 'Legacy workspace']]
+  Help: [['hub', 'Core Command Center'], ['bridge', 'Blender Bridge'], ['graphics', 'Graphics diagnostics'], ['help', 'Navigation & preview guide'], ['legacy', 'Legacy workspace']]
 };
 
 export function normalizeStudioLayout(value = {}) {
@@ -132,7 +133,7 @@ export class StudioWorkspace {
     this.move(this.builder, this.left.querySelector('.sf-studio-builder'));
     this.move(this.rpanel, this.right.querySelector('.sf-studio-selection'));
     this.move(this.sidebar, this.right.querySelector('.sf-studio-sky'));
-    this.initMenus(); this.initSkyControls(); this.lightingBench = new LightingWorkbench(this.api, this).init(); this.effects = new CelestialPanel(this.api,this).init();
+    this.initMenus(); this.initSkyControls(); this.lightingBench = new LightingWorkbench(this.api, this).init(); this.effects = new CelestialPanel(this.api,this).init();this.initLooks();
     this.outlinerNew = this.outliner?.querySelector('[onclick="sfCreateSceneObject()"]');
     this.outlinerNewTitle = this.outlinerNew?.title;
     this.on(this.root, 'click', event => {
@@ -146,6 +147,7 @@ export class StudioWorkspace {
       else this.action(button.dataset.studioAction);
     });
     this.on(this.toolbar.querySelector('[data-studio-space]'), 'change', event => this.api.store.set('viewport.transformSpace', event.target.value, { label: 'Set transform orientation', record: false }));
+    for(const event of ['skyforge:viewport-status','skyforge:viewport-rendered'])this.on(this.root,event,()=>this.sync(this.api.store.snapshot()));
     this.on(this.left, 'click', event => {
       if (event.target.closest('.tri-out-extra,.tri-out-group')) this.setLayout({ ...this.layout, inspector: 'selection', rightCollapsed: false });
       this.action(event.target.closest('[data-studio-action]')?.dataset.studioAction);
@@ -251,6 +253,12 @@ export class StudioWorkspace {
       this.cloudTools = this.document.createElement('div'); this.cloudTools.className = 'sf-studio-cloud-controls';
       this.cloudTools.innerHTML = `<label class="sf-studio-cloud-type">Cloud shape<select aria-label="Cloud shape" data-studio-cloud-type>${['Cumulus', 'Stratus', 'Cirrus', 'Cumulonimbus', 'Altostratus'].map(type => `<option>${type}</option>`).join('')}</select></label>${['Erosion', 'Detail'].map(name => `<div class="sl-wrap"><div class="sl-top"><span class="sl-name">${name}</span><span class="sl-val"></span></div><input type="range" class="sl" min="0" max="100" step="1" aria-label="Cloud ${name.toLowerCase()}"></div>`).join('')}<div class="sf-studio-cloud-presets">${['Clear', 'Cumulus', 'Overcast', 'Storm'].map(name => `<button type="button" data-cloud-preset="${name}">${name}</button>`).join('')}</div><p class="sf-studio-preview-note">GPU display preview. Quality sets the sample and pixel budget. Wind is in km/h. Professional HDR / EXR export is still pending.</p>`;
       clouds.append(this.cloudTools); this.cloudType = this.cloudTools.querySelector('[data-studio-cloud-type]');
+      const scaleLabel=this.document.createElement('label');scaleLabel.className='sf-studio-cloud-scale';scaleLabel.innerHTML='Cloud size (m)<input type="number" min="250" max="6000" step="10" aria-label="Cloud size in metres">';this.cloudType.closest('label').after(scaleLabel);this.cloudScale=scaleLabel.querySelector('input');
+      this.on(this.cloudScale,'focus',()=>{this.cloudScaleEdit=this.api.store.beginEdit('clouds.scale',{label:'Edit cloud size'});});
+      this.on(this.cloudScale,'input',()=>{if(this.cloudScale.value===''||!Number.isFinite(Number(this.cloudScale.value)))return;if(!this.cloudScaleEdit?.active)this.cloudScaleEdit=this.api.store.beginEdit('clouds.scale',{label:'Edit cloud size'});this.cloudScaleEdit.preview(bounded(this.cloudScale.value,250,6000,1200));});
+      for(const event of ['change','blur'])this.on(this.cloudScale,event,()=>this.finishCloudScale(this.cloudScale.value===''||!Number.isFinite(Number(this.cloudScale.value))));
+      this.on(this.cloudScale,'keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();this.finishCloudScale(true);this.cloudScale.blur();}});
+      this.on(this.root,'blur',()=>this.finishCloudScale(true));this.on(this.document,'visibilitychange',()=>{if(this.document.hidden)this.finishCloudScale(true);});
       this.on(this.cloudType, 'change', event => this.api.store.set('clouds.type', event.target.value, { label: 'Change cloud shape' }));
       this.on(this.cloudTools, 'click', event => {
         const name = event.target.closest('[data-cloud-preset]')?.dataset.cloudPreset;
@@ -261,8 +269,34 @@ export class StudioWorkspace {
     }
     this.showSky('sun', false);
   }
+  finishCloudScale(cancel){const edit=this.cloudScaleEdit;this.cloudScaleEdit=null;if(edit?.active)cancel?edit.cancel():edit.commit();if(this.cloudScale)this.cloudScale.value=String(this.api.store.get('clouds.scale')??1200);}
+  initLooks(){
+    this.toolbar.querySelector('strong').append(Object.assign(this.document.createElement('span'),{className:'sf-studio-version',textContent:'R15',title:STUDIO_VERSION}));
+    this.looks=this.document.createElement('section');this.looks.id='sec-sf-looks';this.looks.className='s-sec';
+    this.looks.innerHTML='<div class="s-head">Sky looks</div><div class="s-body-inner sf-sky-looks"><p>Select a look to set the sky, display exposure and camera together. Undo restores the previous look.</p>'+Object.keys(SCENE_LOOKS).map((name,index)=>`<button type="button" data-scene-look="${name}" class="sf-look-${index}"><span class="sf-look-swatch" aria-hidden="true"></span><strong>${name}</strong></button>`).join('')+'</div>';
+    this.sidebar?.querySelector('.s-body')?.append(this.looks);
+    this.looksButton=this.document.createElement('button');this.looksButton.type='button';this.looksButton.className='sf-open-looks';this.looksButton.textContent='Sky looks';
+    this.left.querySelector('.sf-studio-panel-heading')?.append(this.looksButton);this.on(this.looksButton,'click',()=>this.showSky('looks'));
+    this.on(this.looks,'click',event=>{const name=event.target.closest('[data-scene-look]')?.dataset.sceneLook;if(name)this.selectLook(name);});
+  }
+  selectLook(name){
+    this.finishExposure(true);this.finishCloudScale(true);this.effects.finish(true);this.api.timeline.pause();
+    this.api.store.batch(`Sky look ${name}`,draft=>applySceneLook(draft,name));
+    this.api.viewport.open3D();this.showSky('looks');
+  }
+  showGraphics(){
+    if(!this.graphicsDialog){
+      this.graphicsDialog=this.document.createElement('dialog');this.graphicsDialog.className='sf-graphics-report';
+      this.graphicsDialog.innerHTML='<h2>Graphics diagnostics</h2><p>This report contains the active renderer, resolution, GPU capabilities and graphics errors.</p><pre></pre><button type="button" data-graphics-download>Save report</button><form method="dialog"><button>Close</button></form>';
+      this.document.body.append(this.graphicsDialog);
+      this.on(this.graphicsDialog.querySelector('[data-graphics-download]'),'click',()=>{
+        const url=URL.createObjectURL(new Blob([JSON.stringify(graphicsReport(this.api),null,2)],{type:'application/json'})),link=this.document.createElement('a');link.href=url;link.download='skyforge-graphics-report.json';link.click();this.root.setTimeout(()=>URL.revokeObjectURL(url),1000);
+      });
+    }
+    this.graphicsDialog.querySelector('pre').textContent=JSON.stringify(graphicsReport(this.api),null,2);this.graphicsDialog.showModal();
+  }
   showSky(name = 'sun', reveal = true) {
-    const id = { sun: 'sec-sun', clouds: 'sec-clouds', location: 'sec-scene-location', lighting: 'sec-sf-lighting', effects: 'sec-sf-effects' }[name] || 'sec-sun';
+    const id = { sun: 'sec-sun', clouds: 'sec-clouds', location: 'sec-scene-location', lighting: 'sec-sf-lighting', effects: 'sec-sf-effects', looks:'sec-sf-looks' }[name] || 'sec-sun';
     for (const section of this.sidebar?.querySelectorAll('.s-sec') || []) section.classList.toggle('sf-studio-sky-section', section.id === id);
     this.document.getElementById(id)?.classList.remove('closed');
     for (const tab of this.skyNav?.querySelectorAll('button') || []) tab.setAttribute('aria-pressed', String(tab.dataset.studioSky === name));
@@ -320,10 +354,11 @@ export class StudioWorkspace {
   sync(state) {
     if (!this.toolbar) return;
     const tool = state.viewport?.transformTool || 'move';
-    for (const name of ['move', 'rotate', 'scale']) this.toolbar.querySelector(`[data-studio-action="${name}"]`).setAttribute('aria-pressed', String(tool === name));
+    const transforms=(state.viewport?.navigationTool||'transform')==='transform';
+    for (const name of ['move', 'rotate', 'scale']) this.toolbar.querySelector(`[data-studio-action="${name}"]`).setAttribute('aria-pressed', String(transforms&&tool === name));
     const orientation = this.toolbar.querySelector('[data-studio-space]');
     orientation.value = state.viewport?.transformSpace === 'local' ? 'local' : 'global';
-    orientation.disabled = tool === 'scale';
+    orientation.disabled = tool === 'scale'||!transforms;
     orientation.title = tool === 'scale' ? 'Scale edits the object local dimensions' : 'Choose global axes or the object local axes';
     this.toolbar.querySelector('[data-studio-action="frame"]').disabled = !state.scene?.referenceObjects?.[state.scene?.selectedReferenceId];
     const selected = state.scene?.referenceObjects?.[state.scene?.selectedReferenceId];
@@ -333,6 +368,7 @@ export class StudioWorkspace {
     if (id !== this.selection && id) this.setLayout({ ...this.layout, inspector: 'selection', rightCollapsed: false });
     this.selection = id;
     if (this.cloudType) this.cloudType.value = state.clouds?.type || 'Cumulus';
+    if(!this.cloudScaleEdit?.active){this.cloudScaleEdit=null;if(this.cloudScale)this.cloudScale.value=String(state.clouds?.scale??1200);}
     for (const button of this.menus?.querySelectorAll('[data-studio-command]') || []) {
       const action = button.dataset.studioCommand;
       button.disabled = action === 'undo' ? !this.api.store.canUndo() : action === 'redo' ? !this.api.store.canRedo() : ['frame', 'duplicate', 'delete'].includes(action) ? !selected || (action !== 'frame' && selected.locked) : action === 'capture' ? !this.api.viewport?.active : false;
@@ -342,7 +378,7 @@ export class StudioWorkspace {
       const viewport = this.api.viewport, frame = state.timeline?.currentFrame ?? 1, end = state.timeline?.endFrame ?? 240;
       const cloud = viewport?.renderer?.cloudMetrics, quality = state.viewport?.cloudQuality || cloud?.quality || 'low';
       const volume = state.viewport?.cloudMode === 'volumetric' && !viewport?.renderer?.cloudFallbackReason;
-      this.studioStatus.textContent = `${viewport?.active ? 'WebGL display preview' : 'Legacy View'} · ${volume ? `GPU cloud preview · ${quality}` : 'Cloud layer preview'} · Frame ${Math.round(frame)} / ${Math.round(end)} · ${state.timeline?.fps || 24} fps timeline · ${state.timeline?.playing ? 'Playing' : 'Render on demand'} · ${state.project?.modified ? 'Modified' : 'Saved'}`;
+      this.studioStatus.textContent = `${STUDIO_VERSION} · ${viewport?.active ? '3D View' : 'Legacy View'} · ${volume ? `GPU clouds · ${quality}` : 'Cloud layer preview'} · Frame ${Math.round(frame)} / ${Math.round(end)} · ${state.timeline?.playing ? 'Playing' : 'Render on demand'} · ${state.project?.modified ? 'Modified' : 'Saved'}`;
     }
   }
   action(action) {
@@ -359,6 +395,8 @@ export class StudioWorkspace {
     if (['left', 'right', 'bottom'].includes(action)) return this.setLayout({ ...this.layout, maximized: false, [`${action}Collapsed`]: !this.layout[`${action}Collapsed`] });
     if (action === 'maximize') return this.setLayout({ ...this.layout, maximized: !this.layout.maximized });
     if (action === 'legacy') return this.setLegacy(!this.legacy);
+    if (action === 'looks') return this.showSky('looks');
+    if (action === 'graphics') return this.showGraphics();
     if (['move', 'rotate', 'scale'].includes(action)) {
       this.api.store.set('viewport.navigationTool','transform',{record:false,label:'Choose transform tool'});
       this.api.store.set('viewport.transformTool', action, { label: 'Set transform tool', record: false }); this.api.viewport?.canvas?.focus({ preventScroll: true }); return;
@@ -401,7 +439,7 @@ export class StudioWorkspace {
     if (action === 'help') {
       if (!this.helpDialog) {
         this.helpDialog = this.document.createElement('dialog'); this.helpDialog.className = 'sf-studio-guide';
-        this.helpDialog.innerHTML = '<h2>SkyForge Studio</h2><p>Orbit: middle mouse or Alt + left drag. Pan: Shift with orbit. Dolly: Ctrl with orbit or mouse wheel. Home resets the camera; F frames the selected reference.</p><p>G / R / S: move, rotate, scale. Drag the Sun marker to change its direction. Escape cancels an edit. Ctrl / Cmd Z undoes; Ctrl / Cmd Shift Z redoes. Space plays the timeline; Shift Space maximizes the viewport.</p><p>The viewport shows a bounded GPU approximation. A compatible physical LUT is used when available. PNG is a display image; this preview does not provide a calibrated HDR / EXR renderer or an OpenColorIO pipeline.</p><p>Legacy workspace retains the original scene tools and menus.</p><form method="dialog"><button>Close</button></form>';
+        this.helpDialog.innerHTML = '<h2>SkyForge Studio</h2><p>Orbit: middle mouse or Alt + left drag. Pan: Shift with orbit. Dolly: Ctrl with orbit or mouse wheel. Home resets the camera; F frames the selected reference.</p><p>G / R / S: move, rotate, scale. Drag the Sun marker to change its direction. Escape cancels an edit. Ctrl / Cmd Z undoes; Ctrl / Cmd Shift Z redoes. Space plays the timeline; Shift Space maximizes the viewport.</p><p>Sky looks apply a complete scene in one reversible edit. Cloud size controls the volume in metres; Low / Medium / High change the cloud pass while keeping the sky and objects sharp. Sky source selects Integrated atmosphere or the compatible Natural Light LUT. Help → Graphics diagnostics reports the actual renderer and any error. The preview uses relative linear RGB and bounded GPU approximations. PNG is a display image; this preview is not a calibrated HDR / EXR renderer or an OpenColorIO pipeline.</p><p>Legacy workspace retains the original scene tools and menus.</p><form method="dialog"><button>Close</button></form>';
         this.document.body.append(this.helpDialog);
       }
       return this.helpDialog.showModal();
@@ -450,7 +488,7 @@ export class StudioWorkspace {
     }
   }
   dispose() {
-    this.finishResize(true); this.finishExposure(true); this.effects?.dispose(); this.lightingBench?.dispose(); this.unsubscribe?.();
+    this.finishResize(true); this.finishExposure(true);this.finishCloudScale(true); this.effects?.dispose(); this.lightingBench?.dispose(); this.unsubscribe?.();
     for (const [target, type, listener, capture] of this.listeners) target?.removeEventListener(type, listener, capture);
     for (const { node, marker } of this.moves) { marker.after(node); marker.remove(); }
     if (this.statusbar) { this.statusbar.append(...this.statusChildren); this.legacyStatus.remove(); this.studioStatus.remove(); }
@@ -458,7 +496,7 @@ export class StudioWorkspace {
     this.document?.body.classList.remove('sf-studio-enabled', 'sf-studio-legacy-layout', 'sf-studio-resizing');
     if (this.originalTitle !== undefined) this.document.title = this.originalTitle;
     this.grid?.classList.remove('sf-studio-grid', 'sf-studio-maximized'); this.center?.classList.remove('sf-studio-center');
-    for (const node of [this.toolbar, this.left, this.right, this.bottom, this.css, this.menus, this.skyNav, this.cloudTools, this.atmosphereTools, this.sunPresets, this.helpDialog, ...(this.handles || [])]) node?.remove();
+    for (const node of [this.toolbar, this.left, this.right, this.bottom, this.css, this.menus, this.skyNav, this.cloudTools, this.atmosphereTools, this.sunPresets, this.helpDialog,this.graphicsDialog,this.looks, ...(this.handles || [])]) node?.remove();
     for (const row of this.sidebar?.querySelectorAll('[data-studio-legacy]') || []) delete row.dataset.studioLegacy;
     for (const section of this.sidebar?.querySelectorAll('.sf-studio-sky-section') || []) section.classList.remove('sf-studio-sky-section');
     if (this.outlinerNew) this.outlinerNew.title = this.outlinerNewTitle;
