@@ -20,6 +20,18 @@ In Nodes, select a card to edit its implemented parameters. Drag its title to re
 
 In Animation, select an animatable property and insert a keyframe. Scrub or change Frame, edit the value, and insert another keyframe. Sun angles/intensity, preview exposure, cloud parameters and complete object transform vectors are available. Click diamonds to select; Shift selects several, dragging moves them, Delete removes them, and Escape cancels a drag. Choose Linear, Constant or Smooth interpolation. Play/Pause, range, FPS and Loop use TimelineEngine. Playback advances the display preview without recording every frame or requesting physical lighting for every frame.
 
+## GPU cloud preview
+
+The viewport toolbar selects **GPU clouds** or the previous **Cloud layer** fallback, with Low, Medium and High quality. GPU clouds raymarch procedural 3D density, with coverage, density, altitude/thickness in metres, erosion, detail, wind speed/direction and timeline frame. Sun direction/intensity illuminate the volume with approximate self-shadowing. Unsupported fragment precision or a rejected shader automatically falls back to the cloud layer; the HUD reports the effective mode.
+
+| Quality | Primary / shadow samples | Maximum pixels |
+| --- | ---: | ---: |
+| Low (default) | 16 / 2 | 250,000 |
+| Medium | 28 / 2 | 500,000 |
+| High | 44 / 3 | 900,000 |
+
+The budget also caps Retina resolution. Ray distance is limited to 12 km, with approximate lighting and procedural cloud shapes; there are no mesh-to-cloud shadows, volumetric imports or production render claims. Low is the default for integrated Intel GPUs. Timings in the validation document include GPU readback overhead and do not establish sustained playback FPS.
+
 ## Projects and preview images
 
 Save/Open use the existing project service; objects, graph positions/parameters/connections and keyframes are included. Autosave writes committed edits, while a project opens paused. Old projects receive missing defaults and preserve unknown legacy data. Undo/Redo synchronizes all editors.

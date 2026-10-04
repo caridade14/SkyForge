@@ -14,7 +14,8 @@ const timelineUrl=url(source('src/client/core/timeline-engine.js').replace('"./s
 const transformUrl=url(source('src/client/viewport/transform-math.js').replace("'./camera.js'",JSON.stringify(cameraUrl)));
 const referenceUrl=url(source('src/client/viewport/reference-geometry.js').replace("'./camera.js'",JSON.stringify(cameraUrl)).replace("'./transform-math.js'",JSON.stringify(transformUrl)));
 const camera=()=>import(cameraUrl);
-const renderer=()=>import(url(source('src/client/viewport/renderer.js').replace("'./camera.js'",JSON.stringify(cameraUrl)).replace("'./reference-geometry.js'",JSON.stringify(referenceUrl)).replace("'./transform-math.js'",JSON.stringify(transformUrl))));
+const cloudUrl=url(source('src/client/viewport/volumetric-clouds.js'));
+const renderer=()=>import(url(source('src/client/viewport/renderer.js').replace("'./camera.js'",JSON.stringify(cameraUrl)).replace("'./reference-geometry.js'",JSON.stringify(referenceUrl)).replace("'./transform-math.js'",JSON.stringify(transformUrl)).replace("'./volumetric-clouds.js'",JSON.stringify(cloudUrl))));
 const close=(a,b,eps=1e-6)=>assert.ok(Math.abs(a-b)<eps,`${a} != ${b}`);
 
 test('viewport modules parse without a build system',()=>{

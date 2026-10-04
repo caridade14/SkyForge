@@ -24,6 +24,9 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   const page = await context.newPage();
   page.setDefaultTimeout(20000);
+  // Cold shader compilation on a software WebGL device can outlast normal UI
+  // interactions. Keep navigation bounded while allowing that startup cost.
+  page.setDefaultNavigationTimeout(45000);
   const errors = [], requests = [], results = { backend: process.env.SKYFORGE_WEBGL_BACKEND || 'swiftshader', stages: [], performance: [] };
   page.on('pageerror', error => errors.push({ type: 'pageerror', message: error.stack || error.message }));
   page.on('console', message => { if (message.type() === 'error') errors.push({ type: 'console', message: message.text() }); });
@@ -274,6 +277,7 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
       stage('volumetric GPU quality, bounded buffers, wind/frame and layer fallback');
       await page.locator('[data-studio-preset="Sky"]').click();
       const savedCamera = await read('viewport.camera');
+      const savedFrame = await read('timeline.currentFrame');
       // Aim into the cloud slab rather than time a mostly clear horizon. Keep
       // this documented benchmark pose separate from the user's scene camera.
       await draw(() => SkyForgeCore.store.set('viewport.camera', { ...SkyForgeCore.store.get('viewport.camera'), target: [0, 0, 10], distance: 12, pitch: -.45 }, { record: false, label: 'Cloud preview benchmark pose' }));
@@ -281,7 +285,7 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
       const hasQuality = await page.locator('[data-vp="cloudQuality"]').count(); assert.equal(hasQuality, 1, 'quality control is present');
       for (const quality of ['low', 'medium', 'high']) {
         await page.locator('[data-vp="cloudQuality"]').selectOption(quality);
-        await page.waitForFunction(quality => SkyForgeCore.viewport.renderer.cloudMetrics?.quality === quality && SkyForgeCore.viewport.frame === null, quality);
+        await page.waitForFunction(quality => SkyForgeCore.viewport.renderer.cloudMetrics?.quality === quality && SkyForgeCore.viewport.frame === null, quality, { timeout: 45000 });
         const sample = await evaluate(() => {
           const viewport = SkyForgeCore.viewport, gl = viewport.renderer.gl, pixel = new Uint8Array(4);
           const state = SkyForgeCore.store.snapshot(), timings = [];
@@ -300,7 +304,10 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
       await page.locator('[data-vp="cloudMode"]').selectOption('layer'); await page.waitForFunction(() => SkyForgeCore.viewport.renderer.cloudMetrics?.mode === 'layer');
       assert.equal((await gpuPixels()).error, 0, 'existing cloud layer remains usable');
       await page.locator('[data-vp="cloudMode"]').selectOption('volumetric');
-      await draw(camera => SkyForgeCore.store.set('viewport.camera', camera, { record: false, label: 'Restore scene camera after cloud benchmark' }), savedCamera);
+      await draw(({ camera, frame }) => {
+        SkyForgeCore.store.set('viewport.camera', camera, { record: false, label: 'Restore scene camera after cloud benchmark' });
+        SkyForgeCore.timeline.seek(frame);
+      }, { camera: savedCamera, frame: savedFrame });
     }
 
     stage('save, reopen, autosave and workspace persistence');

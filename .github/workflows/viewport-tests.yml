@@ -40,6 +40,7 @@ jobs:
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/skyforge-browser/node_modules/playwright
           SKYFORGE_TEST_OUTPUT: ${{ runner.temp }}/viewport-results
+          SKYFORGE_EXPECT_VOLUMETRIC: '1'
         run: |
           npm start > "$RUNNER_TEMP/skyforge-server.log" 2>&1 &
           SERVER_PID=$!

@@ -21,8 +21,9 @@ export class SkyForgeViewport {
       b.onclick=e=>this.commit(axisView(this.getCamera(),view,e.shiftKey),'Align viewport');this.axes.append(b);
     }
     this.bar=doc.createElement('div');this.bar.className='sf-3d-toolbar';
-    this.bar.innerHTML='<button data-vp="mode" title="Switch between WebGL sky preview and the existing scene tools">3D View</button><span class="sf-3d-tools"><button data-vp="home" title="Reset view">Home</button><button data-vp="frame" title="Frame selected reference (F)">Frame selected</button><button data-vp="projection">Perspective</button><button data-vp="grid">Grid</button><button data-vp="referenceSphere">Reference sphere</button><button data-vp="overlays">Overlays</button><button data-vp="sun" title="Copy the evaluated Natural Light sun direction into the scene">Use physical sun</button></span><span class="sf-3d-message" role="status"></span>';
-    this.bar.onclick=e=>this.action(e.target.closest('[data-vp]')?.dataset.vp);
+    this.bar.innerHTML='<button data-vp="mode" title="Switch between WebGL sky preview and the existing scene tools">3D View</button><span class="sf-3d-tools"><button data-vp="home" title="Reset view">Home</button><button data-vp="frame" title="Frame selected reference (F)">Frame selected</button><button data-vp="projection">Perspective</button><button data-vp="grid">Grid</button><button data-vp="referenceSphere">Reference sphere</button><button data-vp="overlays">Overlays</button><button data-vp="sun" title="Copy the evaluated Natural Light sun direction into the scene">Use physical sun</button><select data-vp="cloudMode" aria-label="Cloud preview renderer" title="Choose GPU volumetric clouds or the existing cloud layer"><option value="volumetric">GPU clouds</option><option value="layer">Cloud layer</option></select><select data-vp="cloudQuality" aria-label="Cloud preview quality" title="Preview budget: Low 16 steps / 250k pixels; Medium 28 / 500k; High 44 / 900k"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></span><span class="sf-3d-message" role="status"></span>';
+    this.bar.onclick=e=>this.action(e.target.closest('button[data-vp]')?.dataset.vp);
+    this.bar.onchange=e=>this.action(e.target.dataset.vp,e.target.value);
     this.message=this.bar.querySelector('.sf-3d-message');
     this.container.append(this.host,this.bar);
     this.camera=this.getCamera();
@@ -85,6 +86,9 @@ export class SkyForgeViewport {
     this.bar.querySelector('[data-vp="frame"]').disabled=!state.scene?.referenceObjects?.[state.scene?.selectedReferenceId];
     for(const key of ['grid','referenceSphere','overlays'])this.bar.querySelector(`[data-vp="${key}"]`).setAttribute('aria-pressed',String(state.viewport?.[key]!==false));
     this.bar.querySelector('[data-vp="projection"]').textContent=nextCamera.projection==='orthographic'?'Orthographic':'Perspective';
+    this.bar.querySelector('[data-vp="cloudMode"]').value=state.viewport?.cloudMode==='layer'?'layer':'volumetric';
+    this.bar.querySelector('[data-vp="cloudQuality"]').value=['low','medium','high'].includes(state.viewport?.cloudQuality)?state.viewport.cloudQuality:'low';
+    this.bar.querySelector('[data-vp="cloudQuality"]').disabled=state.viewport?.cloudMode==='layer';
     this.host.classList.toggle('sf-3d-no-overlays',state.viewport?.overlays===false);
   }
   setActive(active,persist=true){
@@ -99,11 +103,16 @@ export class SkyForgeViewport {
     if(persist)this.store.set('viewport.mode',active?'webgl':'legacy',{label:'Switch viewport renderer'});
     if(active)this.invalidate();else this.root.drawSky?.();
   }
-  action(action){
+  action(action,value){
     if(!action)return;
     this.sunGizmo.finish(true);this.referenceGizmo.finish(true);
     if(action==='mode'){this.setActive(!this.active);return;}
     this.navigation.finish(true);
+    if(action==='cloudMode'||action==='cloudQuality'){
+      const choices=action==='cloudMode'?['volumetric','layer']:['low','medium','high'];
+      if(choices.includes(value))this.store.set(`viewport.${action}`,value,{label:action==='cloudMode'?'Change cloud preview renderer':'Change cloud preview quality'});
+      return;
+    }
     if(action==='frame')this.referenceGizmo.frameSelected();
     else if(action==='home')this.commit(axisView(this.getCamera(),'home'),'Reset viewport');
     else if(action==='projection'){
@@ -138,7 +147,7 @@ export class SkyForgeViewport {
     if(this.disposed||!this.active||this.root.document.hidden||this.frame!==null)return;
     this.frame=this.root.requestAnimationFrame(()=>{
       this.frame=null;
-      if(!this.active||this.disposed)return;
+      if(!this.active||this.disposed||this.root.document.hidden)return;
       const r=this.container.getBoundingClientRect();if(r.width<1||r.height<1)return;
       try{
         this.renderer.resize(r.width,r.height,this.root.devicePixelRatio||1);
@@ -146,7 +155,11 @@ export class SkyForgeViewport {
         this.renderer.draw(state,this.camera);
         this.referenceGizmo.update(this.camera,r.width,r.height,Number(state.camera?.fov)||60);
         this.sunGizmo.update(state.sun,this.camera,r.width,r.height,Number(state.camera?.fov)||60);
-        this.hud.textContent=`WEBGL · ${this.camera.projection.toUpperCase()} · ${this.renderer.usingLut?'NATURAL LIGHT LUT':'ANALYTIC SKY PREVIEW'}\n${this.renderer.canvas.width} × ${this.renderer.canvas.height} · Clouds: procedural layer · Display preview`;
+        const cloud=this.renderer.cloudMetrics;
+        const cloudLabel=cloud?.mode==='volumetric'?`GPU volume · ${cloud.quality} · ${cloud.samples} steps`:'procedural layer';
+        this.hud.textContent=`WEBGL · ${this.camera.projection.toUpperCase()} · ${this.renderer.usingLut?'NATURAL LIGHT LUT':'ANALYTIC SKY PREVIEW'}\n${this.renderer.canvas.width} × ${this.renderer.canvas.height} · Clouds: ${cloudLabel} · Display preview`;
+        this.message.textContent=this.renderer.cloudFallbackReason||'Reference geometry · other scene types in Legacy View';
+        this.message.title=this.renderer.cloudFallbackReason||'';
         this.updateAxes();
       }catch(error){this.error=`3D preview failed: ${error.message}`;this.setActive(false,false);}
     });

@@ -138,7 +138,9 @@ export const DEFAULT_SKYFORGE_STATE = Object.freeze({
     camera: { yaw: 0.55, pitch: 0.22, distance: 12, target: [0, 0, 1.5], projection: "perspective" },
     grid: true,
     overlays: true,
-    referenceSphere: true
+    referenceSphere: true,
+    cloudMode: "volumetric",
+    cloudQuality: "low"
   },
   scene: {
     referenceObjects: {},

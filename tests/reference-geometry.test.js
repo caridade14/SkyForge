@@ -7,7 +7,8 @@ const url = text => 'data:text/javascript;base64,' + Buffer.from(text).toString(
 const cameraUrl = url(source('src/client/viewport/camera.js'));
 const transformUrl = url(source('src/client/viewport/transform-math.js').replace("'./camera.js'", JSON.stringify(cameraUrl)));
 const geometryUrl = url(source('src/client/viewport/reference-geometry.js').replace("'./camera.js'", JSON.stringify(cameraUrl)).replace("'./transform-math.js'", JSON.stringify(transformUrl)));
-const rendererModule = () => import(url(source('src/client/viewport/renderer.js').replace("'./camera.js'", JSON.stringify(cameraUrl)).replace("'./reference-geometry.js'", JSON.stringify(geometryUrl)).replace("'./transform-math.js'", JSON.stringify(transformUrl))));
+const cloudUrl = url(source('src/client/viewport/volumetric-clouds.js'));
+const rendererModule = () => import(url(source('src/client/viewport/renderer.js').replace("'./camera.js'", JSON.stringify(cameraUrl)).replace("'./reference-geometry.js'", JSON.stringify(geometryUrl)).replace("'./transform-math.js'", JSON.stringify(transformUrl)).replace("'./volumetric-clouds.js'", JSON.stringify(cloudUrl))));
 const modules = async () => ({ ...await import(cameraUrl), ...await import(geometryUrl) });
 const close = (actual, expected, epsilon = 1e-6) => assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);
 const object = (id, type, position = [0, 0, 0], options = {}) => ({ id, type, name: id, position, scale: 1, visible: true, locked: false, ...options });

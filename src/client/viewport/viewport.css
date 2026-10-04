@@ -11,7 +11,7 @@
 .sf-3d-sun.sf-sun-dragging{border-color:#fff4d7;box-shadow:0 0 0 4px #ffb54560}
 .sf-3d-sun.sf-sun-offscreen::before{inset:8px;border-radius:0;background:none;border-top:2px solid #ffd173;border-right:2px solid #ffd173;transform:rotate(calc(var(--sf-sun-angle) + 45deg))}
 .sf-3d-toolbar{position:absolute;left:8px;right:8px;top:8px;z-index:151;display:flex;align-items:center;flex-wrap:wrap;gap:4px;pointer-events:none;font:10px system-ui,sans-serif}
-.sf-3d-toolbar button,.sf-3d-axis button{pointer-events:auto;color:#cdd4df;border:1px solid #3c4654;background:#18202ded;border-radius:4px;padding:5px 8px;cursor:pointer;font:10px system-ui,sans-serif}
+.sf-3d-toolbar button,.sf-3d-toolbar select,.sf-3d-axis button{pointer-events:auto;color:#cdd4df;border:1px solid #3c4654;background:#18202ded;border-radius:4px;padding:5px 8px;cursor:pointer;font:10px system-ui,sans-serif}
 .sf-3d-toolbar button:hover,.sf-3d-axis button:hover{background:#334155;color:white}
 .sf-3d-toolbar [data-vp=mode]{border-color:#e8812a;color:#ffba75}
 .sf-3d-toolbar [aria-pressed=true]{background:#293c50;color:#e3f0ff}
@@ -28,4 +28,5 @@
 @media(max-width:800px){.sf-3d-help{font-size:9px}.sf-3d-toolbar button{padding:4px 6px}.sf-3d-axis{top:105px}.sf-3d-message{font-size:9px}}
 
 .sf-3d-translate{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden;filter:drop-shadow(0 1px 2px #000);font: bold 12px system-ui,sans-serif}
-.sf-3d-toolbar button:disabled{opacity:.45;cursor:default}
+.sf-3d-toolbar button:disabled,.sf-3d-toolbar select:disabled{opacity:.45;cursor:default}
+.sf-3d-toolbar select:focus-visible{outline:1px solid #e8812a;outline-offset:1px}
