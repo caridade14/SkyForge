@@ -362,6 +362,15 @@ fs.mkdirSync(out, { recursive: true });
     await assertSunUI(await readSun());
     await page.screenshot({ path: path.join(out, 'viewport-physical-lut.png') });
 
+    // Geometry visibility needs a deterministic daytime fixture. The physical
+    // evaluation above follows the current date/time and can legitimately be
+    // dark at night; the preview/UI gate verifies that night behavior separately.
+    await mutateAndDraw(() => SkyForgeCore.store.set('sun', {
+      ...SkyForgeCore.store.get('sun'), azimuth: 215, elevation: 45,
+      intensity: 1.8, temperature: 6500
+    }, { record: false }));
+    assert.equal(await page.evaluate(() => SkyForgeCore.viewport.renderer.usingLut), false);
+
     // Reference geometry is created through the existing Object Builder, picked
     // with real pointer rays and translated through the visible XYZ handles.
     console.log('Checking reference creation');
