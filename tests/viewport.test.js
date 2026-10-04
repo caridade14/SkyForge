@@ -1,10 +1,11 @@
+const { clientSource } = require('./helpers/client-source.cjs');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
 const root=path.join(__dirname,'..');
-const source=p=>fs.readFileSync(path.join(root,p),'utf8');
+const source=p=>clientSource(p);
 const url=s=>'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
 const cameraUrl=url(source('src/client/viewport/camera.js'));
 const storeUrl=url(source('src/client/core/state-store.js'));

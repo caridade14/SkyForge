@@ -153,6 +153,7 @@ export class SkyForgeViewport {
         this.renderer.resize(r.width,r.height,this.root.devicePixelRatio||1);
         const state=this.store.snapshot();
         this.renderer.draw(state,this.camera);
+        if(typeof this.root.CustomEvent==='function')this.root.dispatchEvent(new this.root.CustomEvent('skyforge:viewport-rendered'));
         this.referenceGizmo.update(this.camera,r.width,r.height,Number(state.camera?.fov)||60);
         this.sunGizmo.update(state.sun,this.camera,r.width,r.height,Number(state.camera?.fov)||60);
         const cloud=this.renderer.cloudMetrics;

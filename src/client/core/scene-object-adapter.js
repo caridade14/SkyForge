@@ -1,3 +1,4 @@
+import { normalizeReferenceMaterial } from './reference-material.js';
 // The legacy scene is Y-up with +Z north; the viewport is Z-up with +Y north.
 // Swap Y/Z to preserve geographic meaning. Generate meshes in viewport space:
 // this permutation changes handedness and must not be applied to triangle winding.
@@ -13,7 +14,7 @@ const resizedUniformly = (object, value) => {
   const previous = uniformSize(object.scale);
   return object.scale.map(component => size(size(component) * next / previous));
 };
-const referenceTransform = value => ({ upAxis: 'Z', rotation: value.rotation || [0,0,0], scale: value.scale });
+const referenceTransform = value => ({ upAxis: 'Z', rotation: value.rotation || [0,0,0], scale: value.scale, ...(value.material ? { material: normalizeReferenceMaterial(value.material) } : {}) });
 export const legacyToViewportPosition = value => Array.isArray(value)
   ? [finite(value[0]), finite(value[2]), finite(value[1])]
   : [finite(value?.x), finite(value?.z), finite(value?.y)];
@@ -25,6 +26,7 @@ export function normalizeReferenceObject(value, id = value?.id) {
     id: String(id), type, name: String(value.name || `Reference ${type}`),
     position: [0, 1, 2].map(index => Math.max(-1e6, Math.min(1e6, finite(value.position?.[index])))),
     ...(Array.isArray(value.rotation) ? {rotation:[0,1,2].map(i=>Math.max(-1e6,Math.min(1e6,finite(value.rotation[i]))))} : {}),
+    ...(value.material && typeof value.material === 'object' ? { material: normalizeReferenceMaterial(value.material) } : {}),
     scale: Array.isArray(value.scale) ? [0,1,2].map(i=>size(value.scale[i])) : size(value.scale), visible: value.visible !== false, locked: value.locked === true
   };
 }
@@ -193,7 +195,7 @@ export class SceneObjectAdapter {
     const id = `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const object = normalizeReferenceObject({ id, type, name: name || `Reference ${type[0].toUpperCase()}${type.slice(1)}`,
       position: options.position ? legacyToViewportPosition(options.position) : [3, 0, type === 'plane' ? 0 : 1],
-      rotation: options.rotation || [0,0,0], scale: options.scale ?? 1, visible: options.visible, locked: false });
+      rotation: options.rotation || [0,0,0], scale: options.scale ?? 1, visible: options.visible, locked: false, material: options.material });
     this.pendingGroup = options.groupKey;
     this.store.batch(`Add reference ${type}`, draft => {
       draft.scene ||= {}; draft.scene.referenceObjects ||= {};
@@ -287,7 +289,7 @@ export class SceneObjectAdapter {
     this.wrap('sfDuplicateSelectedObject', function (original, receiver, args) {
       const object = this.selectedObject(args[0] || this.selectedRow()); if (!object) return original.apply(receiver, args);
       return this.add(object.type, `${object.name} Copy`, { position: viewportToLegacyPosition([object.position[0] + 1, object.position[1] + 1, object.position[2]]),
-        rotation: object.rotation || [0,0,0], scale: object.scale, visible: object.visible });
+        rotation: object.rotation || [0,0,0], scale: object.scale, visible: object.visible, material: object.material });
     });
     this.wrap('sfDeleteSelectedObject', function (original, receiver, args) {
       const object = this.selectedObject(args[0] || this.selectedRow()); if (!object) return original.apply(receiver, args);

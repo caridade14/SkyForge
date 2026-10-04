@@ -296,9 +296,13 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
           sample = await timeout(page.evaluate(({ state, camera }) => {
             const viewport = SkyForgeCore.viewport, gl = viewport.renderer.gl, pixel = new Uint8Array(4);
             const begin = performance.now(); viewport.renderer.draw(state, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-            return { ...viewport.renderer.cloudMetrics, drawReadbackMs: performance.now() - begin, error: gl.getError() };
+            return { ...viewport.renderer.cloudMetrics, lighting: viewport.renderer.lightingMetrics, drawReadbackMs: performance.now() - begin, error: gl.getError() };
           }, benchmark), 45000, `${quality} GPU draw/readback ${index + 1}`);
           assert.equal(sample.error, 0); assert.equal(sample.quality, quality);
+          assert.equal(sample.lighting.reflectionProbe, true, sample.lighting.reflectionFallback);
+          const probeWidth = { low: 128, medium: 192, high: 256 }[quality];
+          assert.deepEqual(sample.lighting.reflectionSize, [probeWidth, probeWidth / 2]);
+          if (sample.lighting.objectShadows) assert.equal(sample.lighting.shadowMapSize, { low: 512, medium: 768, high: 1024 }[quality]);
           if (index) timings.push(sample.drawReadbackMs); // Discard one warmup.
         }
         sample.timings = timings;

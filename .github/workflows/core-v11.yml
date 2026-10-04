@@ -9,8 +9,10 @@ on:
       - feature/studio-editors
       - feature/studio-volumetric-preview
       - fix/studio-natural-preview-ui
+      - feature/lighting-workbench
   pull_request:
     branches:
+      - fix/studio-natural-preview-ui
       - feature/studio-volumetric-preview
       - feature/viewport-reference-objects
       - feature/studio-editors

@@ -1,9 +1,10 @@
+const { clientSource } = require('./helpers/client-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const read = (file) => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+const read = (file) => clientSource(file);
 const url = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const stateUrl = url(read('src/client/core/state-store.js'));
 const graphUrl = url(read('src/client/core/node-graph.js').replace('"./state-store.js"', JSON.stringify(stateUrl)));
