@@ -3507,11 +3507,14 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
           <button class="sf-type-chip" data-create-type="FX" onclick="sfPickCreateType('FX')">FX</button>
           <button class="sf-type-chip" data-create-type="NOTE" onclick="sfPickCreateType('NOTE')">NOTE</button>
           <button class="sf-type-chip" data-create-type="ITEM" onclick="sfPickCreateType('ITEM')">ITEM</button>
+          <button class="sf-type-chip" data-create-type="SPHERE" onclick="sfPickCreateType('SPHERE')">SPHERE</button>
+          <button class="sf-type-chip" data-create-type="CUBE" onclick="sfPickCreateType('CUBE')">CUBE</button>
+          <button class="sf-type-chip" data-create-type="PLANE" onclick="sfPickCreateType('PLANE')">PLANE</button>
         </div>
         <div class="sf-field-grid three">
           <input class="sf-outliner-input" id="sf-new-name" placeholder="Object name">
           <select class="sf-outliner-select" id="sf-new-type" onchange="sfPickCreateType(this.value)">
-            <option>CLOUD</option><option>VOL</option><option>LIGHT</option><option>CAM</option><option>HDRI</option><option>FX</option><option>NOTE</option><option>ITEM</option>
+            <option>CLOUD</option><option>VOL</option><option>LIGHT</option><option>CAM</option><option>HDRI</option><option>FX</option><option>NOTE</option><option>ITEM</option><option>SPHERE</option><option>CUBE</option><option>PLANE</option>
           </select>
           <select class="sf-outliner-select" id="sf-new-group"></select>
         </div>
@@ -3533,7 +3536,7 @@ button:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:fo
         <div class="sf-field-grid three">
           <input class="sf-outliner-input" id="sf-ins-name" placeholder="Selection name" onchange="sfUpdateSelectedFromInspector('name',this.value)">
           <select class="sf-outliner-select" id="sf-ins-type" onchange="sfUpdateSelectedFromInspector('type',this.value)">
-            <option>GROUP</option><option>ROOT</option><option>CLOUDS</option><option>VOL</option><option>SKY</option><option>LIGHT</option><option>CLOUD</option><option>CAM</option><option>HDRI</option><option>FX</option><option>NOTE</option><option>ITEM</option>
+            <option>GROUP</option><option>ROOT</option><option>CLOUDS</option><option>VOL</option><option>SKY</option><option>LIGHT</option><option>CLOUD</option><option>CAM</option><option>HDRI</option><option>FX</option><option>NOTE</option><option>ITEM</option><option>SPHERE</option><option>CUBE</option><option>PLANE</option>
           </select>
           <select class="sf-outliner-select" id="sf-ins-group" onchange="sfUpdateSelectedFromInspector('group',this.value)"></select>
         </div>
@@ -4482,6 +4485,11 @@ var SF_OBJECT_PROPERTY_SCHEMAS={
 };
 SF_OBJECT_PROPERTY_SCHEMAS.ROOT=SF_OBJECT_PROPERTY_SCHEMAS.ITEM;
 SF_OBJECT_PROPERTY_SCHEMAS.CLOUDS=SF_OBJECT_PROPERTY_SCHEMAS.CLOUD;
+// Reference geometry has its transform in the Core Store; legacy rows preserve
+// the type and position for older scene save/load paths.
+SF_OBJECT_PROPERTY_SCHEMAS.SPHERE=[];
+SF_OBJECT_PROPERTY_SCHEMAS.CUBE=[];
+SF_OBJECT_PROPERTY_SCHEMAS.PLANE=[];
 
 function sfPropertySchemaForType(type){
   type=sfNormalizeObjectType(type||'ITEM');
@@ -10689,7 +10697,7 @@ function sfNormalizeObjectType(type){
   type=String(type||'ITEM').trim().toUpperCase();
   var aliases={VOLUME:'VOL',VOLUMETRIC:'VOL',CLOUDS:'CLOUD',CAMERA:'CAM',PROBE:'HDRI',LIGHTING:'LIGHT',OBJECT:'ITEM'};
   type=aliases[type]||type;
-  return ['SKY','LIGHT','VOL','FX','CLOUD','CAM','HDRI','NOTE','ITEM'].includes(type)?type:'ITEM';
+  return ['SKY','LIGHT','VOL','FX','CLOUD','CAM','HDRI','NOTE','ITEM','SPHERE','CUBE','PLANE'].includes(type)?type:'ITEM';
 }
 function sfObjectMeta(type){
   type=sfNormalizeObjectType(type);
@@ -10702,7 +10710,10 @@ function sfObjectMeta(type){
     HDRI:['H','HDRI Probe'],
     NOTE:['N','Shot Note'],
     SKY:['S','Sky Layer'],
-    ITEM:['O','Scene Object']
+    ITEM:['O','Scene Object'],
+    SPHERE:['●','Reference Sphere'],
+    CUBE:['▣','Reference Cube'],
+    PLANE:['▱','Reference Plane']
   }[type]||['O','Scene Object'];
 }
 function sfDefaultObjectName(type){
@@ -11975,7 +11986,7 @@ function sfSelectAfterRemoval(next,prev){
   }
 }
 function sfCreateSceneObject(){
-  var rawType=prompt('Type: CLOUD, VOL, LIGHT, CAM, HDRI, FX, NOTE, ITEM','CLOUD');
+  var rawType=prompt('Type: CLOUD, VOL, LIGHT, CAM, HDRI, FX, NOTE, ITEM, SPHERE, CUBE, PLANE','CLOUD');
   if(rawType===null)return;
   var type=sfNormalizeObjectType(rawType);
   var defaultName=sfDefaultObjectName(type);
@@ -12130,9 +12141,10 @@ function sfCreateOutlinerRow(obj){
   row.draggable=true;
   row.setAttribute('onclick','triSelectOut(this)');
   var p=(Number.isFinite(Number(obj.x))&&Number.isFinite(Number(obj.y))&&Number.isFinite(Number(obj.z)))?{x:Number(obj.x),y:Number(obj.y),z:Number(obj.z)}:sfDefaultObjectPosition(obj.type,1);
-  row.dataset.sfX=String(Math.round(p.x));row.dataset.sfY=String(Math.round(p.y));row.dataset.sfZ=String(Math.round(p.z));
+  var reference=['SPHERE','CUBE','PLANE'].includes(String(obj.type||'').toUpperCase());
+  row.dataset.sfX=String(reference?p.x:Math.round(p.x));row.dataset.sfY=String(reference?p.y:Math.round(p.y));row.dataset.sfZ=String(reference?p.z:Math.round(p.z));
   row.dataset.sfRot=String(Math.round(Number(obj.rot)||0));
-  row.dataset.sfScale=String(Number(obj.scale||1).toFixed(2));
+  row.dataset.sfScale=String(reference?Number(obj.scale||1):Number(obj.scale||1).toFixed(2));
   row.dataset.sfProps=JSON.stringify(sfSanitizePropsForType(obj.type||'ITEM',obj.props||{}));
   var icon=document.createElement('span');icon.textContent=obj.icon||'O';
   var name=document.createElement('span');name.textContent=obj.name||'Object';

@@ -18,12 +18,15 @@ fs.mkdirSync(out, { recursive: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(15000);
   const errors = [];
-  page.on('pageerror', e => errors.push(e.message));
+  page.on('pageerror', e => errors.push(e.stack || e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   const requests = [];
   page.on('request', r => { if (r.url().includes('/api/lighting/preview')) requests.push(r.postData()); });
   const readCamera = () => page.evaluate(() => SkyForgeCore.store.get('viewport.camera'));
   const readSun = () => page.evaluate(() => SkyForgeCore.store.get('sun'));
+  const readReferences = () => page.evaluate(() => SkyForgeCore.store.get('scene.referenceObjects') || {});
+  const readReference = id => page.evaluate(id => SkyForgeCore.store.get(`scene.referenceObjects.${id}`), id);
+  const selectedReference = () => page.evaluate(() => SkyForgeCore.store.get('scene.selectedReferenceId'));
   const historyLength = () => page.evaluate(() => SkyForgeCore.store.history.length);
   const frameCount = () => page.evaluate(() => SkyForgeCore.viewport.renderer.frames);
   // A prior pending draw can finish between reading the counter and making a
@@ -86,11 +89,78 @@ fs.mkdirSync(out, { recursive: true });
     return position;
   };
   const assertIdle = async () => {
-    await page.waitForTimeout(180);
+    // Let finite startup/resize/LUT work settle even on the software CI GPU.
+    // A continuous render loop cannot satisfy the quiet interval.
+    await page.evaluate(() => { globalThis.__sfGateIdle = null; });
+    await page.waitForFunction(() => {
+      const viewport = SkyForgeCore.viewport, count = viewport.renderer.frames, now = performance.now();
+      if (!globalThis.__sfGateIdle || globalThis.__sfGateIdle.count !== count || viewport.frame !== null) {
+        globalThis.__sfGateIdle = { count, since: now }; return false;
+      }
+      return now - globalThis.__sfGateIdle.since >= 800;
+    }, null, { timeout: 15000 });
     const frames = await frameCount();
     await page.waitForTimeout(350);
     assert.equal(await frameCount(), frames, 'rendering sleeps after the gesture');
   };
+  const referenceScreenPoint = id => page.evaluate(async id => {
+    const { projectPoint } = await import('/src/client/viewport/reference-geometry.js');
+    const viewport = SkyForgeCore.viewport, rect = viewport.canvas.getBoundingClientRect();
+    const object = SkyForgeCore.store.get(`scene.referenceObjects.${id}`);
+    const point = projectPoint(object.position, viewport.camera, rect.width / rect.height, SkyForgeCore.store.get('camera.fov'));
+    return { x: rect.x + (point.x + 1) * rect.width / 2,
+      y: rect.y + (1 - point.y) * rect.height / 2, behind: point.behind };
+  }, id);
+  const assertReferenceInspector = async (id, object) => {
+    const ui = await page.evaluate(id => ({
+      selected: SkyForgeCore.store.get('scene.selectedReferenceId'),
+      position: ['x', 'y', 'z'].map(axis => Number(document.getElementById(`tri-pos-${axis}`)?.value)),
+      name: document.getElementById('tri-selected-object')?.textContent,
+      rowSelected: document.querySelector(`[data-sf-reference-id="${id}"]`)?.classList.contains('sel')
+    }), id);
+    const diagnostics = JSON.stringify({ id, desired: object, ui });
+    assert.equal(ui.selected, id, `reference selection matches Store: ${diagnostics}`);
+    assert.equal(ui.rowSelected, true, `outliner selection follows Store: ${diagnostics}`);
+    assert.ok(ui.name?.includes(object.name), `inspector identifies the selected reference: ${diagnostics}`);
+    for (let axis = 0; axis < 3; axis++) {
+      assert.ok(Math.abs(ui.position[axis] - object.position[axis]) < 0.001, `Z-up inspector preserves position precision: ${diagnostics}`);
+    }
+  };
+  const startReferenceDrag = async (axis, distance = 32) => {
+    const handle = await page.evaluate(axis => {
+      const viewport = SkyForgeCore.viewport, rect = viewport.canvas.getBoundingClientRect();
+      const segment = viewport.referenceGizmo.segments.find(segment => segment.axis === axis && segment.enabled !== false);
+      if (!segment) return null;
+      const dx = segment.end[0] - segment.start[0], dy = segment.end[1] - segment.start[1], length = Math.hypot(dx, dy);
+      return { x: rect.x + segment.start[0] + dx * 0.72, y: rect.y + segment.start[1] + dy * 0.72,
+        dx: dx / length, dy: dy / length };
+    }, axis);
+    assert.ok(handle, `${axis.toUpperCase()} translation handle is available`);
+    await page.mouse.move(handle.x, handle.y); await page.mouse.down({ button: 'left' });
+    assert.equal(await page.evaluate(() => Boolean(SkyForgeCore.viewport.referenceGizmo.drag)), true, `${axis} handle begins translation`);
+    const before = await frameCount();
+    await page.mouse.move(handle.x + handle.dx * distance, handle.y + handle.dy * distance, { steps: 6 });
+    await nextFrame(before);
+    return handle;
+  };
+  const referenceGpuPixels = id => page.evaluate(async id => {
+    const { projectPoint } = await import('/src/client/viewport/reference-geometry.js');
+    const viewport = SkyForgeCore.viewport, rect = viewport.canvas.getBoundingClientRect();
+    const object = SkyForgeCore.store.get(`scene.referenceObjects.${id}`);
+    const point = projectPoint(object.position, viewport.camera, rect.width / rect.height, SkyForgeCore.store.get('camera.fov'));
+    // Sample actual framebuffer pixels in the same animation frame as the draw,
+    // before preserveDrawingBuffer:false allows the browser to clear its buffer.
+    return new Promise(resolve => {
+      viewport.invalidate();
+      requestAnimationFrame(() => {
+        const gl = viewport.renderer.gl, pixels = new Uint8Array(16 * 16 * 4);
+        const x = Math.max(0, Math.min(viewport.canvas.width - 16, Math.round((point.x + 1) * viewport.canvas.width / 2) - 8));
+        const y = Math.max(0, Math.min(viewport.canvas.height - 16, Math.round((point.y + 1) * viewport.canvas.height / 2) - 8));
+        gl.readPixels(x, y, 16, 16, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        resolve({ pixels: [...pixels], error: gl.getError() });
+      });
+    });
+  }, id);
   try {
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => globalThis.SkyForgeCore?.viewport?.renderer?.frames > 0, {}, { timeout: 30000 });
@@ -288,6 +358,167 @@ fs.mkdirSync(out, { recursive: true });
     await assertSunUI(await readSun());
     await page.screenshot({ path: path.join(out, 'viewport-physical-lut.png') });
 
+    // Reference geometry is created through the existing Object Builder, picked
+    // with real pointer rays and translated through the visible XYZ handles.
+    console.log('Checking reference creation');
+    const referenceRequests = requests.length, referenceIds = {};
+    const positions = { sphere: [-3, 0, 1.5], cube: [3, 0, 1], plane: [0, 4, 0.05] };
+    for (const type of ['sphere', 'cube', 'plane']) {
+      const previous = await readReferences(), name = `WebGL reference ${type}`;
+      await page.locator('#sf-new-type').selectOption(type.toUpperCase());
+      await page.locator('#sf-new-name').fill(name);
+      const createFrame = await frameCount();
+      await page.locator('button[onclick="sfCreateObjectFromPanel()"]').click();
+      await nextFrame(createFrame);
+      const references = await readReferences(), ids = Object.keys(references).filter(id => !previous[id]);
+      assert.equal(ids.length, 1, `${type} Object Builder creates one canonical reference`);
+      const id = referenceIds[type] = ids[0];
+      assert.equal(references[id].type, type); assert.equal(references[id].name, name);
+      assert.equal(await selectedReference(), id, 'creation selects the new reference');
+      assert.equal(await page.locator(`[data-sf-reference-id="${id}"]`).count(), 1, 'creation adds its outliner row');
+      const positionFrame = await frameCount();
+      for (const [index, axis] of ['x', 'y', 'z'].entries()) {
+        await page.locator(`#tri-pos-${axis}`).fill(String(positions[type][index]));
+        await page.locator(`#tri-pos-${axis}`).press('Tab');
+      }
+      if (JSON.stringify(references[id].position) !== JSON.stringify(positions[type])) await nextFrame(positionFrame);
+      assert.deepEqual((await readReference(id)).position, positions[type], 'numeric inspector edits world positions in metres');
+      await assertReferenceInspector(id, await readReference(id));
+    }
+    console.log('Checking reference picking and pixels');
+    for (const type of ['sphere', 'cube', 'plane']) {
+      const id = referenceIds[type];
+      await page.locator(`[data-sf-reference-id="${id}"]`).click();
+      const frameBefore = await frameCount();
+      await page.locator('[data-vp="frame"]').click(); await nextFrame(frameBefore);
+      assert.deepEqual((await readCamera()).target, (await readReference(id)).position, 'toolbar frames the selected reference');
+      await mutateAndDraw(() => SkyForgeCore.store.set('scene.selectedReferenceId', null, { record: false }));
+      const point = await referenceScreenPoint(id);
+      assert.equal(point.behind, false); assert.ok(Number.isFinite(point.x) && Number.isFinite(point.y));
+      const selectFrame = await frameCount();
+      await page.mouse.click(point.x, point.y); await nextFrame(selectFrame);
+      assert.equal(await selectedReference(), id, `viewport ray picks the actual ${type}`);
+      await assertReferenceInspector(id, await readReference(id));
+      await mutateAndDraw(id => SkyForgeCore.store.set(`scene.referenceObjects.${id}.visible`, false, { record: false }), id);
+      const background = await referenceGpuPixels(id);
+      await mutateAndDraw(id => SkyForgeCore.store.set(`scene.referenceObjects.${id}.visible`, true, { record: false }), id);
+      const geometry = await referenceGpuPixels(id);
+      assert.equal(background.error, 0); assert.equal(geometry.error, 0);
+      assert.notDeepEqual(geometry.pixels, background.pixels, `GPU framebuffer contains the lit ${type} mesh`);
+    }
+    console.log('Checking reference gestures');
+    const cubeId = referenceIds.cube;
+    await page.locator(`[data-sf-reference-id="${cubeId}"]`).click();
+    const precisePosition = [2.125, -0.875, 1.375], preciseFrame = await frameCount();
+    for (const [index, axis] of ['x', 'y', 'z'].entries()) {
+      await page.locator(`#tri-pos-${axis}`).fill(String(precisePosition[index]));
+      await page.locator(`#tri-pos-${axis}`).press('Tab');
+    }
+    await nextFrame(preciseFrame);
+    assert.deepEqual((await readReference(cubeId)).position, precisePosition, 'inspector retains sub-metre precision');
+    await assertReferenceInspector(cubeId, await readReference(cubeId));
+    const inspectorFrame = await frameCount();
+    await page.locator('[data-ref-action="frame"]').click(); await nextFrame(inspectorFrame);
+    assert.deepEqual((await readCamera()).target, precisePosition, 'inspector frames the selected reference');
+    await mutateAndDraw(() => SkyForgeCore.store.set('viewport.camera', { ...SkyForgeCore.store.get('viewport.camera'), distance: 15 }));
+    await canvas.focus();
+    const keyboardFrame = await frameCount();
+    await page.keyboard.press('f'); await nextFrame(keyboardFrame);
+    assert.deepEqual((await readCamera()).target, precisePosition); assert.ok((await readCamera()).distance < 15, 'F fits the selected reference');
+    const referenceSun = await readSun(), referenceCamera = await readCamera();
+    for (const [index, axis] of ['x', 'y', 'z'].entries()) {
+      const objectBefore = await readReference(cubeId), historyBefore = await historyLength();
+      await startReferenceDrag(axis);
+      const objectPreview = await readReference(cubeId);
+      assert.ok(Math.abs(objectPreview.position[index] - objectBefore.position[index]) > 0.001, `${axis} handle changes its world axis`);
+      for (let other = 0; other < 3; other++) {
+        if (other !== index) assert.equal(objectPreview.position[other], objectBefore.position[other], 'axis translation preserves the other coordinates');
+      }
+      assert.equal(await historyLength(), historyBefore, 'translation preview adds no history');
+      assert.equal(await page.evaluate(() => SkyForgeCore.store.activeEdit?.path), `scene.referenceObjects.${cubeId}.position`);
+      assert.deepEqual(await readCamera(), referenceCamera, 'object translation preserves navigation state');
+      assert.deepEqual(await readSun(), referenceSun, 'object translation preserves manual/physical sun state');
+      await assertReferenceInspector(cubeId, objectPreview);
+      const committedPosition = await page.evaluate(id => {
+        SkyForgeCore.store.persist();
+        return { project: SkyForgeCore.projects.createDocument().payload.scene.referenceObjects[id].position,
+          autosave: JSON.parse(localStorage.getItem(SkyForgeCore.store.storageKey)).scene.referenceObjects[id].position };
+      }, cubeId);
+      assert.deepEqual(committedPosition.project, objectBefore.position, 'project export excludes live object translation');
+      assert.deepEqual(committedPosition.autosave, objectBefore.position, 'autosave excludes live object translation');
+      await page.mouse.up({ button: 'left' });
+      assert.equal(await historyLength(), historyBefore + 1, 'one axis gesture creates exactly one undo entry');
+      const objectAfter = await readReference(cubeId);
+      assert.deepEqual(objectAfter.position, objectPreview.position);
+      // Exercise both portable Ctrl and Mac Cmd shortcuts through the actual UI.
+      for (const modifier of ['Control', 'Meta']) {
+        await canvas.focus();
+        const undoFrame = await frameCount();
+        await page.keyboard.press(`${modifier}+z`); await nextFrame(undoFrame);
+        assert.deepEqual((await readReference(cubeId)).position, objectBefore.position, `${modifier}+Z restores the entire axis gesture`);
+        await assertReferenceInspector(cubeId, await readReference(cubeId));
+        const redoFrame = await frameCount();
+        await page.keyboard.press(`${modifier}+Shift+z`); await nextFrame(redoFrame);
+        assert.deepEqual((await readReference(cubeId)).position, objectAfter.position, `${modifier}+Shift+Z reapplies the gesture`);
+      }
+    }
+    const canceledObject = await readReference(cubeId), canceledHistory = await historyLength();
+    await startReferenceDrag('x');
+    await page.keyboard.press('Escape'); await page.mouse.up({ button: 'left' });
+    assert.deepEqual(await readReference(cubeId), canceledObject, 'Escape restores object translation');
+    assert.equal(await historyLength(), canceledHistory, 'Escape adds no object history');
+    assert.equal(await page.evaluate(() => SkyForgeCore.store.activeEdit), null);
+    await assertReferenceInspector(cubeId, canceledObject);
+    for (const button of ['left', 'middle']) {
+      const point = await referenceScreenPoint(cubeId), referencesBeforeNavigation = await readReferences(), cameraBeforeNavigation = await readCamera();
+      await page.mouse.move(point.x, point.y);
+      if (button === 'left') await page.keyboard.down('Alt');
+      await page.mouse.down({ button }); await page.mouse.move(point.x + 28, point.y + 12, { steps: 4 });
+      assert.equal(await page.evaluate(() => SkyForgeCore.viewport.referenceGizmo.drag), null, 'navigation over a reference does not capture its transform');
+      await page.mouse.up({ button }); if (button === 'left') await page.keyboard.up('Alt');
+      assert.notEqual((await readCamera()).yaw, cameraBeforeNavigation.yaw, `${button === 'left' ? 'Option/Alt+LMB' : 'MMB'} navigates over selected geometry`);
+      assert.deepEqual(await readReferences(), referencesBeforeNavigation, 'navigation preserves reference positions');
+      assert.deepEqual(await readSun(), referenceSun);
+    }
+    await assertIdle();
+    assert.equal(requests.length, referenceRequests, 'creation, selection, XYZ edits, framing and object history do not reevaluate Natural Light');
+    await page.screenshot({ path: path.join(out, 'viewport-reference-objects.png') });
+    const referencesBeforeLegacyCreate = await readReferences();
+    await page.locator('#sf-new-type').selectOption('CLOUD');
+    await page.locator('#sf-new-name').fill('Existing legacy cloud');
+    await page.locator('button[onclick="sfCreateObjectFromPanel()"]').click();
+    assert.deepEqual(await readReferences(), referencesBeforeLegacyCreate, 'unsupported Object Builder types stay outside reference geometry');
+    const unsupportedRow = page.locator('#outliner-list .tri-out-extra').filter({ hasText: 'Existing legacy cloud' });
+    assert.equal(await unsupportedRow.count(), 1);
+    assert.equal(await unsupportedRow.locator('.tri-out-type').innerText(), 'CLOUD', 'existing cloud remains a legacy scene object');
+    assert.equal(await unsupportedRow.getAttribute('data-sf-reference-id'), null);
+    await page.locator(`[data-sf-reference-id="${cubeId}"]`).click();
+    const savedReferences = await readReferences();
+    const referenceDocument = await page.evaluate(() => SkyForgeCore.projects.createDocument());
+    await mutateAndDraw(() => SkyForgeCore.store.set('scene.referenceObjects', {}));
+    await mutateAndDraw(doc => SkyForgeCore.projects.loadDocument(doc), referenceDocument);
+    assert.deepEqual(await readReferences(), savedReferences, 'portable project reload restores every reference object');
+    await assertReferenceInspector(cubeId, await readReference(cubeId));
+    await mutateAndDraw(() => SkyForgeCore.projects.loadDocument({ scene: {
+      metadata: { upAxis: 'Y', units: 'meters' },
+      objects: [
+        { key: 'old-cube', type: 'CUBE', name: 'Old cube', x: 2.5, y: 4.5, z: 6.5, visible: true },
+        { key: 'old-cloud', type: 'CLOUD', name: 'Legacy cloud', x: 7, y: 8, z: 9, visible: true, props: { coverage: 0.42 } }
+      ]
+    } }));
+    const migratedReferences = Object.values(await readReferences());
+    assert.equal(migratedReferences.length, 1, 'old projects import only supported reference geometry');
+    assert.equal(migratedReferences[0].type, 'cube');
+    assert.deepEqual(migratedReferences[0].position, [2.5, 6.5, 4.5], 'legacy Y-up positions migrate to Z-up metres');
+    assert.equal(await page.locator('[data-sf-key="old-cloud"] .tri-out-type').innerText(), 'CLOUD', 'legacy cloud remains in the outliner after migration');
+    assert.equal(await page.locator('[data-sf-key="old-cloud"]').getAttribute('data-sf-reference-id'), null);
+    const retainedLegacyCloud = await page.evaluate(() => SkyForgeCore.store.get('objects').find(object => object.key === 'old-cloud'));
+    assert.deepEqual(retainedLegacyCloud.props, { coverage: 0.42 }, 'legacy properties survive project migration');
+    assert.equal(retainedLegacyCloud.x, 7); assert.equal(retainedLegacyCloud.y, 8); assert.equal(retainedLegacyCloud.z, 9);
+    await mutateAndDraw(doc => SkyForgeCore.projects.loadDocument(doc), referenceDocument);
+    assert.deepEqual(await readReferences(), savedReferences);
+    await assertSunUI(await readSun());
+
     // Mode switches cancel a live gesture before recording the mode itself.
     await placeSunAtCenter();
     const modeSun = await readSun(), modeSunEdits = await page.evaluate(() => SkyForgeCore.store.history.filter(change => change.path === 'sun').length);
@@ -320,12 +551,13 @@ fs.mkdirSync(out, { recursive: true });
     // Pre-viewport project files retain their sun and receive the default camera.
     const currentDocument = await page.evaluate(() => SkyForgeCore.projects.createDocument());
     await mutateAndDraw(doc => {
-      delete doc.checksum; delete doc.payload.viewport;
+      delete doc.checksum; delete doc.payload.viewport; delete doc.payload.scene;
       doc.version = 2; doc.payload.schemaVersion = 2;
       SkyForgeCore.projects.loadDocument(doc);
     }, currentDocument);
     assert.equal(await page.evaluate(() => SkyForgeCore.viewport.active), true);
     assert.deepEqual(await readSun(), currentDocument.payload.sun, 'old project sun survives loading');
+    assert.deepEqual(await readReferences(), {}, 'Core projects predating reference objects load an empty reference collection');
     assert.equal(await page.evaluate(() => SkyForgeCore.viewport.camera.projection), 'perspective');
     await assertSunUI(await readSun());
     await mutateAndDraw(doc => SkyForgeCore.projects.loadDocument(doc), currentDocument);
@@ -338,10 +570,15 @@ fs.mkdirSync(out, { recursive: true });
       const saved = JSON.parse(localStorage.getItem(SkyForgeCore.store.storageKey) || 'null');
       return saved?.viewport?.camera?.yaw === 1.234 && JSON.stringify(saved.sun) === JSON.stringify(sun);
     }, savedSun);
+    await page.waitForFunction(references => {
+      const saved = JSON.parse(localStorage.getItem(SkyForgeCore.store.storageKey) || 'null');
+      return JSON.stringify(saved?.scene?.referenceObjects) === JSON.stringify(references);
+    }, savedReferences);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => globalThis.SkyForgeCore?.viewport?.active && SkyForgeCore.viewport.renderer.frames > 0);
     assert.equal((await readCamera()).yaw, 1.234, 'autosave restores camera after reload');
     assert.deepEqual(await readSun(), savedSun, 'autosave restores committed sun gesture after reload');
+    assert.deepEqual(await readReferences(), savedReferences, 'autosave restores reference objects and translated positions after reload');
     await assertSunUI(savedSun);
     await page.waitForFunction(() => SkyForgeNaturalLightPreview.getState().skyViewLut !== null, {}, { timeout: 30000 });
     await page.waitForTimeout(1200); await assertIdle();
@@ -368,7 +605,7 @@ fs.mkdirSync(out, { recursive: true });
     assert.match(await fallback.locator('.sf-3d-message').innerText(), /WebGL unavailable/);
     await fallback.close();
     assert.ok(!errors.some(e => /Shader|WebGL.*INVALID|viewport\/|SkyViewportRenderer|SunGizmo|sun-gizmo|store listener failed/.test(e)), errors.join('\n'));
-    console.log('PASS: real WebGL, sun gizmo, bidirectional controls, single Undo, Escape, Option/Alt navigation, perspective/orthographic, offscreen marker, manual/physical separation, LUT, autosave, old projects, idle rendering, no physical request loop, fallback, context recovery and dispose');
+    console.log('PASS: real WebGL, lit sphere/cube/plane reference meshes, ray selection, XYZ translation, inspector, framing, project persistence, sun gizmo, bidirectional controls, single Undo, Escape, Cmd/Ctrl shortcuts, Option/Alt navigation, perspective/orthographic, offscreen marker, manual/physical separation, LUT, autosave, old projects, idle rendering, no physical request loop, fallback, context recovery and dispose');
   } catch (error) {
     console.error('Browser diagnostics', errors);
     console.error('Viewport state', await page.evaluate(async () => {
@@ -385,6 +622,8 @@ fs.mkdirSync(out, { recursive: true });
       return {
         active: viewport?.active, error: viewport?.error, sun,
         camera: viewport?.camera, committedCamera: globalThis.SkyForgeCore?.store?.get('viewport.camera'), projectedSun,
+        references: globalThis.SkyForgeCore?.store?.get('scene.referenceObjects'), selectedReference: globalThis.SkyForgeCore?.store?.get('scene.selectedReferenceId'),
+        referenceDrag: Boolean(viewport?.referenceGizmo?.drag), translationSegments: viewport?.referenceGizmo?.segments,
         marker: viewport?.sunGizmo?.marker && {
           left: viewport.sunGizmo.marker.style.left, top: viewport.sunGizmo.marker.style.top,
           offscreen: viewport.sunGizmo.marker.classList.contains('sf-sun-offscreen'), aria: viewport.sunGizmo.marker.getAttribute('aria-label')

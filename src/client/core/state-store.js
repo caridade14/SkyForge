@@ -140,6 +140,10 @@ export const DEFAULT_SKYFORGE_STATE = Object.freeze({
     overlays: true,
     referenceSphere: true
   },
+  scene: {
+    referenceObjects: {},
+    selectedReferenceId: null
+  },
   color: {
     workingSpace: "ACEScg",
     displayTransform: "ACES 1.3",

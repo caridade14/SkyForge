@@ -1,4 +1,5 @@
 import { cameraBasis, viewProjection, sunDirection, clamp } from './camera.js';
+import { REFERENCE_TYPES, shapeGeometry, outlineGeometry } from './reference-geometry.js';
 
 const SKY_VERTEX = `attribute vec2 aPosition; varying vec2 vNdc;
 void main(){vNdc=aPosition;gl_Position=vec4(aPosition,0.9999,1.0);}`;
@@ -44,10 +45,10 @@ void main(){
  if(rd.z<0.0)sky=mix(vec3(0.025,0.03,0.04),horizon,exp(rd.z*12.0));
  gl_FragColor=vec4(display(sky),1.0);
 }`;
-const MESH_VERTEX = `attribute vec3 aPosition,aNormal,aColor;uniform mat4 uVP;varying vec3 vNormal,vColor;
-void main(){vNormal=aNormal;vColor=aColor;gl_Position=uVP*vec4(aPosition,1);}`;
+const MESH_VERTEX = `attribute vec3 aPosition,aNormal,aColor;uniform mat4 uVP;uniform vec3 uOffset;uniform float uScale;varying vec3 vNormal,vColor;
+void main(){vNormal=aNormal;vColor=aColor;gl_Position=uVP*vec4(aPosition*uScale+uOffset,1);}`;
 const MESH_FRAGMENT = `precision mediump float;varying vec3 vNormal,vColor;uniform vec3 uSun;uniform float uExposure,uIntensity,uLines;
-void main(){float diffuse=max(0.0,dot(normalize(vNormal),uSun));vec3 c=vColor*(0.2+diffuse*uIntensity*0.5);if(uLines>0.5)c=vColor;c=c*uExposure/(1.0+c*uExposure);gl_FragColor=vec4(pow(c,vec3(1.0/2.2)),1);}`;
+void main(){vec3 normal=normalize(vNormal);if(!gl_FrontFacing)normal=-normal;float diffuse=max(0.0,dot(normal,uSun));vec3 c=vColor*(0.2+diffuse*uIntensity*0.5);if(uLines>0.5)c=vColor;c=c*uExposure/(1.0+c*uExposure);gl_FragColor=vec4(pow(c,vec3(1.0/2.2)),1);}`;
 
 function program(gl, vertex, fragment) {
   const shaders=[]; let p;
@@ -114,6 +115,12 @@ export class SkyViewportRenderer {
       const sphere=sphereGeometry(),grid=gridGeometry();
       this.sphere=this.buffer(sphere);this.sphereCount=sphere.length/9;
       this.grid=this.buffer(grid);this.gridCount=grid.length/9;
+      this.referenceMeshes=new Map();
+      for(const type of REFERENCE_TYPES){
+        const triangles=shapeGeometry(type),outline=outlineGeometry(type);
+        this.referenceMeshes.set(type,{buffer:this.buffer(triangles),count:triangles.length/9,
+          outline:this.buffer(outline),outlineCount:outline.length/9});
+      }
       this.texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.texture);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
@@ -161,12 +168,29 @@ export class SkyViewportRenderer {
     this.uniform(this.mesh,'uSun','uniform3fv',sun);this.uniform(this.mesh,'uExposure','uniform1f',exposure);this.uniform(this.mesh,'uIntensity','uniform1f',intensity);
     if(state.viewport?.grid!==false)this.drawMesh(this.grid,this.gridCount,gl.LINES,true);
     if(state.viewport?.referenceSphere!==false)this.drawMesh(this.sphere,this.sphereCount,gl.TRIANGLES,false);
+    const objects=state.scene?.referenceObjects||{};
+    for(const object of Object.values(objects)){
+      const mesh=this.referenceMeshes.get(object?.type);if(!mesh||object.visible===false)continue;
+      const position=[0,1,2].map(i=>Number.isFinite(Number(object.position?.[i]))?Number(object.position[i]):0);
+      const scale=clamp(Number(object.scale)>0?Number(object.scale):1,0.01,100000);
+      // Fill offset keeps a coplanar selection outline stable at every scale.
+      gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1,1);
+      this.drawMesh(mesh.buffer,mesh.count,gl.TRIANGLES,false,position,scale);
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+    }
+    const selected=objects[state.scene?.selectedReferenceId],mesh=this.referenceMeshes.get(selected?.type);
+    if(mesh&&selected.visible!==false){
+      const position=[0,1,2].map(i=>Number.isFinite(Number(selected.position?.[i]))?Number(selected.position[i]):0);
+      const scale=clamp(Number(selected.scale)>0?Number(selected.scale):1,0.01,100000);
+      gl.depthFunc(gl.LEQUAL);this.drawMesh(mesh.outline,mesh.outlineCount,gl.LINES,true,position,scale);gl.depthFunc(gl.LESS);
+    }
   }
-  drawMesh(buffer,count,mode,lines){
+  drawMesh(buffer,count,mode,lines,offset=[0,0,0],scale=1){
     const g=this.gl;g.bindBuffer(g.ARRAY_BUFFER,buffer);const enabled=[];
     for(const [i,n] of ['aPosition','aNormal','aColor'].entries()){
       const a=g.getAttribLocation(this.mesh,n);g.enableVertexAttribArray(a);g.vertexAttribPointer(a,3,g.FLOAT,false,36,i*12);enabled.push(a);
     }
+    this.uniform(this.mesh,'uOffset','uniform3fv',offset);this.uniform(this.mesh,'uScale','uniform1f',scale);
     this.uniform(this.mesh,'uLines','uniform1f',lines?1:0);g.drawArrays(mode,0,count);enabled.forEach(a=>g.disableVertexAttribArray(a));
   }
   dispose(){const g=this.gl;if(!g||g.isContextLost()){this.resources=[];return;}this.resources.forEach(b=>g.deleteBuffer(b));this.resources=[];if(this.texture)g.deleteTexture(this.texture);if(this.sky)g.deleteProgram(this.sky);if(this.mesh)g.deleteProgram(this.mesh);}
