@@ -232,6 +232,8 @@ export class SkyViewportRenderer {
   dispose(){
     const g=this.gl;
     if(g&&!g.isContextLost()){
+      // A current program stays alive after deleteProgram until it is unbound.
+      g.useProgram(null);
       this.resources.forEach(b=>g.deleteBuffer(b));
       if(this.texture)g.deleteTexture(this.texture);
       if(this.sky)g.deleteProgram(this.sky);

@@ -50,7 +50,10 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
     requestAnimationFrame(() => {
       try {
         const gl = viewport.renderer.gl, width = viewport.canvas.width, height = viewport.canvas.height, pixels = [];
-        for (const [fx, fy] of [[0.2, 0.7], [0.5, 0.8], [0.8, 0.7], [0.5, 0.5]]) {
+        // Read high sky rays as well as the scene centre. With the default
+        // downward-looking camera, near-horizon rays can miss the bounded
+        // volumetric slab even while clouds are visible at the top of the view.
+        for (const [fx, fy] of [[0.2, 0.93], [0.5, 0.96], [0.8, 0.93], [0.5, 0.5]]) {
           const part = new Uint8Array(12 * 12 * 4);
           gl.readPixels(Math.max(0, Math.min(width - 12, Math.floor(width * fx))), Math.max(0, Math.min(height - 12, Math.floor(height * fy))), 12, 12, gl.RGBA, gl.UNSIGNED_BYTE, part);
           pixels.push(...part);
@@ -77,9 +80,20 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
     return { x: rect.x + segment.start[0] + dx * 0.75, y: rect.y + segment.start[1] + dy * 0.75, dx: dx / length * 30, dy: dy / length * 30 };
   }, axis);
   const dragTransform = async (axis, cancel = false) => {
+    const settledGizmo = () => page.waitForFunction(() => {
+      const viewport = SkyForgeCore.viewport, gizmo = viewport.referenceGizmo, rect = viewport.canvas.getBoundingClientRect();
+      return viewport.frame === null && JSON.stringify(gizmo.segments) === JSON.stringify(gizmo.handles(gizmo.selected(), viewport.camera, rect.width, rect.height, SkyForgeCore.store.get('camera.fov')));
+    });
+    // A toolbar click updates the store before a slow GPU draw or a layout
+    // ResizeObserver has repainted the handles. Use the handles actually drawn.
+    await settledGizmo();
+    await evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settledGizmo();
+    const tool = await read('viewport.transformTool');
+    console.log(`Studio transform: ${tool} ${axis}${cancel ? ' cancel' : ''}`);
     const handle = await transformHandle(axis); assert.ok(handle, `${axis} transform handle exists`);
     await page.mouse.move(handle.x, handle.y); await page.mouse.down();
-    assert.equal(await evaluate(() => Boolean(SkyForgeCore.viewport.referenceGizmo.drag)), true, 'actual pointer hit owns a transform gesture');
+    assert.equal(await evaluate(() => Boolean(SkyForgeCore.viewport.referenceGizmo.drag)), true, `actual ${tool} ${axis} pointer hit owns a transform gesture at ${JSON.stringify(handle)}`);
     const before = await frames();
     await page.mouse.move(handle.x + handle.dx, handle.y + handle.dy, { steps: 5 }); await nextFrame(before);
     if (cancel) await page.keyboard.press('Escape');
@@ -259,6 +273,11 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
     if (expectVolume) {
       stage('volumetric GPU quality, bounded buffers, wind/frame and layer fallback');
       await page.locator('[data-studio-preset="Sky"]').click();
+      const savedCamera = await read('viewport.camera');
+      // Aim into the cloud slab rather than time a mostly clear horizon. Keep
+      // this documented benchmark pose separate from the user's scene camera.
+      await draw(() => SkyForgeCore.store.set('viewport.camera', { ...SkyForgeCore.store.get('viewport.camera'), target: [0, 0, 10], distance: 12, pitch: -.45 }, { record: false, label: 'Cloud preview benchmark pose' }));
+      results.benchmarkCamera = await read('viewport.camera');
       const hasQuality = await page.locator('[data-vp="cloudQuality"]').count(); assert.equal(hasQuality, 1, 'quality control is present');
       for (const quality of ['low', 'medium', 'high']) {
         await page.locator('[data-vp="cloudQuality"]').selectOption(quality);
@@ -276,11 +295,12 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
         assert.equal(sample.mode, 'volumetric'); assert.equal(sample.error, 0); assert.ok(sample.samples <= 44 && sample.shadowSamples <= 3); assert.ok(sample.pixels <= 900000); results.performance.push(sample);
       }
       await page.locator('[data-vp="cloudQuality"]').selectOption('low');
-      const cloudBefore = await gpuPixels(); await draw(() => SkyForgeCore.timeline.seek(40)); const cloudAfter = await gpuPixels();
+      const cloudBefore = await gpuPixels(); await draw(() => SkyForgeCore.timeline.seek(40, { apply: false })); const cloudAfter = await gpuPixels();
       assert.notDeepEqual(cloudAfter.pixels, cloudBefore.pixels, 'wind and timeline frame alter volume pixels');
       await page.locator('[data-vp="cloudMode"]').selectOption('layer'); await page.waitForFunction(() => SkyForgeCore.viewport.renderer.cloudMetrics?.mode === 'layer');
       assert.equal((await gpuPixels()).error, 0, 'existing cloud layer remains usable');
       await page.locator('[data-vp="cloudMode"]').selectOption('volumetric');
+      await draw(camera => SkyForgeCore.store.set('viewport.camera', camera, { record: false, label: 'Restore scene camera after cloud benchmark' }), savedCamera);
     }
 
     stage('save, reopen, autosave and workspace persistence');
@@ -351,9 +371,9 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
       const programs = [renderer.sky, renderer.mesh, ...(renderer.cloudPrograms?.values?.() || [])].filter(Boolean);
       SkyForgeCore.dispose();
       return { remainingBuffers: buffers.filter(buffer => gl.isBuffer(buffer)).length,
-        programsDeleted: programs.every(program => !gl.isProgram(program) || gl.getProgramParameter(program, gl.DELETE_STATUS)), pendingFrame: viewport.frame };
+        programsDeleted: programs.every(program => !gl.isProgram(program) || gl.getProgramParameter(program, gl.DELETE_STATUS)), currentProgram: gl.getParameter(gl.CURRENT_PROGRAM), pendingFrame: viewport.frame };
     });
-    assert.equal(results.disposal.remainingBuffers, 0); assert.equal(results.disposal.programsDeleted, true); assert.equal(results.disposal.pendingFrame, null);
+    assert.equal(results.disposal.remainingBuffers, 0); assert.equal(results.disposal.programsDeleted, true); assert.equal(results.disposal.currentProgram, null); assert.equal(results.disposal.pendingFrame, null);
     assert.equal(await page.locator('.sf-3d-canvas').count(), 0); assert.equal(await page.locator('#sf-studio-toolbar').count(), 0);
     assert.equal(await evaluate(() => Boolean(globalThis.SkyForgeCore)), false);
     const fatal = errors.filter(error => error.type === 'pageerror' ? !/signal is aborted without reason/i.test(error.message) : /shader|WebGL.*INVALID|SkyViewportRenderer|Maximum call stack|state store listener failed|timeline listener failed|node graph listener failed/i.test(error.message));
