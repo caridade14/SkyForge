@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../src/client/viewport/volumetric-clouds.js'), 'utf8');
-const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
+const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(clientSource('src/client/viewport/volumetric-clouds.js')).toString('base64');
 const modules = () => import(moduleUrl);
 
 test('cloud preview budgets cap Retina and large window costs with a low default', async () => {
@@ -150,7 +150,7 @@ test('cloud shadows reuse scene density uniforms, cache their program and recove
 
 test('manual optical changes invalidate the physical LUT baseline without evaluating Natural Light', async () => {
   const { SkyViewportRenderer, lutMatchesAtmosphere } = await rendererModule();
-  const { renderer } = makeRenderer(SkyViewportRenderer); const state = testState();
+  const { renderer } = makeRenderer(SkyViewportRenderer); const state = testState();state.viewport.skySource='backend';
   const payload = { input: { aerosolOpticalDepth550: .3 }, evaluation: { solarPosition: { azimuthDeg: 0, apparentElevationDeg: 30 } }, skyViewLut: { layout: { width: 1, height: 1, channels: ['R', 'G', 'B'] }, pixels: [.1, .2, .3] } };
   renderer.setLut(payload, state.atmosphere); renderer.draw(state, testCamera); assert.equal(renderer.usingLut, true);
   state.atmosphere.turbidity = 5; renderer.draw(state, testCamera); assert.equal(renderer.usingLut, false);

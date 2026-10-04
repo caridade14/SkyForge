@@ -1,4 +1,4 @@
-import { cloneValue, DEFAULT_SKYFORGE_STATE } from "./state-store.js";
+import { cloneValue, completeStateDefaults } from "./state-store.js";
 import { prepareReferenceScene } from "./scene-object-adapter.js";
 import { NodeGraph } from "./node-graph.js";
 import { applyTimelineSnapshot } from "./timeline-engine.js";
@@ -12,15 +12,7 @@ const RECENTS_KEY = "skyforge.core.v11.recentProjects";
 // Old projects may omit entire service roots. Fill known defaults, preserving
 // unknown fields and legacy payloads rather than replacing the loaded document.
 export function completeProjectState(payload) {
-  const fill = (value, defaults) => {
-    if (defaults && typeof defaults === "object" && !Array.isArray(defaults)) {
-      const result = value && typeof value === "object" && !Array.isArray(value) ? cloneValue(value) : {};
-      for (const [key, fallback] of Object.entries(defaults)) result[key] = fill(result[key], fallback);
-      return result;
-    }
-    return value === undefined || value === null ? cloneValue(defaults) : cloneValue(value);
-  };
-  return fill(payload, DEFAULT_SKYFORGE_STATE);
+  return completeStateDefaults(payload);
 }
 
 function fnv1a(input) {
@@ -77,7 +69,7 @@ export class ProjectService {
       const base = state.scene.directState || state;
       try {
         const output = graph.evaluateOutput({ state: { ...state, ...base } });
-        for (const root of ["sun", "atmosphere", "clouds", "color"]) {
+        for (const root of ["sun", "atmosphere", "clouds", "color", "moon", "stars", "aurora", "rainbow"]) {
           state[root] = { ...(base[root] || state[root]), ...(output?.[root] && typeof output[root] === "object" ? cloneValue(output[root]) : {}) };
         }
       } catch {

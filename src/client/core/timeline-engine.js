@@ -20,7 +20,7 @@ export function interpolateValue(a, b, t, interpolation = "linear") {
 // Scene paths stay explicit: loaded projects cannot animate project/engine metadata.
 export function isAnimatablePath(path) {
   if (typeof path !== "string" || path.split(".").some((key) => ["__proto__", "prototype", "constructor"].includes(key))) return false;
-  return /^(sun|clouds|atmosphere|camera|color)\.[\w]+$/.test(path) || /^scene\.referenceObjects\.[\w-]+\.(position|rotation|scale)$/.test(path);
+  return /^(sun|clouds|atmosphere|camera|color|moon|stars|aurora|rainbow)\.[\w]+$/.test(path) || /^scene\.referenceObjects\.[\w-]+\.(position|rotation|scale)$/.test(path);
 }
 
 export function sampleKeyframes(list, frame) {

@@ -30,7 +30,7 @@ export function sunAtPointer(camera, x, y, aspect = 1, fov = 60, previousAzimuth
 
 export function sunMarker(sun, camera, width, height, fov = 60) {
   const projected = projectSun(sun, camera, width / Math.max(1, height), fov);
-  const margin = Math.min(24, width / 4, height / 4), top = Math.min(70, height / 4);
+  const margin = Math.min(62, width / 4, height / 4), top = Math.min(70, height / 4);
   let x = width * (projected.x + 1) / 2, y = height * (1 - projected.y) / 2;
   const offscreen = projected.behind || x < margin || x > width - margin || y < top || y > height - margin;
   if (offscreen) {
@@ -50,6 +50,7 @@ export class SunGizmo {
     // Register before navigation so only a plain LMB hit owns the sun gesture.
     this.listen('pointerdown', e => {
       if (e.target !== canvas || !isActive() || e.button !== 0 || e.altKey || e.ctrlKey || e.metaKey || this.drag) return;
+      if (['orbit','pan','dolly'].includes(store.get('viewport.navigationTool'))) return;
       const rect = canvas.getBoundingClientRect(), camera = getCamera();
       const position = sunMarker(store.get('sun'), camera, rect.width, rect.height, getFov());
       if (Math.hypot(e.clientX - rect.left - position.x, e.clientY - rect.top - position.y) > 22) return;

@@ -1,22 +1,22 @@
 import { normalizeCamera, orbit, pan, dolly, axisView } from './camera.js';
 
-export function dragMode(event) {
+export function dragMode(event, tool = 'transform') {
   // Blender default + Emulate 3 Button Mouse for Mac trackpads.
   if (event.button === 1 || (event.button === 0 && event.altKey)) {
     return event.ctrlKey || event.metaKey ? 'dolly' : event.shiftKey ? 'pan' : 'orbit';
   }
-  return null;
+  return event.button === 0 && ['orbit','pan','dolly'].includes(tool) ? tool : null;
 }
 
 export class ViewportNavigation {
-  constructor(canvas, { getCamera, getFov, preview, commit, root = globalThis }) {
+  constructor(canvas, { getCamera, getFov, preview, commit, getTool = () => 'transform', root = globalThis }) {
     Object.assign(this, {canvas, getCamera, getFov, preview, commit, root});
     this.drag = null;
     this.listeners = [];
     this.listen('pointerdown', e => {
       if(e.target !== canvas) return;
       canvas.focus({preventScroll:true});
-      const mode = dragMode(e);
+      const mode = dragMode(e, getTool());
       if(mode) {
         this.drag = {id:e.pointerId,mode,x:e.clientX,y:e.clientY,before:normalizeCamera(getCamera()),camera:normalizeCamera(getCamera())};
         canvas.setPointerCapture?.(e.pointerId);

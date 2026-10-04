@@ -1,4 +1,4 @@
-import { cloneValue } from "./state-store.js";
+import { cloneValue, DEFAULT_CELESTIAL } from "./state-store.js";
 
 function createId(prefix = "node") {
   const random = Math.random().toString(36).slice(2, 9);
@@ -278,7 +278,9 @@ export function registerDefaultNodeTypes(graph) {
       inputs: {
         sun: { type: "sun", default: null },
         atmosphere: { type: "atmosphere", default: null },
-        clouds: { type: "clouds", default: null }
+        clouds: { type: "clouds", default: null },
+        moon: { type: "moon", default: null }, stars: { type: "stars", default: null },
+        aurora: { type: "aurora", default: null }, rainbow: { type: "rainbow", default: null }
       },
       outputs: { scene: { type: "scene" } },
       evaluate: ({ inputs }) => ({ scene: { ...inputs } })
@@ -301,4 +303,10 @@ export function registerDefaultNodeTypes(graph) {
       outputs: { output: { type: "scene" } },
       evaluate: ({ inputs }) => ({ output: inputs.input })
     });
+  for (const [type,root] of [["Moon","moon"],["Stars","stars"],["Aurora","aurora"],["Rainbow","rainbow"]]) {
+    graph.registerType(type, { category: "Sky effects", outputs: { [root]: { type: root } },
+      defaults: { ...DEFAULT_CELESTIAL[root], enabled: true },
+      evaluate: ({ params, context }) => ({ [root]: { ...(context.state?.[root] || {}), ...params } }) });
+  }
+
 }

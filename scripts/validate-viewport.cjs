@@ -354,6 +354,7 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await historyLength(), outsideHistory + 1);
 
     // Physical evaluation remains explicit and uses its existing LUT once angles match.
+    await page.getByLabel('Sky lighting source',{exact:true}).selectOption('backend');
     await page.locator('[data-vp=sun]').click();
     await page.waitForFunction(() => SkyForgeCore.viewport.renderer.usingLut === true, {}, { timeout: 10000 });
     const solar = await page.evaluate(() => SkyForgeCore.viewport.payload.evaluation.solarPosition);
