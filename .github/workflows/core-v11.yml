@@ -6,8 +6,12 @@ on:
       - feature/skyforge-core-v11
       - feature/viewport-sun-gizmo
       - feature/viewport-reference-objects
+      - feature/studio-editors
+      - feature/studio-volumetric-preview
   pull_request:
     branches:
+      - feature/viewport-reference-objects
+      - feature/studio-editors
       - feature/viewport-sun-gizmo
       - feature/real-3d-viewport
       - feature/natural-light-engine

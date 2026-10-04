@@ -7,7 +7,9 @@ const source = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8')
 const moduleUrl = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const storeUrl = moduleUrl(source('src/client/core/state-store.js'));
 const adapterUrl = moduleUrl(source('src/client/core/scene-object-adapter.js'));
-const projectUrl = moduleUrl(source('src/client/core/project-service.js').replace('"./state-store.js"', JSON.stringify(storeUrl)).replace('"./scene-object-adapter.js"', JSON.stringify(adapterUrl)));
+const graphUrl = moduleUrl(source('src/client/core/node-graph.js').replace('"./state-store.js"', JSON.stringify(storeUrl)));
+const timelineUrl = moduleUrl(source('src/client/core/timeline-engine.js').replace('"./state-store.js"', JSON.stringify(storeUrl)));
+const projectUrl = moduleUrl(source('src/client/core/project-service.js').replace('"./state-store.js"', JSON.stringify(storeUrl)).replace('"./scene-object-adapter.js"', JSON.stringify(adapterUrl)).replace('"./node-graph.js"', JSON.stringify(graphUrl)).replace('"./timeline-engine.js"', JSON.stringify(timelineUrl)));
 const modules = () => Promise.all([import(storeUrl), import(projectUrl)]);
 const wait = delay => new Promise(resolve => setTimeout(resolve, delay));
 const direction = (sun, azimuth, elevation) => ({ ...sun, azimuth, elevation });

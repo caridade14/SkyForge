@@ -1,3 +1,7 @@
+# Current Studio editor
+
+The integrated workspace, rotation/nonuniform scale, timeline and node editor are documented in [SKYFORGE_STUDIO.md](SKYFORGE_STUDIO.md). The sections below also describe the earlier viewport increments.
+
 # Real 3D viewport — first integration milestone
 
 ## Baseline and architecture

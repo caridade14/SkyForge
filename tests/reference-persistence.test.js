@@ -6,7 +6,9 @@ const source = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8')
 const url = text => 'data:text/javascript;base64,' + Buffer.from(text).toString('base64');
 const storeUrl = url(source('src/client/core/state-store.js'));
 const adapterUrl = url(source('src/client/core/scene-object-adapter.js'));
-const projectUrl = () => url(source('src/client/core/project-service.js').replace('"./state-store.js"', JSON.stringify(storeUrl)).replace('"./scene-object-adapter.js"', JSON.stringify(adapterUrl)));
+const graphUrl = url(source('src/client/core/node-graph.js').replace('"./state-store.js"', JSON.stringify(storeUrl)));
+const timelineUrl = url(source('src/client/core/timeline-engine.js').replace('"./state-store.js"', JSON.stringify(storeUrl)));
+const projectUrl = () => url(source('src/client/core/project-service.js').replace('"./state-store.js"', JSON.stringify(storeUrl)).replace('"./scene-object-adapter.js"', JSON.stringify(adapterUrl)).replace('"./node-graph.js"', JSON.stringify(graphUrl)).replace('"./timeline-engine.js"', JSON.stringify(timelineUrl)));
 
 test('projects and autosave roundtrip all reference types, fractional positions, selection and hidden/locked properties', async () => {
   const { SkyForgeStore } = await import(storeUrl), { ProjectService } = await import(projectUrl());
@@ -60,4 +62,24 @@ test('Project Service migrates explicit Y-up reference records while preserving 
     assert.deepEqual(store.get('scene.referenceObjects'), {}); assert.equal(store.get('scene.selectedReferenceId'), null);
     assert.equal(store.get('sun.elevation'), 7);
   } finally { store.destroy(); }
+});
+
+test('project and autosave persist Euler rotation and nonuniform local scale while excluding numeric previews', async () => {
+  const { SkyForgeStore } = await import(storeUrl), { ProjectService } = await import(projectUrl());
+  const values = new Map(), storage = { setItem: (key, value) => values.set(key, value), getItem: key => values.get(key) };
+  const store = new SkyForgeStore({ storage }), reopened = new SkyForgeStore({ storage });
+  try {
+    const object = { id: 'cube', type: 'cube', name: 'Studio cube', position: [1.125, 2.25, 3.375], rotation: [15.125, -27.25, 48.375], scale: [2, .5, 3], visible: true, locked: false };
+    store.set('scene', { referenceObjects: { cube: object }, selectedReferenceId: 'cube' });
+    const projects = new ProjectService(store), edit = store.beginEdit('scene.referenceObjects.cube.rotation', { label: 'Numeric rotation' });
+    edit.preview([90, 0, 0]); store.persist();
+    assert.deepEqual(JSON.parse(values.get(store.storageKey)).scene.referenceObjects.cube.rotation, object.rotation);
+    assert.deepEqual(projects.createDocument().payload.scene.referenceObjects.cube.rotation, object.rotation);
+    edit.cancel();
+    const document = projects.createDocument(); new ProjectService(reopened).loadDocument(document);
+    assert.deepEqual(reopened.get('scene.referenceObjects.cube'), object);
+    store.persist(); reopened.reset(); assert.equal(reopened.restore(), true);
+    assert.deepEqual(reopened.get('scene.referenceObjects.cube'), object);
+    assert.equal(reopened.get('scene.selectedReferenceId'), 'cube');
+  } finally { store.destroy(); reopened.destroy(); }
 });

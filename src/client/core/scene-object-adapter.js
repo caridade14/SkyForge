@@ -5,6 +5,15 @@ export const REFERENCE_TYPES = Object.freeze(['sphere', 'cube', 'plane']);
 const typeOf = value => String(value || '').toLowerCase();
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const size = value => Math.max(.01, Math.min(100000, finite(value, 1)));
+const uniformSize = value => Array.isArray(value) ? Math.max(...value.map(size)) : size(value);
+const resizedUniformly = (object, value) => {
+  const next = size(value);
+  if (!Array.isArray(object.scale)) return next;
+  const previous = uniformSize(object.scale);
+  return object.scale.map(component => size(size(component) * next / previous));
+};
+const referenceTransform = value => ({ upAxis: 'Z', rotation: value.rotation || [0,0,0], scale: value.scale });
 export const legacyToViewportPosition = value => Array.isArray(value)
   ? [finite(value[0]), finite(value[2]), finite(value[1])]
   : [finite(value?.x), finite(value?.z), finite(value?.y)];
@@ -15,17 +24,22 @@ export function normalizeReferenceObject(value, id = value?.id) {
   return {
     id: String(id), type, name: String(value.name || `Reference ${type}`),
     position: [0, 1, 2].map(index => Math.max(-1e6, Math.min(1e6, finite(value.position?.[index])))),
-    scale: Math.max(.01, Math.min(100000, finite(value.scale, 1))), visible: value.visible !== false, locked: value.locked === true
+    ...(Array.isArray(value.rotation) ? {rotation:[0,1,2].map(i=>Math.max(-1e6,Math.min(1e6,finite(value.rotation[i]))))} : {}),
+    scale: Array.isArray(value.scale) ? [0,1,2].map(i=>size(value.scale[i])) : size(value.scale), visible: value.visible !== false, locked: value.locked === true
   };
 }
 export function referenceFromLegacy(value) {
   const type = typeOf(value?.type);
   if (!REFERENCE_TYPES.includes(type)) return null;
-  return normalizeReferenceObject({ ...value, type, position: legacyToViewportPosition(value) }, value.key || value.id);
+  // Old ROT rotates a Canvas symbol. Retain its angle as viewport RZ when no
+  // explicit 3D transform exists; metadata owns all three Euler components.
+  const transform = value.referenceTransform?.upAxis === 'Z' ? value.referenceTransform
+    : value.rot !== undefined ? { rotation: [0, 0, finite(value.rot)] } : {};
+  return normalizeReferenceObject({ ...value, ...transform, type, position: legacyToViewportPosition(value) }, value.key || value.id);
 }
 export function referenceToLegacy(value, previous = {}) {
   return { ...previous, key: value.id, type: value.type.toUpperCase(), name: value.name,
-    ...viewportToLegacyPosition(value.position), scale: value.scale, rot: 0,
+    ...viewportToLegacyPosition(value.position), scale: uniformSize(value.scale), rot: value.rotation?.[2] || 0, referenceTransform: referenceTransform(value),
     visible: value.visible, locked: value.locked, added: true, props: {} };
 }
 
@@ -115,6 +129,9 @@ export class SceneObjectAdapter {
       // Let the legacy controller also discard its private drag state after the
       // Store cancels; otherwise subsequent mousemoves could restart the edit.
       if (this.legacyEdit?.active) { event.preventDefault(); this.finishLegacyEdit(true); }
+      if (event.target?.matches?.('[data-studio-transform]') && this.selectedObject()) {
+        event.preventDefault(); event.stopImmediatePropagation(); this.finishNumericEdit(true);this.syncTransform(this.selectedRow());event.target.blur?.();return;
+      }
       if (event.target?.matches?.('#tri-pos-x,#tri-pos-y,#tri-pos-z,#tri-scale') && this.selectedObject()) {
         event.preventDefault(); event.stopImmediatePropagation(); this.syncTransform(this.selectedRow()); event.target.blur?.();
       }
@@ -143,14 +160,40 @@ export class SceneObjectAdapter {
     this.frameButton.dataset.refAction = 'frame'; this.frameButton.textContent = 'Frame selected (F)';
     this.frameButton.hidden = true; this.frameButton.onclick = () => this.root.sfFocusOutlinerRow?.(this.selectedRow());
     this.note.insertAdjacentElement('afterend', this.frameButton);
+    this.createTransformInspector();
   }
+  createTransformInspector() {
+    this.transformInspector=this.document.createElement('div');this.transformInspector.className='sf-reference-transforms';this.transformInspector.hidden=true;
+    this.transformInspector.innerHTML='<div class="sf-inspector-readout">Rotation · XYZ degrees · scale in local dimensions</div>'+['rotation','scale'].map(key=>'<div class="tri-transform-grid">'+['x','y','z'].map(axis=>`<label class="tri-transform-field"><b>${key==='rotation'?'R':'S'}${axis.toUpperCase()}</b><input id="sf-ref-${key}-${axis}" data-studio-transform="${key}" data-axis="${axis}" type="number" step="${key==='scale'?'.05':'1'}" ${key==='scale'?'min=".01" max="100000"':''} aria-label="${key} ${axis.toUpperCase()}"></label>`).join('')+'</div>').join('');
+    this.frameButton.insertAdjacentElement('afterend',this.transformInspector);
+    for(const input of this.transformInspector.querySelectorAll('input')){
+      this.on(input,'focus',()=>this.startNumericEdit(input));
+      this.on(input,'input',()=>this.previewNumericEdit(input));
+      this.on(input,'change',()=>{this.previewNumericEdit(input);this.finishNumericEdit(false);});
+      this.on(input,'blur',()=>this.finishNumericEdit(false));
+    }
+  }
+  startNumericEdit(input){
+    const object=this.selectedObject();if(!object||object.locked)return;
+    this.finishNumericEdit(false);this.numericObjectId=object.id;this.numericKey=input.dataset.studioTransform;this.numericStartedVisible=object.visible!==false;
+    this.numericEdit=this.store.beginEdit(['scene','referenceObjects',object.id,this.numericKey],{label:`Edit reference ${this.numericKey}`});
+  }
+  previewNumericEdit(input){
+    if(input.value===''||!Number.isFinite(Number(input.value)))return;
+    const object=this.selectedObject();if(!object||object.locked)return;
+    if(!this.numericEdit?.active)this.startNumericEdit(input);
+    const values=this.numericKey==='rotation'?[...(object.rotation||[0,0,0])]:Array.isArray(object.scale)?[...object.scale]:[object.scale,object.scale,object.scale];
+    values[['x','y','z'].indexOf(input.dataset.axis)]=this.numericKey==='scale'?size(input.value):Math.max(-1e6,Math.min(1e6,Number(input.value)));
+    this.numericEdit?.preview(values);
+  }
+  finishNumericEdit(cancel){const edit=this.numericEdit;this.numericEdit=null;this.numericObjectId=null;this.numericKey=null;this.numericStartedVisible=null;if(cancel)edit?.cancel();else edit?.commit();}
   add(type, name, options = {}) {
     type = typeOf(type);
     if (!REFERENCE_TYPES.includes(type)) return null;
     const id = `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const object = normalizeReferenceObject({ id, type, name: name || `Reference ${type[0].toUpperCase()}${type.slice(1)}`,
       position: options.position ? legacyToViewportPosition(options.position) : [3, 0, type === 'plane' ? 0 : 1],
-      scale: options.scale ?? 1, visible: options.visible, locked: false });
+      rotation: options.rotation || [0,0,0], scale: options.scale ?? 1, visible: options.visible, locked: false });
     this.pendingGroup = options.groupKey;
     this.store.batch(`Add reference ${type}`, draft => {
       draft.scene ||= {}; draft.scene.referenceObjects ||= {};
@@ -173,6 +216,15 @@ export class SceneObjectAdapter {
     if (cancel) edit?.cancel(); else edit?.commit();
     this.observer?.takeRecords();
   }
+  setLegacyTransform(object, field, value, label) {
+    if (object.locked) return false;
+    if (!this.legacyPointer) return this.update(object, { [field]: value }, label);
+    if (!this.legacyEdit?.active) {
+      this.legacyObjectId = object.id;
+      this.legacyEdit = this.store.beginEdit(['scene', 'referenceObjects', object.id], { label });
+    }
+    return this.legacyEdit.preview(normalizeReferenceObject({ ...object, [field]: value }));
+  }
   installWrappers() {
     this.wrap('sfInitCleanStartupScene', function (original, receiver, args) {
       this.applying = true;
@@ -194,34 +246,27 @@ export class SceneObjectAdapter {
     this.wrap('sfSetSelectedTransformFromInputs', function (original, receiver, args) {
       const object = this.selectedObject(); if (!object) return original.apply(receiver, args);
       const position = ['x', 'y', 'z'].map(axis => finite(this.document.getElementById(`tri-pos-${axis}`)?.value));
-      const scale = Math.max(.01, finite(this.document.getElementById('tri-scale')?.value, object.scale));
+      const scale = resizedUniformly(object, finite(this.document.getElementById('tri-scale')?.value, uniformSize(object.scale)));
       return this.update(object, { position, scale }, 'Edit reference transform');
     });
     this.wrap('sfGetRowPosition', function (original, receiver, args) {
       const object = this.selectedObject(args[0]); return object ? viewportToLegacyPosition(object.position) : original.apply(receiver, args);
     });
     this.wrap('sfGetRowScale', function (original, receiver, args) {
-      return this.selectedObject(args[0])?.scale ?? original.apply(receiver, args);
+      const object=this.selectedObject(args[0]);return object ? uniformSize(object.scale) : original.apply(receiver, args);
     });
     this.wrap('sfSetRowPosition', function (original, receiver, args) {
       const object = this.selectedObject(args[0]); if (!object || this.applying) return original.apply(receiver, args);
       if (object.locked) return;
       const position = legacyToViewportPosition(args[1]);
-      if (this.legacyPointer) {
-        if (!this.legacyEdit?.active) {
-          this.legacyObjectId = object.id;
-          this.legacyEdit = this.store.beginEdit(['scene', 'referenceObjects', object.id, 'position'], { label: 'Move reference object' });
-        }
-        return this.legacyEdit.preview(position);
-      }
-      return this.store.set(['scene', 'referenceObjects', object.id, 'position'], position, { label: 'Move reference object' });
+      return this.setLegacyTransform(object, 'position', position, 'Move reference object');
     });
     this.wrap('sfSetRowScale', function (original, receiver, args) {
       const object = this.selectedObject(args[0]);
-      return object && !this.applying ? this.update(object, { scale: Math.max(.01, finite(args[1], 1)) }, 'Scale reference object') : original.apply(receiver, args);
+      return object && !this.applying ? this.setLegacyTransform(object, 'scale', resizedUniformly(object, args[1]), 'Scale reference object') : original.apply(receiver, args);
     });
     this.wrap('sfSetRowRotation', function (original, receiver, args) {
-      if (this.selectedObject(args[0]) && !this.applying) return;
+      const object=this.selectedObject(args[0]);if(object && !this.applying) return this.setLegacyTransform(object,'rotation',[...(object.rotation||[0,0,0]).slice(0,2),finite(args[1])],'Rotate reference object');
       return original.apply(receiver, args);
     });
     this.wrap('sfFocusOutlinerRow', function (original, receiver, args) {
@@ -242,7 +287,7 @@ export class SceneObjectAdapter {
     this.wrap('sfDuplicateSelectedObject', function (original, receiver, args) {
       const object = this.selectedObject(args[0] || this.selectedRow()); if (!object) return original.apply(receiver, args);
       return this.add(object.type, `${object.name} Copy`, { position: viewportToLegacyPosition([object.position[0] + 1, object.position[1] + 1, object.position[2]]),
-        scale: object.scale, visible: object.visible });
+        rotation: object.rotation || [0,0,0], scale: object.scale, visible: object.visible });
     });
     this.wrap('sfDeleteSelectedObject', function (original, receiver, args) {
       const object = this.selectedObject(args[0] || this.selectedRow()); if (!object) return original.apply(receiver, args);
@@ -270,17 +315,20 @@ export class SceneObjectAdapter {
       return original.apply(receiver, args).map(value => committed[value.key] ? referenceToLegacy(committed[value.key], value) : value);
     });
     this.wrap('sfRestoreOutlinerObjects', function (original, receiver, args) {
-      this.finishLegacyEdit(true); this.applying = true;
+      this.finishNumericEdit(true); this.finishLegacyEdit(true); this.applying = true;
       let result;
       try { result = original.apply(receiver, args); } finally { this.applying = false; }
-      if (Array.isArray(args[0])) this.importRows({ record: false });
+      if (Array.isArray(args[0])) {
+        for (const value of args[0]) { const row=this.row(value.key||value.id);if(row&&value.referenceTransform)row.dataset.sfReferenceTransform=JSON.stringify(value.referenceTransform); }
+        this.importRows({ record: false });
+      }
       this.observer?.takeRecords(); this.signature = ''; this.sync(this.store.snapshot());
       return result;
     });
   }
   readRow(row) {
     return referenceFromLegacy({ key: row.dataset.sfKey, type: row.children[2]?.textContent, name: row.children[1]?.textContent,
-      x: row.dataset.sfX, y: row.dataset.sfY, z: row.dataset.sfZ, scale: row.dataset.sfScale,
+      x: row.dataset.sfX, y: row.dataset.sfY, z: row.dataset.sfZ, rot: row.dataset.sfRot, scale: row.dataset.sfScale, referenceTransform: (()=>{try{return JSON.parse(row.dataset.sfReferenceTransform||'null');}catch{return null;}})(),
       visible: row.querySelector('.tri-eye')?.classList.contains('on') !== false,
       locked: row.querySelector('.tri-lock')?.classList.contains('on') === true });
   }
@@ -327,8 +375,16 @@ export class SceneObjectAdapter {
       if (object) input.value = object.position[index];
     }
     const rotation = this.document?.getElementById('tri-rot'), scale = this.document?.getElementById('tri-scale');
-    if (rotation) { rotation.disabled = Boolean(object); if (object) rotation.value = 0; }
-    if (scale) { scale.min = object ? '.01' : '.1'; scale.max = object ? '100000' : '5'; if (object) scale.value = object.scale; }
+    if (rotation) { rotation.disabled = Boolean(object); if (object) rotation.value = object.rotation?.[2] || 0; }
+    if (scale) { scale.min = object ? '.01' : '.1'; scale.max = object ? '100000' : '5'; if (object) scale.value = uniformSize(object.scale); }
+    if(this.transformInspector){
+      this.transformInspector.hidden=!object;
+      for(const input of this.transformInspector.querySelectorAll('[data-studio-transform]')){
+        const values=input.dataset.studioTransform==='rotation' ? object?.rotation||[0,0,0] : Array.isArray(object?.scale)?object.scale:[object?.scale||1,object?.scale||1,object?.scale||1];
+        input.disabled=Boolean(object?.locked);
+        if(!(this.document.activeElement===input&&this.numericEdit?.active))input.value=values[['x','y','z'].indexOf(input.dataset.axis)];
+      }
+    }
     const readout = this.document?.getElementById('sf-ins-readout');
     if (object && readout) readout.textContent = `${object.visible ? 'visible' : 'hidden'}, ${object.locked ? 'locked' : 'editable'} · position ${object.position.join(' / ')} m · Z up`;
   }
@@ -346,6 +402,13 @@ export class SceneObjectAdapter {
       this.signature = '';
     }
     const objects = this.objects(state), selected = state.scene?.selectedReferenceId || null;
+    const numericObject = objects[this.numericObjectId];
+    if (this.numericEdit?.active && (!numericObject || numericObject.locked || (this.numericStartedVisible && numericObject.visible === false) || selected !== this.numericObjectId)) {
+      this.finishNumericEdit(true);
+      // Cancellation notifies synchronously. Read the restored state instead of
+      // continuing with the stale preview snapshot supplied to this subscriber.
+      this.sync(this.store.snapshot()); return;
+    }
     const edited = objects[this.legacyObjectId];
     if (this.legacyEdit?.active && (!edited || edited.locked || !edited.visible || selected !== this.legacyObjectId)) {
       this.finishLegacyEdit(true); return;
@@ -369,7 +432,7 @@ export class SceneObjectAdapter {
         row.dataset.sfReferenceId = id; row.dataset.sfAdded = '1';
         const position = viewportToLegacyPosition(object.position);
         row.dataset.sfX = String(position.x); row.dataset.sfY = String(position.y); row.dataset.sfZ = String(position.z);
-        row.dataset.sfScale = String(object.scale); row.dataset.sfRot = '0';
+        row.dataset.sfScale = String(uniformSize(object.scale)); row.dataset.sfRot = String(object.rotation?.[2]||0); row.dataset.sfReferenceTransform=JSON.stringify(referenceTransform(object));
         if (row.children[1].textContent !== object.name) row.children[1].textContent = object.name;
         row.children[2].textContent = object.type.toUpperCase();
         const eye = row.querySelector('.tri-eye'), lock = row.querySelector('.tri-lock');
@@ -393,9 +456,9 @@ export class SceneObjectAdapter {
     } finally { this.applying = false; this.observer?.takeRecords(); }
   }
   dispose() {
-    this.finishLegacyEdit(true); this.disposed = true; this.unsubscribe?.(); this.observer?.disconnect();
+    this.finishNumericEdit(true);this.finishLegacyEdit(true); this.disposed = true; this.unsubscribe?.(); this.observer?.disconnect();
     for (const [target, type, fn, capture] of this.listeners) target?.removeEventListener(type, fn, capture);
     for (const [name, { original, wrapped }] of this.originals) if (this.root[name] === wrapped) this.root[name] = original;
-    this.note?.remove(); this.frameButton?.remove(); this.originals.clear(); this.listeners = [];
+    this.note?.remove(); this.frameButton?.remove();this.transformInspector?.remove(); this.originals.clear(); this.listeners = [];
   }
 }

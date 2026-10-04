@@ -370,27 +370,29 @@ export class SkyForgeStore {
       if (edit.keys.length) setAtPath(this.state, edit.keys, previewValue);
       else this.state = cloneValue(previewValue);
     }
+    let recordedChange = null;
     if (!options.transient) {
       this.touchProject([]);
       if (options.record !== false) {
-        this.pushHistory({
+        recordedChange = {
           type: "batch",
           path: "",
           label: label || "Batch change",
           before,
           after: this.snapshot({ committed: true }),
           transient: false
-        });
+        };
+        this.pushHistory(recordedChange);
       }
       this.scheduleAutosave();
     }
-    this.notify({ type: "batch", path: "", label: label || "Batch change", transient: Boolean(options.transient) });
+    this.notify(recordedChange || { type: "batch", path: "", label: label || "Batch change", transient: Boolean(options.transient) });
     return true;
   }
 
   touchProject(path) {
     const root = path[0] || "";
-    if (root === "app" || root === "engine" || root === "bridge" || root === "timeline") return;
+    if (root === "app" || root === "engine" || root === "bridge" || (root === "timeline" && ["currentFrame", "playing"].includes(path[1]))) return;
     if (!this.state.project) this.state.project = {};
     this.state.project.modified = true;
     this.state.project.updatedAt = new Date().toISOString();
@@ -416,6 +418,7 @@ export class SkyForgeStore {
     if (!change) return false;
     if (change.path) setAtPath(this.state, change.path, change.before);
     else this.state = cloneValue(change.before);
+    for (const related of change.related || []) setAtPath(this.state, related.path, related.before);
     this.future.push(change);
     this.scheduleAutosave();
     this.notify({ type: "undo", path: change.path, label: change.label });
@@ -428,6 +431,7 @@ export class SkyForgeStore {
     if (!change) return false;
     if (change.path) setAtPath(this.state, change.path, change.after);
     else this.state = cloneValue(change.after);
+    for (const related of change.related || []) setAtPath(this.state, related.path, related.after);
     this.history.push(change);
     this.scheduleAutosave();
     this.notify({ type: "redo", path: change.path, label: change.label });

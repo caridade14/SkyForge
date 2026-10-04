@@ -16,6 +16,7 @@ function range(name, label) {
     querySelectorAll() { return []; },
     closest() { return { querySelector: (selector) => selector === ".sl-val" ? label : { textContent: name } }; },
     addEventListener(name, listener) { listeners.set(name, [...(listeners.get(name) || []), listener]); },
+    removeEventListener(name, listener) { listeners.set(name, (listeners.get(name) || []).filter((current) => current !== listener)); },
     dispatchEvent() { throw new Error("State refresh must not dispatch legacy input handlers"); },
     fire(name, afterTargetListeners) {
       for (const listener of listeners.get(name) || []) listener();
@@ -48,6 +49,7 @@ async function fixture(run) {
     addEventListener(type, listener) { documentListeners.set(type, [...(documentListeners.get(type) || []), listener]); },
     removeEventListener(type, listener) { documentListeners.set(type, (documentListeners.get(type) || []).filter((current) => current !== listener)); },
     bubble(type, target) { for (const listener of documentListeners.get(type) || []) listener({ target }); },
+    dispatch(type, event) { for (const listener of documentListeners.get(type) || []) listener(event); },
     listenerCount(type) { return (documentListeners.get(type) || []).length; }
   };
   controls.forEach((control) => { control.ownerDocument = document; });
@@ -199,7 +201,48 @@ test("Sun document listeners retain their owner document and are removed on disp
     azimuth.value = "330.3";
     azimuth.fire("input");
     assert.equal(labels["v-az"].textContent, "rounded", "disposed bridges do not touch readouts");
-    assert.equal(store.get("sun.azimuth"), 330.3);
-    assert.equal(store.history.length, 2);
+    assert.equal(store.get("sun.azimuth"), 330.2, "disposed controls no longer write into the old Store");
+    assert.equal(store.history.length, 1);
+  });
+});
+
+test("UI Bridge removes keyboard ownership and dynamically mounted control handlers on disposal", async () => {
+  await fixture(({ ui, store, document, controls, elevation }) => {
+    ui.bindControls(document); ui.bindKeyboard(); ui.bindKeyboard();
+    assert.equal(document.listenerCount("keydown"), 1);
+    const dynamic = range("Azimuth", { textContent: "" }); dynamic.ownerDocument = document; controls.push(dynamic); ui.bindControls(dynamic);
+    assert.equal(dynamic.listenerCount("input"), 1); assert.equal(dynamic.listenerCount("change"), 1);
+    elevation.value = "24"; elevation.fire("input");
+    const key = (key) => ({ key, ctrlKey: true, metaKey: false, shiftKey: false, preventDefault() {}, target: { closest: () => null } });
+    document.dispatch("keydown", key("z")); assert.equal(store.get("sun.elevation"), 7);
+    const before = store.snapshot(); ui.dispose();
+    assert.equal(document.listenerCount("keydown"), 0); assert.equal(dynamic.listenerCount("input"), 0); assert.equal(dynamic.listenerCount("change"), 0); assert.equal(elevation.listenerCount("input"), 0);
+    elevation.value = "30"; elevation.fire("input"); dynamic.value = "90"; dynamic.fire("change"); document.dispatch("keydown", key("z"));
+    assert.deepEqual(store.snapshot(), before);
+    ui.bindControls(document); ui.bindKeyboard(); assert.equal(document.listenerCount("keydown"), 0); assert.equal(dynamic.listenerCount("input"), 0);
+  });
+});
+
+test("Rebooting the bridge attaches controls to the new Store and leaves the disposed Store untouched", async () => {
+  await fixture(({ ui, store, document, elevation }) => {
+    ui.bindControls(document); elevation.value = "21"; elevation.fire("input"); const previous = store.snapshot(); ui.dispose();
+    const nextStore = new store.constructor({ storage: null }), nextUI = new ui.constructor({ store: nextStore });
+    try {
+      nextUI.bindControls(document); assert.equal(elevation.listenerCount("input"), 1);
+      elevation.value = "12"; elevation.fire("input"); elevation.fire("change");
+      assert.equal(nextStore.get("sun.elevation"), 12); assert.equal(nextStore.history.length, 1); assert.deepEqual(store.snapshot(), previous);
+    } finally { nextUI.dispose(); nextStore.destroy(); }
+  });
+});
+
+test("Queued control mutations cannot recreate disposed listeners", async () => {
+  await fixture(({ ui, document }) => {
+    const previous = global.MutationObserver; let callback, disconnected = false;
+    global.MutationObserver = class { constructor(fn) { callback = fn; } observe() {} disconnect() { disconnected = true; } };
+    try {
+      ui.observe(); ui.bindKeyboard(); ui.dispose(); assert.equal(disconnected, true);
+      const late = range("Elevation", { textContent: "" }); late.ownerDocument = document; late.nodeType = 1;
+      callback([{ addedNodes: [late] }]); assert.equal(late.listenerCount("input"), 0); assert.equal(document.listenerCount("keydown"), 0);
+    } finally { global.MutationObserver = previous; }
   });
 });
