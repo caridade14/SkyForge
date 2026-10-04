@@ -46,7 +46,7 @@ test('volumetric quality uses constant WebGL1 loop bounds and 3D density with bo
     assert.ok(shader.includes('cloudDensity(vec3 point)'));
     assert.ok(shader.includes('point.z-uAltitude'));
     assert.ok(shader.includes('point+uSun*lightStep'));
-    assert.ok(shader.includes('uTime*uWindSpeed'));
+    assert.ok(shader.includes('uTime*(uWindSpeed/3.6)'), 'legacy km/h is converted to metres per second');
     assert.ok(shader.includes('transmittance<0.015'));
   }
 });
@@ -62,16 +62,17 @@ const rendererModule = async () => {
 };
 
 class TestGL {
-  constructor({ highPrecision = true, rejectVolume = false } = {}) {
+  constructor({ highPrecision = true, rejectVolume = false, rejectShadow = false } = {}) {
     Object.assign(this, { VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, HIGH_FLOAT: 3, COMPILE_STATUS: 4, LINK_STATUS: 5, ARRAY_BUFFER: 6, STATIC_DRAW: 7, TEXTURE_2D: 8, TEXTURE_MIN_FILTER: 9, TEXTURE_MAG_FILTER: 10, NEAREST: 11, TEXTURE_WRAP_S: 12, TEXTURE_WRAP_T: 13, CLAMP_TO_EDGE: 14, RGBA: 15, UNSIGNED_BYTE: 16, FLOAT: 17, COLOR_BUFFER_BIT: 18, DEPTH_BUFFER_BIT: 19, DEPTH_TEST: 20, TRIANGLES: 21, LINES: 22, TEXTURE0: 23, POLYGON_OFFSET_FILL: 24, LEQUAL: 25, LESS: 26, highPrecision, rejectVolume });
     this.next = 0; this.buffers = new Set(); this.programs = new Set(); this.shaders = new Set(); this.textures = new Set(); this.sources = []; this.uniforms = new Map(); this.matrixUniforms = new Map(); this.lost = false;
+    this.rejectShadow = rejectShadow;
   }
   getShaderPrecisionFormat() { return { precision: this.highPrecision ? 23 : 0 }; }
   getExtension() { return null; }
   isContextLost() { return this.lost; }
   createShader(type) { const shader = { id: ++this.next, type }; this.shaders.add(shader); return shader; }
   shaderSource(shader, value) { shader.source = value; this.sources.push(value); }
-  compileShader(shader) { shader.failed = this.rejectVolume && shader.source.includes('marchClouds'); }
+  compileShader(shader) { shader.failed = this.rejectVolume && shader.source.includes('marchClouds') || this.rejectShadow && shader.source.includes('cloudShadow(vec3 point)'); }
   getShaderParameter(shader) { return !shader.failed; }
   getShaderInfoLog() { return 'Driver rejected volumetric shader'; }
   deleteShader(shader) { this.shaders.delete(shader); }
@@ -129,6 +130,23 @@ test('quality programs cache independently, apply grading and release all GPU re
   const lost = makeRenderer(SkyViewportRenderer); lost.renderer.draw(testState(), testCamera); lost.gl.lost = true; lost.renderer.dispose(); assert.equal(lost.renderer.resources.length, 0); assert.equal(lost.renderer.cloudPrograms.size, 0);
 });
 
+test('cloud shadows reuse scene density uniforms, cache their program and recover from driver rejection', async () => {
+  const { SkyViewportRenderer } = await rendererModule();
+  const state = testState(); state.clouds.type = 'Stratus'; state.clouds.altitude = 3200; state.clouds.windSpeed = 16;
+  for (const rejectShadow of [false, true]) {
+    const { renderer, gl } = makeRenderer(SkyViewportRenderer, { rejectShadow });
+    for (let frame = 0; frame < 4; frame++) renderer.draw(state, testCamera);
+    assert.equal(renderer.cloudMetrics.cloudShadows, !rejectShadow);
+    assert.equal(gl.sources.filter(source => source.includes('cloudShadow(vec3 point)')).length, 1);
+    if (!rejectShadow) {
+      assert.equal(gl.uniforms.get(`${renderer.cloudMesh.id}:uCloudKind`), 1);
+      assert.equal(gl.uniforms.get(`${renderer.cloudMesh.id}:uAltitude`), 3200);
+      assert.equal(gl.uniforms.get(`${renderer.cloudMesh.id}:uWindSpeed`), 16);
+    } else assert.ok(renderer.shadowFailure);
+    renderer.dispose(); assert.equal(gl.programs.size, 0); assert.equal(gl.buffers.size, 0);
+  }
+});
+
 test('manual optical changes invalidate the physical LUT baseline without evaluating Natural Light', async () => {
   const { SkyViewportRenderer, lutMatchesAtmosphere } = await rendererModule();
   const { renderer } = makeRenderer(SkyViewportRenderer); const state = testState();
@@ -140,4 +158,39 @@ test('manual optical changes invalidate the physical LUT baseline without evalua
   assert.equal(lutMatchesAtmosphere(payload, { aerosolOpticalDepth550: Infinity }), false);
   assert.equal(lutMatchesAtmosphere({}, { haze: .3 }), true, 'older payloads preserve the supported physical Sun path');
   renderer.dispose();
+});
+
+test('solar preview extinction warms the horizon and removes direct light below it', async () => {
+  const { previewSunTint } = await rendererModule();
+  const atmosphere = { rayleigh: 2.8, turbidity: 2.4, mieCoefficient: .005, ozone: .6 };
+  const noon = previewSunTint({ elevation: 60, temperature: 6500 }, atmosphere);
+  const horizon = previewSunTint({ elevation: 2, temperature: 6500 }, atmosphere);
+  assert.ok(noon.every(value => value > 0 && value <= 1));
+  assert.ok(horizon.every((value, index) => value < noon[index]), 'longer air mass attenuates all channels');
+  assert.ok(horizon[0] / horizon[2] > noon[0] / noon[2], 'blue attenuates faster toward the horizon');
+  for (const elevation of [-90, -18, -1, 0]) assert.deepEqual(previewSunTint({ elevation }, atmosphere), [0, 0, 0]);
+  const polluted = previewSunTint({ elevation: 30 }, { ...atmosphere, turbidity: 8 });
+  const clear = previewSunTint({ elevation: 30 }, atmosphere);
+  assert.ok(polluted.every((value, index) => value < clear[index]));
+  assert.ok(previewSunTint({ elevation: NaN, temperature: Infinity }, { rayleigh: NaN }).every(Number.isFinite));
+});
+
+test('sky fill integrates the physical LUT and bounds malformed data without clamping HDR energy', async () => {
+  const { skyAmbientFromLut } = await rendererModule();
+  assert.equal(skyAmbientFromLut(null), null);
+  assert.equal(skyAmbientFromLut({ layout: { width: 99999, height: 1 }, pixels: [] }), null);
+  const lut = { layout: { width: 2, height: 3, channels: ['R', 'G', 'B', 'A'] }, pixels: Array.from({ length: 6 }, () => [4, 2, 1, 1]).flat() };
+  const ambient = skyAmbientFromLut(lut);
+  ambient.forEach((value, index) => assert.ok(Math.abs(value - [4, 2, 1][index]) < 1e-10));
+  const malformed = { layout: { width: 1, height: 1, channels: ['R', 'G', 'B'] }, pixels: [-1, NaN, .5] };
+  assert.deepEqual(skyAmbientFromLut(malformed), [0, 0, .5]);
+});
+
+test('cloud range reaches the default camera layer without raising sample budgets; shapes are explicit', async () => {
+  const { cloudUniforms, CLOUD_QUALITIES } = await modules();
+  const uniforms = cloudUniforms({ clouds: { altitude: 2400 } });
+  assert.ok(uniforms.uCloudDistance > 2400 / Math.sin(3.5 * Math.PI / 180));
+  assert.equal(CLOUD_QUALITIES.low.samples, 16);
+  for (const [type, kind] of [['Cumulus', 0], ['Stratus', 1], ['Cirrus', 2], ['Cumulonimbus', 3], ['Altostratus', 4]]) assert.equal(cloudUniforms({ clouds: { type } }).uCloudKind, kind);
+  assert.equal(cloudUniforms({ clouds: { type: 'Unknown', altitude: 1e30 } }).uCloudDistance, 220000);
 });

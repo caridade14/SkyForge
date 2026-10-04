@@ -13,6 +13,7 @@ fs.mkdirSync(out, { recursive: true });
   // omits the software-GPU flags to exercise its native backend.
   const launch = { headless: true };
   if (process.env.PLAYWRIGHT_CHANNEL) launch.channel = process.env.PLAYWRIGHT_CHANNEL;
+  if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) launch.executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
   if (process.env.SKYFORGE_WEBGL_BACKEND !== 'native') launch.args = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
   const browser = await chromium.launch(launch);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });

@@ -2,6 +2,7 @@ const CONTROL_BINDINGS = {
   "time of day": ["time.timeOfDay", 1], date: ["time.date", 1], latitude: ["location.latitude", 1], longitude: ["location.longitude", 1], location: ["location.name", 1],
   elevation: ["sun.elevation", 1], azimuth: ["sun.azimuth", 1], "sun intensity": ["sun.intensity", 0.1], "color temp (k)": ["sun.temperature", 1],
   turbidity: ["atmosphere.turbidity", 0.1], haze: ["atmosphere.haze", 0.1], "ozone layer": ["atmosphere.ozone", 0.1], "mie scattering": ["atmosphere.mieCoefficient", 0.001],
+  rayleigh: ["atmosphere.rayleigh", .1], "mie anisotropy": ["atmosphere.mieDirectionalG", .01],
   coverage: ["clouds.coverage", 0.01], altitude: ["clouds.altitude", 1], thickness: ["clouds.thickness", 1], density: ["clouds.density", 0.01], erosion: ["clouds.erosion", 0.01], detail: ["clouds.detail", 0.01],
   "wind speed": ["clouds.windSpeed", 1], "wind direction": ["clouds.windDirection", 1], precipitation: ["clouds.precipitation", 0.01], exposure: ["camera.exposure", 0.1], saturation: ["color.saturation", 0.01], contrast: ["color.contrast", 0.01]
 };
@@ -36,6 +37,7 @@ export class SkyForgeUIBridge {
     this.disposed = false;
     this.sunControlDocuments = new Map();
     this.controlListeners = new Map();
+    this.controlBindings = new Map();
     this.keyboardOwner = null;
     this.keyboardHandler = null;
   }
@@ -108,10 +110,10 @@ export class SkyForgeUIBridge {
         <main>
           <section class="active" data-panel="project"><div class="sf-core-hero"><small>ACTIVE PROJECT</small><h2 data-field="project">Untitled Sky</h2><p>Central state, autosave, recovery and non-destructive history.</p></div><div class="sf-core-actions"><button data-action="new"><b>New Project</b><span>Clean physical sky</span></button><button data-action="open"><b>Open Project</b><span>.skyforge or JSON</span></button><button class="primary" data-action="save"><b>Save Project</b><span>Portable project file</span></button><button data-action="undo"><b>Undo</b><span>Previous state</span></button><button data-action="redo"><b>Redo</b><span>Reapply change</span></button><button data-action="reset-layout"><b>Reset Workspace</b><span>Restore panels</span></button></div></section>
           <section data-panel="engine"><div class="sf-core-metrics"><article><small>LIGHTING</small><b data-field="lighting">idle</b></article><article><small>ATMOSPHERE</small><b data-field="atmosphere">Physical</b></article><article><small>TIMELINE</small><b data-field="timeline">Frame 1</b></article><article><small>NODES</small><b data-field="nodes">0 nodes</b></article></div><div class="sf-core-row"><button data-action="evaluate">Evaluate Physical Sky</button><button data-action="timeline">Play / Pause</button><button data-action="graph">Default Node Graph</button></div><pre data-field="log">Engine ready.</pre></section>
-          <section data-panel="pipeline"><div class="sf-core-pipeline"><article><span>01</span><b>Physical Atmosphere</b><small>Rayleigh, Mie, ozone and multiple scattering</small></article><article><span>02</span><b>Procedural Clouds</b><small>Coverage, density, altitude, erosion and wind</small></article><article><span>03</span><b>ACES Color</b><small>Linear HDR working pipeline</small></article><article><span>04</span><b>HDRI Output</b><small>Queue, preview, passes and metadata</small></article></div><div class="sf-core-row"><button data-action="preview">Generate Preview</button><button class="primary" data-action="render">Queue HDRI Render</button></div></section>
+          <section data-panel="pipeline"><div class="sf-core-pipeline"><article><span>01</span><b>Physical Atmosphere</b><small>Rayleigh, Mie, ozone and multiple scattering</small></article><article><span>02</span><b>Procedural Clouds</b><small>Coverage, density, altitude, erosion and wind</small></article><article><span>03</span><b>Display Preview</b><small>sRGB display; ACES / OpenColorIO workflow pending</small></article><article><span>04</span><b>Render Jobs</b><small>Queue and preview; professional HDR / EXR renderer pending</small></article></div><div class="sf-core-row"><button data-action="preview">Generate Preview</button><button class="primary" data-action="render">Queue Render Job</button></div></section>
           <section data-panel="bridge"><div class="sf-core-bridge"><i data-field="bridge-orb"></i><div><small>BLENDER LOCAL BRIDGE</small><h2 data-field="bridge">Checking…</h2><p>Local port 8765 with queued payload fallback.</p></div></div><div class="sf-core-row"><button data-action="bridge-health">Test Connection</button><button class="primary" data-action="bridge-send">Send World to Blender</button></div><p class="sf-core-help">Install <code>integrations/blender/skyforge_bridge_addon.py</code>, enable it, then press Start Bridge in Blender.</p></section>
         </main>
-        <footer><span>CORE11 • Schema 3 • ACEScg</span><span data-field="footer">Ready</span></footer>
+        <footer><span>CORE11 • Schema 3 • Display preview</span><span data-field="footer">Ready</span></footer>
       </section>`;
     this.hub.onclick = (event) => {
       const section = event.target.closest("[data-section]")?.dataset.section;
@@ -132,6 +134,7 @@ export class SkyForgeUIBridge {
   }
 
   setSection(section) {
+    if (!["project", "engine", "pipeline", "bridge"].includes(section)) section = "project";
     this.hub.querySelectorAll("[data-section]").forEach((item) => item.classList.toggle("active", item.dataset.section === section));
     this.hub.querySelectorAll("[data-panel]").forEach((item) => item.classList.toggle("active", item.dataset.panel === section));
   }
@@ -143,16 +146,21 @@ export class SkyForgeUIBridge {
     try {
       if (action === "close") return this.closeHub();
       if (action === "new") { this.projects.newProject(); return this.toast("New project created", "success"); }
-      if (action === "open") { await this.projects.openPicker(); return this.toast("Project opened", "success"); }
+      if (action === "open") { if (await this.projects.openPicker()) this.toast("Project opened", "success"); return; }
       if (action === "save") { this.projects.download(); return this.toast("Project exported", "success"); }
       if (action === "undo") return this.store.undo() ? this.toast("Undo") : this.toast("Nothing to undo", "warning");
       if (action === "redo") return this.store.redo() ? this.toast("Redo") : this.toast("Nothing to redo", "warning");
-      if (action === "reset-layout") { document.body.classList.remove("sf-hide-left", "sf-hide-right", "sf-hide-timeline", "sf-hide-status"); return this.toast("Workspace restored", "success"); }
+      if (action === "reset-layout") { document.body.classList.remove("sf-hide-left", "sf-hide-right", "sf-hide-timeline", "sf-hide-status"); globalThis.dispatchEvent?.(new Event("skyforge:reset-workspace")); return this.toast("Workspace restored", "success"); }
       if (action === "evaluate") { const result = await this.lighting.evaluate(); return this.toast(result ? "Physical sky evaluated" : "Lighting evaluation failed", result ? "success" : "error"); }
       if (action === "timeline") return this.timeline.toggle();
-      if (action === "graph") { this.nodeGraph.createDefaultGraph(); this.store.set("nodes", this.nodeGraph.serialize(), { label: "Create default node graph" }); return this.toast("Default node graph created", "success"); }
+      if (action === "graph") {
+        const graph = new this.nodeGraph.constructor(); graph.registry = this.nodeGraph.registry;
+        graph.createDefaultGraph();
+        this.store.set("nodes", graph.serialize(), { label: "Create default node graph" });
+        return this.toast("Default node graph created", "success");
+      }
       if (action === "preview") { await this.render.preview(); return this.toast("Preview generated", "success"); }
-      if (action === "render") { await this.render.queue(); return this.toast("HDRI render queued", "success"); }
+      if (action === "render") { await this.render.queue(); return this.toast("Render job queued", "success"); }
       if (action === "bridge-health") { const result = await this.blender.health(); return this.toast(result.connected ? "Blender connected" : "Blender is offline", result.connected ? "success" : "warning"); }
       if (action === "bridge-send") { const result = await this.blender.send(); return this.toast(result.forwarded ? "World sent to Blender" : "World queued for Blender", result.forwarded ? "success" : "warning"); }
     } catch (error) { this.toast(error.message || "Operation failed", "error"); }
@@ -162,15 +170,21 @@ export class SkyForgeUIBridge {
     if (this.disposed) return;
     matchingControls(root, "input,select").forEach((control) => {
       if (this.bound.has(control)) return;
-      const [path, scale] = CONTROL_BINDINGS[controlLabel(control)] || [];
+      const [path, defaultScale] = CONTROL_BINDINGS[controlLabel(control)] || [];
       if (!path) return;
+      // Legacy normalized sliders use both 0..10 and 0..100. In particular,
+      // density is 0..10: binding it as percent made 0.7 become at most 0.1.
+      const scale = ["clouds.density", "clouds.erosion", "clouds.detail"].includes(path) && control.type === "range" && Number(control.max) === 10 ? .1 : defaultScale;
       this.bound.add(control);
       control.dataset.sfCorePath = path;
-      if (path === "sun.azimuth" || path === "sun.elevation") this.bindSunControlEvents(control.ownerDocument || document);
+      control.dataset.sfCoreScale = String(scale);
+      this.controlBindings.set(control, { path, scale });
+      this.bindSunControlEvents(control.ownerDocument || document);
       const commit = () => {
         if (this.disposed) return;
+        if (control.value === "" && ["range", "number"].includes(control.type)) return;
         const numeric = Number(control.value);
-        const value = control.type === "checkbox" ? control.checked : Number.isFinite(numeric) ? numeric * scale : control.value;
+        const value = control.type === "checkbox" ? control.checked : control.tagName === "SELECT" || ["text", "date", "time"].includes(control.type) ? control.value : Number.isFinite(numeric) ? numeric * scale : control.value;
         this.store.set(path, value, { label: `Change ${controlLabel(control)}` });
       };
       control.addEventListener("input", commit);
@@ -179,7 +193,7 @@ export class SkyForgeUIBridge {
       const value = this.store.get(path);
       if (value !== undefined) control.type === "checkbox" ? control.checked = Boolean(value) : control.value = typeof value === "number" ? value / scale : value;
     });
-    this.syncSunControls(this.store.snapshot(), root);
+    this.syncControls(this.store.snapshot(), root);
   }
 
   bindSunControlEvents(documentRef) {
@@ -187,7 +201,7 @@ export class SkyForgeUIBridge {
     const sync = (event) => {
       const path = event.target?.dataset?.sfCorePath;
       // Document bubbling follows the late legacy listeners on the input itself.
-      if (!this.disposed && (path === "sun.azimuth" || path === "sun.elevation")) this.syncSunControls(this.store.snapshot(), documentRef);
+      if (!this.disposed && path) this.syncControls(this.store.snapshot(), documentRef);
     };
     documentRef.addEventListener("input", sync);
     documentRef.addEventListener("change", sync);
@@ -223,6 +237,33 @@ export class SkyForgeUIBridge {
     }
   }
 
+  syncControls(state, root = document) {
+    for (const [control, { path, scale }] of this.controlBindings) {
+      if (root !== control.ownerDocument && root !== control && root.contains && !root.contains(control)) continue;
+      const value = path.split(".").reduce((part, key) => part?.[key], state);
+      if (value === undefined || path === "sun.azimuth" || path === "sun.elevation") continue;
+      if (control.type === "range" && Number.isFinite(value)) {
+        const raw = value / scale;
+        // Imported/node/animated values must not silently round or clamp to a
+        // different value in the old range input before the next user edit.
+        control.step = "any";
+        if (path === "sun.intensity") control.min = "0";
+        if (raw < Number(control.min)) control.min = String(raw);
+        if (raw > Number(control.max)) control.max = String(raw);
+      }
+      if (control.type === "checkbox") control.checked = Boolean(value);
+      else control.value = typeof value === "number" ? Number((value / scale).toFixed(6)) : value;
+      const label = control.closest(".sl-wrap,.s-row,.tog-row,.prefs-field,.rp-sec")?.querySelector(".sl-val");
+      if (label && typeof value === "number") {
+        const unit = path === "clouds.coverage" ? "%" : ["clouds.altitude", "clouds.thickness"].includes(path) ? " m" : path === "clouds.windSpeed" ? " km/h" : path === "clouds.windDirection" ? "°" : "";
+        const display = path === "clouds.coverage" ? value * 100 : value;
+        const text = `${Number(display.toFixed(3))}${unit}`;
+        if (label.textContent !== text) label.textContent = text;
+      }
+    }
+    this.syncSunControls(state, root);
+  }
+
   observe() {
     if (this.disposed) return;
     this.observer?.disconnect();
@@ -237,6 +278,7 @@ export class SkyForgeUIBridge {
       if (this.disposed) return;
       if (event.key === "Escape" && !this.hub.hidden) { event.preventDefault(); return this.closeHub(); }
       const mod = event.ctrlKey || event.metaKey;
+      if (mod && ['z', 'y'].includes(event.key.toLowerCase()) && editable(event.target)) return;
       if (mod && event.shiftKey && event.key.toLowerCase() === "h") { event.preventDefault(); return this.openHub(); }
       if (mod && event.key.toLowerCase() === "s") { event.preventDefault(); this.projects.download(); return; }
       if (mod && event.key.toLowerCase() === "o") { event.preventDefault(); this.projects.openPicker().catch((error) => this.toast(error.message, "error")); return; }
@@ -249,7 +291,7 @@ export class SkyForgeUIBridge {
   }
 
   refresh(state, change = {}) {
-    this.syncSunControls(state);
+    this.syncControls(state);
     this.status.querySelector("span").textContent = stateSummary(state);
     this.status.dataset.tone = state.engine?.lighting?.status === "error" ? "error" : state.engine?.lighting?.status === "evaluating" ? "busy" : "ready";
     const set = (field, value) => { const element = this.hub.querySelector(`[data-field="${field}"]`); if (element) element.textContent = value; };
@@ -274,6 +316,7 @@ export class SkyForgeUIBridge {
       control.removeEventListener("change", commit);
     }
     this.controlListeners.clear();
+    this.controlBindings.clear();
     this.keyboardOwner?.removeEventListener("keydown", this.keyboardHandler);
     this.keyboardOwner = null;
     this.keyboardHandler = null;

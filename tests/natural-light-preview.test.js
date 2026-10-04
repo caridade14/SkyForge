@@ -100,6 +100,16 @@ test("preview controls clamp Phase 4 physical overrides", () => {
   assert.equal(input.multipleScatteringOrders, 8);
 });
 
+test("empty Core date/time controls still produce a valid physical timestamp", () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const fields = { 'scene-date': { value: '' }, 'scene-time': { value: '' }, 'city-tz': { textContent: 'UTC+0' } };
+  const input = preview.buildInputFromDocument({ getElementById: id => fields[id] || null }, {});
+  assert.equal(input.dateTime, `${today}T12:00:00+00:00`);
+  assert.ok(Number.isFinite(new Date(input.dateTime).getTime()));
+  fields['scene-date'].value = '2026-07-09'; fields['scene-time'].value = '14:03:25';
+  assert.equal(preview.buildInputFromDocument({ getElementById: id => fields[id] || null }, {}).dateTime, '2026-07-09T14:03:25+00:00');
+});
+
 test("preview LUT sampling supports RGB and RGBA-like LUT layouts", () => {
   const rgbLut = {
     layout: { width: 2, height: 2 },

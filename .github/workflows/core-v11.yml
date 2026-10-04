@@ -8,8 +8,10 @@ on:
       - feature/viewport-reference-objects
       - feature/studio-editors
       - feature/studio-volumetric-preview
+      - fix/studio-natural-preview-ui
   pull_request:
     branches:
+      - feature/studio-volumetric-preview
       - feature/viewport-reference-objects
       - feature/studio-editors
       - feature/viewport-sun-gizmo

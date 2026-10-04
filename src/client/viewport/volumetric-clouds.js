@@ -24,8 +24,12 @@ export function cloudUniforms(state = {}) {
     uDensity: clamp(finite(clouds.density, 0), 0, 1),
     uAltitude: clamp(finite(clouds.altitude, 2400), 1, 50000),
     uThickness: clamp(finite(clouds.thickness, 800), 50, 10000),
+    // Range changes the interval, never the number of raymarch samples. The
+    // default 2.4 km layer needs about 40 km at a 3.5 degree viewing elevation.
+    uCloudDistance: clamp(finite(clouds.altitude, 2400) * 4, 65000, 220000),
     uErosion: clamp(finite(clouds.erosion, 0), 0, 1),
     uDetail: clamp(finite(clouds.detail, 0), 0, 1),
+    uCloudKind: { Cumulus: 0, Stratus: 1, Cirrus: 2, Cumulonimbus: 3, Altostratus: 4 }[clouds.type] ?? 0,
     uTime: clamp(finite(timeline.currentFrame, 0), -1e7, 1e7) / clamp(finite(timeline.fps, 24), 1, 240),
     uWindSpeed: clamp(finite(clouds.windSpeed, 0), -200, 200),
     uWindDirection: (finite(clouds.windDirection, 0) % 360) * Math.PI / 180
@@ -60,31 +64,39 @@ float cloudNoise(vec3 p){
 float cloudDensity(vec3 point){
  float height=(point.z-uAltitude)/uThickness;
  if(height<=0.0||height>=1.0)return 0.0;
- vec3 p=point/900.0;
- p.xy+=vec2(sin(uWindDirection),cos(uWindDirection))*uTime*uWindSpeed/900.0;
- float base=cloudNoise(p)*0.68+cloudNoise(p*2.03+vec3(11.7,4.1,8.8))*0.32;
- float threshold=0.10+(1.0-uCoverage)*0.72;
- float mass=clamp((base-threshold)*4.0,0.0,1.0);
+ float horizontalScale=uCloudKind==1.0||uCloudKind==4.0?3200.0:uCloudKind==3.0?2200.0:1500.0;
+ vec3 p=vec3(point.xy/horizontalScale,point.z/900.0);
+ // State/UI wind retains the legacy km/h unit; density coordinates are metres.
+ p.xy+=vec2(sin(uWindDirection),cos(uWindDirection))*uTime*(uWindSpeed/3.6)/horizontalScale;
+ if(uCloudKind==2.0)p.xy*=vec2(0.3,2.0);
+ float base=cloudNoise(p)*0.72+cloudNoise(p*0.47+vec3(11.7,4.1,8.8))*0.28;
+ float threshold=0.10+(1.0-uCoverage)*0.78;
+ float mass=smoothstep(threshold,threshold+0.22,base);
  if(mass<=0.001)return 0.0;
  float fine=cloudNoise(p*(5.0+uDetail*5.0)+vec3(2.3,12.1,6.7));
  mass=max(0.0,mass-uErosion*(1.0-fine)*0.48);
  mass*=mix(1.0,0.72+fine*0.4,uDetail);
- return mass*smoothstep(0.0,0.15,height)*(1.0-smoothstep(0.65,1.0,height))*uDensity;
+ float top=uCloudKind==1.0||uCloudKind==4.0?0.85:0.55+mass*0.45;
+ float envelope=smoothstep(0.0,0.12,height)*(1.0-smoothstep(top*0.6,top,height));
+ if(uCloudKind==2.0)envelope*=0.35;
+ return mass*envelope*uDensity;
 }
 vec3 marchClouds(vec3 sky,vec3 ro,vec3 rd,float daylight){
  if(uCoverage<0.001||uDensity<0.001)return sky;
- float nearT=0.0,farT=12000.0;
+ float nearT=0.0,farT=uCloudDistance;
  if(abs(rd.z)<0.0001){if(ro.z<uAltitude||ro.z>uAltitude+uThickness)return sky;}
  else{
   float a=(uAltitude-ro.z)/rd.z,b=(uAltitude+uThickness-ro.z)/rd.z;
-  nearT=max(0.0,min(a,b));farT=min(12000.0,max(a,b));
+  nearT=max(0.0,min(a,b));farT=min(uCloudDistance,max(a,b));
  }
  if(farT<=nearT)return sky;
  float stepSize=(farT-nearT)/float(${samples});
  float jitter=cloudHash(vec3(gl_FragCoord.xy,1.0));
  float distanceT=nearT+stepSize*(0.2+jitter*0.6),transmittance=1.0;
  vec3 radiance=vec3(0.0);
- float phase=0.35+0.65*pow(max(0.0,dot(rd,uSun)),8.0);
+ float mu=dot(rd,uSun),g=0.65;
+ float hg=(1.0-g*g)/(12.5663706*pow(max(0.02,1.0+g*g-2.0*g*mu),1.5));
+ float phase=0.4+0.8*hg/(1.0+hg);
  for(int sampleIndex=0;sampleIndex<${samples};sampleIndex++){
   vec3 point=ro+rd*distanceT;
   float density=cloudDensity(point);
@@ -94,8 +106,11 @@ vec3 marchClouds(vec3 sky,vec3 ro,vec3 rd,float daylight){
     float lightStep=240.0+float(lightIndex)*350.0;
     lightDepth+=cloudDensity(point+uSun*lightStep)*350.0;
    }
-   float direct=exp(-lightDepth*0.003)*max(0.0,uSun.z)*uIntensity;
-   vec3 ambient=mix(vec3(0.008,0.012,0.025),vec3(0.27,0.34,0.43),daylight);
+   // The solar zenith cosine belongs to ground irradiance, not radiance
+   // incident on an airborne cloud. uSunTint already includes air extinction
+   // and suppresses direct lighting while the sun is below the horizon.
+   float direct=exp(-lightDepth*0.003)*uIntensity;
+   vec3 ambient=max(vec3(0.001,0.0015,0.003),uSkyAmbient)*0.85;
    vec3 light=ambient+uSunTint*direct*phase;
    float opacity=1.0-exp(-density*stepSize*0.004);
    radiance+=transmittance*opacity*light;
@@ -104,6 +119,9 @@ vec3 marchClouds(vec3 sky,vec3 ro,vec3 rd,float daylight){
   }
   distanceT+=stepSize;
  }
- return sky*transmittance+radiance;
+ // Atmospheric distance softens the horizon instead of a hard range cut.
+ float aerial=exp(-nearT*(0.000006+max(0.0,uHaze)*0.000014));
+ aerial*=1.0-smoothstep(uCloudDistance*0.75,uCloudDistance,nearT);
+ return mix(sky,sky*transmittance+radiance,aerial);
 }`;
 }

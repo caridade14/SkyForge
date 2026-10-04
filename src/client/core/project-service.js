@@ -180,6 +180,7 @@ export class ProjectService {
       input.type = "file";
       input.accept = ".skyforge,.json,application/json";
       input.style.display = "none";
+      input.addEventListener("cancel", () => { input.remove(); resolve(null); }, { once: true });
       input.addEventListener("change", async () => {
         try {
           const file = input.files?.[0];
