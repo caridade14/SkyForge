@@ -175,7 +175,7 @@ test('renderer reuses geometry during moves, highlights selection and releases G
 test('renderer applies graph grading and switches optical edits away from the cached physical baseline', async () => {
   const { normalizeCamera } = await modules(), { SkyViewportRenderer } = await rendererModule();
   const { gl, uniforms } = mockGL(), renderer = new SkyViewportRenderer({ getContext: () => gl, width: 800, height: 600 });
-  const state = { viewport: { grid: false, referenceSphere: false }, sun: { elevation: 30, azimuth: 0 }, atmosphere: { haze: .3, turbidity: 2.4 }, camera: { exposure: 2 }, color: { exposure: 1, saturation: .5, contrast: 1.2 } };
+  const state = { viewport: { skySource:'backend', grid: false, referenceSphere: false }, sun: { elevation: 30, azimuth: 0 }, atmosphere: { haze: .3, turbidity: 2.4 }, camera: { exposure: 2 }, color: { exposure: 1, saturation: .5, contrast: 1.2 } };
   const payload = { evaluation: { solarPosition: { azimuthDeg: 0, apparentElevationDeg: 30 } }, skyViewLut: { layout: { width: 1, height: 1, channels: ['R', 'G', 'B'] }, pixels: [.1, .2, .3] } };
   renderer.setLut(payload, state.atmosphere); renderer.draw(state, normalizeCamera());
   assert.equal(renderer.usingLut, true);

@@ -1,4 +1,4 @@
-import { normalizeCamera, axisView, cameraBasis } from './camera.js';
+import { normalizeCamera, axisView, cameraBasis, dolly } from './camera.js';
 import { ViewportNavigation } from './navigation.js';
 import { SkyViewportRenderer } from './renderer.js';
 import { SunGizmo } from './sun-gizmo.js';
@@ -14,6 +14,11 @@ export class SkyForgeViewport {
     const doc=this.root.document;
     this.host=doc.createElement('div');this.host.className='sf-3d-host';this.host.hidden=true;
     this.host.innerHTML='<canvas class="sf-3d-canvas" tabindex="0" aria-label="3D sky viewport. Click a reference object to select; drag X/Y/Z to move. F frames selection. Left drag the sun marker; Escape cancels. Middle mouse or Alt drag to orbit. Shift to pan. Scroll to dolly."></canvas><svg class="sf-3d-translate" role="img"></svg><div class="sf-3d-sun" role="img"><span>Sun</span></div><div class="sf-3d-hud"></div><div class="sf-3d-axis" aria-label="View orientation"></div><div class="sf-3d-help">Click: select · X/Y/Z: move · F: frame · Sun: direction · Escape: cancel · MMB / Alt drag: orbit · Shift: pan · Ctrl: dolly · Scroll: zoom · Numpad 1/3/7/5 · Home: reset</div>';
+    this.rail=doc.createElement('nav');this.rail.className='sf-3d-rail';this.rail.setAttribute('role','toolbar');this.rail.setAttribute('aria-label','Viewport tools');
+    const glyphs={select:'↖',move:'↔',rotate:'⟳',scale:'⤢',orbit:'◎',pan:'✥',dolly:'⌕',undo:'↶',frame:'▣',capture:'▧',home:'⌂',top:'TOP',front:'FRT',right:'SIDE'};
+    this.rail.innerHTML=Object.entries(glyphs).map(([key,glyph])=>`<button type="button" data-vp-rail="${key}" aria-label="Viewport ${key}" title="${['orbit','pan','dolly'].includes(key)?`${key}: left drag in viewport`:key}"><span>${glyph}</span></button>`).join('');
+    this.rail.onclick=e=>this.railAction(e.target.closest('[data-vp-rail]')?.dataset.vpRail);
+    this.host.append(this.rail);
     this.canvas=this.host.querySelector('canvas');this.hud=this.host.querySelector('.sf-3d-hud');
     this.axes=this.host.querySelector('.sf-3d-axis');
     for(const [axis,view] of [['X','right'],['Y','front'],['Z','top']]){
@@ -21,7 +26,7 @@ export class SkyForgeViewport {
       b.onclick=e=>this.commit(axisView(this.getCamera(),view,e.shiftKey),'Align viewport');this.axes.append(b);
     }
     this.bar=doc.createElement('div');this.bar.className='sf-3d-toolbar';
-    this.bar.innerHTML='<button data-vp="mode" title="Switch between WebGL sky preview and the existing scene tools">3D View</button><span class="sf-3d-tools"><button data-vp="home" title="Reset view">Home</button><button data-vp="frame" title="Frame selected reference (F)">Frame selected</button><button data-vp="projection">Perspective</button><button data-vp="grid">Grid</button><button data-vp="referenceSphere">Reference sphere</button><button data-vp="overlays">Overlays</button><button data-vp="sun" title="Copy the evaluated Natural Light sun direction into the scene">Use physical sun</button><select data-vp="cloudMode" aria-label="Cloud preview renderer" title="Choose GPU volumetric clouds or the existing cloud layer"><option value="volumetric">GPU clouds</option><option value="layer">Cloud layer</option></select><select data-vp="cloudQuality" aria-label="Cloud preview quality" title="Preview budget: Low 16 steps / 250k pixels; Medium 28 / 500k; High 44 / 900k"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></span><span class="sf-3d-message" role="status"></span>';
+    this.bar.innerHTML='<button data-vp="mode" title="Switch between WebGL sky preview and the existing scene tools">3D View</button><span class="sf-3d-tools"><button data-vp="home" title="Reset view">Home</button><button data-vp="frame" title="Frame selected reference (F)">Frame selected</button><button data-vp="projection">Perspective</button><button data-vp="grid">Grid</button><button data-vp="referenceSphere">Reference sphere</button><button data-vp="overlays">Overlays</button><button data-vp="sun" title="Copy the evaluated Natural Light sun direction into the scene">Use physical sun</button><select data-vp="skySource" aria-label="Sky lighting source"><option value="integrated">Realtime atmosphere</option><option value="backend">Natural Light LUT</option></select><select data-vp="cloudMode" aria-label="Cloud preview renderer" title="Choose GPU volumetric clouds or the existing cloud layer"><option value="volumetric">GPU clouds</option><option value="layer">Cloud layer</option></select><select data-vp="cloudQuality" aria-label="Cloud preview quality" title="Preview budget: Low 16 steps / 250k pixels; Medium 28 / 500k; High 44 / 900k"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></span><span class="sf-3d-message" role="status"></span>';
     this.bar.onclick=e=>this.action(e.target.closest('button[data-vp]')?.dataset.vp);
     this.bar.onchange=e=>this.action(e.target.dataset.vp,e.target.value);
     this.message=this.bar.querySelector('.sf-3d-message');
@@ -39,7 +44,7 @@ export class SkyForgeViewport {
       beforeFrame:()=>{this.sunGizmo.finish(true);this.navigation?.finish(true);}
     });
     this.navigation=new ViewportNavigation(this.canvas,{
-      root:this.root,getCamera:()=>this.getCamera(),getFov:()=>Number(this.store.get('camera.fov'))||60,
+      root:this.root,getTool:()=>this.store.get('viewport.navigationTool'),getCamera:()=>this.getCamera(),getFov:()=>Number(this.store.get('camera.fov'))||60,
       preview:c=>{this.camera=normalizeCamera(c);this.invalidate();},commit:(c,label)=>this.commit(c,label)
     });
     this.unsubscribe=this.store.subscribe((state)=>this.sync(state));
@@ -81,14 +86,20 @@ export class SkyForgeViewport {
     }
     const desired=state.viewport?.mode!=='legacy';
     if(desired!==this.active)this.setActive(desired,false);
-    const signature=JSON.stringify([state.viewport,state.scene?.referenceObjects,state.scene?.selectedReferenceId,state.camera,state.sun,state.atmosphere,state.clouds,state.color,state.timeline?.currentFrame,state.timeline?.fps]);
+    const signature=JSON.stringify([state.viewport,state.scene?.referenceObjects,state.scene?.selectedReferenceId,state.camera,state.sun,state.atmosphere,state.clouds,state.color,state.moon,state.stars,state.aurora,state.rainbow,state.timeline?.currentFrame,state.timeline?.fps]);
     if(signature!==this.signature){this.signature=signature;this.invalidate();}
     this.bar.querySelector('[data-vp="frame"]').disabled=!state.scene?.referenceObjects?.[state.scene?.selectedReferenceId];
     for(const key of ['grid','referenceSphere','overlays'])this.bar.querySelector(`[data-vp="${key}"]`).setAttribute('aria-pressed',String(state.viewport?.[key]!==false));
     this.bar.querySelector('[data-vp="projection"]').textContent=nextCamera.projection==='orthographic'?'Orthographic':'Perspective';
+    this.bar.querySelector('[data-vp="skySource"]').value=state.viewport?.skySource==='backend'?'backend':'integrated';
     this.bar.querySelector('[data-vp="cloudMode"]').value=state.viewport?.cloudMode==='layer'?'layer':'volumetric';
     this.bar.querySelector('[data-vp="cloudQuality"]').value=['low','medium','high'].includes(state.viewport?.cloudQuality)?state.viewport.cloudQuality:'low';
     this.bar.querySelector('[data-vp="cloudQuality"]').disabled=state.viewport?.cloudMode==='layer';
+    const navigation=state.viewport?.navigationTool||'transform';
+    for(const b of this.rail.querySelectorAll('[data-vp-rail]')){
+      const action=b.dataset.vpRail;b.setAttribute('aria-pressed',String(navigation==='transform'?action===(state.viewport?.transformTool||'move'):action===navigation));
+      b.disabled=action==='undo'?!this.store.canUndo():action==='frame'?!state.scene?.referenceObjects?.[state.scene?.selectedReferenceId]:false;
+    }
     this.host.classList.toggle('sf-3d-no-overlays',state.viewport?.overlays===false);
   }
   setActive(active,persist=true){
@@ -99,17 +110,28 @@ export class SkyForgeViewport {
     this.container.classList.toggle('sf-3d-active',active);this.host.hidden=!active;
     this.bar.querySelector('[data-vp="mode"]').textContent=active?'Legacy View':'3D View';
     this.bar.querySelector('.sf-3d-tools').hidden=!active;
-    this.message.textContent=this.error||(active?'Reference geometry · other scene types in Legacy View':'Legacy scene tools');
+    this.message.textContent=this.error||(active?'Reference geometry · sky layers · render on demand':'Legacy scene tools');
     if(persist)this.store.set('viewport.mode',active?'webgl':'legacy',{label:'Switch viewport renderer'});
     if(active)this.invalidate();else this.root.drawSky?.();
+  }
+  railAction(action){
+    if(!action)return;this.sunGizmo.finish(true);this.referenceGizmo.finish(true);this.navigation.finish(true);
+    if(['select','move','rotate','scale','orbit','pan','dolly'].includes(action)){
+      this.store.set('viewport.navigationTool',['move','rotate','scale'].includes(action)?'transform':action,{record:false,label:'Choose viewport tool'});
+      if(['move','rotate','scale'].includes(action))this.store.set('viewport.transformTool',action,{record:false,label:'Choose transform tool'});
+    }else if(action==='undo')this.store.undo();
+    else if(['top','front','right'].includes(action))this.commit(axisView(this.getCamera(),action),'Align viewport');
+    else if(action==='capture')this.capturePreview().catch(error=>{this.message.textContent=error.message;});
+    else this.action(action);
+    this.canvas.focus({preventScroll:true});
   }
   action(action,value){
     if(!action)return;
     this.sunGizmo.finish(true);this.referenceGizmo.finish(true);
     if(action==='mode'){this.setActive(!this.active);return;}
     this.navigation.finish(true);
-    if(action==='cloudMode'||action==='cloudQuality'){
-      const choices=action==='cloudMode'?['volumetric','layer']:['low','medium','high'];
+    if(action==='cloudMode'||action==='cloudQuality'||action==='skySource'){
+      const choices=action==='cloudMode'?['volumetric','layer']:action==='skySource'?['integrated','backend']:['low','medium','high'];
       if(choices.includes(value))this.store.set(`viewport.${action}`,value,{label:action==='cloudMode'?'Change cloud preview renderer':'Change cloud preview quality'});
       return;
     }
@@ -158,8 +180,8 @@ export class SkyForgeViewport {
         this.sunGizmo.update(state.sun,this.camera,r.width,r.height,Number(state.camera?.fov)||60);
         const cloud=this.renderer.cloudMetrics;
         const cloudLabel=cloud?.mode==='volumetric'?`GPU volume · ${cloud.quality} · ${cloud.samples} steps`:'procedural layer';
-        this.hud.textContent=`WEBGL · ${this.camera.projection.toUpperCase()} · ${this.renderer.usingLut?'NATURAL LIGHT LUT':'ANALYTIC SKY PREVIEW'}\n${this.renderer.canvas.width} × ${this.renderer.canvas.height} · Clouds: ${cloudLabel} · Display preview`;
-        this.message.textContent=this.renderer.cloudFallbackReason||'Reference geometry · other scene types in Legacy View';
+        this.hud.textContent=`WEBGL · ${this.camera.projection.toUpperCase()} · ${this.renderer.usingLut?'NATURAL LIGHT LUT':'INTEGRATED ATMOSPHERE'}\n${this.renderer.canvas.width} × ${this.renderer.canvas.height} · Clouds: ${cloudLabel} · Display preview`;
+        this.message.textContent=this.renderer.cloudFallbackReason||'Reference geometry · sky layers · render on demand';
         this.message.title=this.renderer.cloudFallbackReason||'';
         this.updateAxes();
       }catch(error){this.error=`3D preview failed: ${error.message}`;this.setActive(false,false);}

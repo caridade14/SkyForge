@@ -1,10 +1,14 @@
 import { cloneValue } from "../core/state-store.js";
 
-const TYPES = ["Sun", "Atmosphere", "Clouds", "SkyScene", "ColorGrade", "Output"];
+const TYPES = ["Sun", "Atmosphere", "Clouds", "Moon", "Stars", "Aurora", "Rainbow", "SkyScene", "ColorGrade", "Output"];
 const PARAMS = {
   Sun: { azimuth: [0, 360, 1], elevation: [-90, 90, 1], intensity: [0, 20, 0.05] },
   Atmosphere: { turbidity: [1, 10, 0.1], rayleigh: [0, 10, 0.1], haze: [0, 1, 0.01], ozone: [0, 1, 0.01] },
   Clouds: { coverage: [0, 1, 0.01], density: [0, 2, 0.01], altitude: [0, 15000, 10], thickness: [10, 10000, 10], erosion: [0, 1, 0.01], detail: [0, 1, 0.01], windSpeed: [0, 100, 0.1], windDirection: [0, 360, 1] },
+  Moon: { enabled: [0,1,1], azimuth: [0,360,.1], elevation: [-90,90,.1], phase: [0,1,.01], angularDiameter: [.1,5,.01], brightness: [0,8,.1] },
+  Stars: { enabled: [0,1,1], count: [0,12000,1], brightness: [0,8,.1], rotation: [-360,360,.1], seed: [0,2147483647,1] },
+  Aurora: { enabled: [0,1,1], intensity: [0,8,.1], azimuth: [0,360,.1], altitude: [80,200,1], height: [20,400,1], width: [1,50,.1], curtains: [1,3,1], speed: [0,2,.01] },
+  Rainbow: { enabled: [0,1,1], intensity: [0,8,.1], rainAmount: [0,1,.01], width: [.1,2,.1], secondary: [0,1,1] },
   ColorGrade: { exposure: [-10, 10, 0.1], contrast: [0.1, 3, 0.05], saturation: [0, 3, 0.05] }
 };
 const CSS = `.sf-studio-nodes{height:100%;min-height:0;display:flex;flex-direction:column;color:#d5dee8;font:11px system-ui;outline:none}.sf-studio-nodes .sf-ng-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#20262d;padding:7px;border-bottom:1px solid #303941}.sf-studio-nodes button,.sf-studio-nodes select,.sf-studio-nodes input{font:inherit;color:inherit;background:#161d23;border:1px solid #3b454e;border-radius:4px;padding:4px}.sf-studio-nodes button:hover,.sf-studio-nodes button:focus-visible{border-color:#ed963e}.sf-studio-nodes button[aria-pressed=true]{background:#71502b;border-color:#e69543}.sf-studio-nodes .sf-ng-body{flex:1;min-height:0;display:flex}.sf-studio-nodes .sf-ng-view{position:relative;flex:1;overflow:hidden;min-width:0;touch-action:none;background-color:#171d23;background-image:radial-gradient(#39414a 1px,transparent 1px);background-size:20px 20px}.sf-studio-nodes .sf-ng-stage{position:absolute;left:0;top:0;width:2000px;height:1400px;transform-origin:0 0}.sf-studio-nodes .sf-ng-wires{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none}.sf-studio-nodes .sf-ng-wire{fill:none;stroke:#6fabbe;stroke-width:2;pointer-events:stroke;cursor:pointer}.sf-studio-nodes .sf-ng-wire.selected{stroke:#ffb04f;stroke-width:3}.sf-studio-nodes .sf-ng-node{position:absolute;width:180px;border:1px solid #4b5966;background:#232e38;border-radius:7px;box-shadow:0 5px 14px #0005}.sf-studio-nodes .sf-ng-node.selected{border-color:#f0a14a;box-shadow:0 0 0 1px #f0a14a66}.sf-studio-nodes .sf-ng-title{padding:8px;color:#e7eef6;background:#344554;border-radius:6px 6px 0 0;cursor:grab;touch-action:none;font-weight:650;display:flex;justify-content:space-between;gap:6px}.sf-studio-nodes .sf-ng-type{font-weight:400;font-size:9px;color:#b7c7d5}.sf-studio-nodes .sf-ng-sockets{display:flex;justify-content:space-between;padding:6px 0;min-height:32px}.sf-studio-nodes .sf-ng-socket-column{display:flex;flex-direction:column;gap:5px}.sf-studio-nodes .sf-ng-socket{border:0;background:none;display:flex;align-items:center;gap:5px;cursor:crosshair;font-size:10px}.sf-studio-nodes .sf-ng-socket:before{content:'';width:9px;height:9px;border:1px solid #9ccee0;border-radius:50%;background:#1c323c;flex-shrink:0}.sf-studio-nodes .sf-ng-socket.output{flex-direction:row-reverse}.sf-studio-nodes .sf-ng-socket.pending:before{background:#ffc46a}.sf-studio-nodes .sf-ng-inspector{width:185px;flex-shrink:0;overflow:auto;border-left:1px solid #343c45;background:#20272e;padding:8px}.sf-studio-nodes .sf-ng-inspector label{display:flex;justify-content:space-between;align-items:center;gap:6px;margin:6px 0}.sf-studio-nodes .sf-ng-inspector input{width:70px;min-width:0}.sf-studio-nodes .sf-ng-inspector p{color:#a9b9c7;line-height:1.45;font-size:10px}.sf-studio-nodes .sf-ng-status{font-size:10px;color:#a9b9c7;padding:5px 9px;min-height:14px}.sf-studio-nodes .sf-ng-status.error{color:#ff9e92}`;
@@ -141,20 +145,20 @@ export class NodePanel {
       if (!node) { this.inspector.append(el("strong", "", "Composition"), el("p", "", "Select a node to edit its implemented preview parameters. Direct / Graph chooses the base; animation wins on keyed properties.")); return; }
       this.inspector.append(el("strong", "", node.label));
       for (const [key, [min, max, step]] of Object.entries(PARAMS[node.type] || {})) {
-        const label = el("label", "", key), input = el("input"); input.type = "number"; input.min = String(min); input.max = String(max); input.step = String(step); input.dataset.param = key; input.setAttribute("aria-label", `${node.type} ${key}`);
+        const label = el("label", "", key), input = el("input"); input.type = ["enabled", "secondary"].includes(key) ? "checkbox" : "number"; input.min = String(min); input.max = String(max); input.step = String(step); input.dataset.param = key; input.setAttribute("aria-label", `${node.type} ${key}`);
         input.onfocus = () => { this.paramEdit = { id: node.id, key, before: this.graph.serialize(), edit: this.store.beginEdit("nodes", { label: `Edit ${node.type} ${key}` }) }; };
         input.oninput = () => {
-          if (!this.paramEdit?.edit.active || input.value === "" || !Number.isFinite(Number(input.value))) return;
-          const serialized = cloneValue(this.paramEdit.before), target = serialized.nodes.find((item) => item.id === node.id); target.params[key] = Math.max(min, Math.min(max, Number(input.value))); this.paramEdit.edit.preview(serialized);
+          if (!this.paramEdit?.edit.active || (input.type!=="checkbox" && (input.value === "" || !Number.isFinite(Number(input.value))))) return;
+          const serialized = cloneValue(this.paramEdit.before), target = serialized.nodes.find((item) => item.id === node.id); target.params[key] = input.type==="checkbox" ? input.checked : Math.max(min, Math.min(max, Number(input.value))); this.paramEdit.edit.preview(serialized);
         };
         input.onblur = () => { if (this.paramEdit?.id === node.id && this.paramEdit?.key === key) { const edit = this.paramEdit.edit; this.paramEdit = null; edit.commit(); } };
         label.append(input); this.inspector.append(label);
       }
-      if (!Object.keys(PARAMS[node.type] || {}).length) this.inspector.append(el("p", "", node.type === "SkyScene" ? "Combines the Sun, Atmosphere and Clouds inputs." : "Passes its connected scene to the preview composition."));
+      if (!Object.keys(PARAMS[node.type] || {}).length) this.inspector.append(el("p", "", node.type === "SkyScene" ? "Combines lighting, atmosphere, clouds and connected sky effects." : "Passes its connected scene to the preview composition."));
       const connections = el("div", "sf-ng-input-connections"); this.inspector.append(connections);
     }
     if (!node) return;
-    for (const input of this.inspector.querySelectorAll("input[data-param]")) if (document.activeElement !== input) input.value = String(node.params[input.dataset.param] ?? 0);
+    for (const input of this.inspector.querySelectorAll("input[data-param]")) if (document.activeElement !== input) input.type === "checkbox" ? input.checked = Boolean(node.params[input.dataset.param]) : input.value = String(node.params[input.dataset.param] ?? 0);
     const connections = this.inspector.querySelector(".sf-ng-input-connections"); connections?.replaceChildren();
     for (const connection of this.graph.connections.values()) if (connection.to.node === node.id) this.button(connections, `Disconnect ${connection.to.socket}`, () => this.graph.disconnect(connection.id));
   }

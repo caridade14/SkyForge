@@ -1,6 +1,6 @@
 import { cloneValue } from "../core/state-store.js";
 
-const ROOTS = ["sun", "atmosphere", "clouds", "color"];
+const ROOTS = ["sun", "atmosphere", "clouds", "color", "moon", "stars", "aurora", "rainbow"];
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const rootsOf = (state) => Object.fromEntries(ROOTS.map((root) => [root, cloneValue(state[root])]));
 
@@ -105,7 +105,7 @@ export class Composition {
     const state = this.store.snapshot();
     const serialized = this.graph.serialize();
     for (const node of serialized.nodes) {
-      const root = { Sun: "sun", Atmosphere: "atmosphere", Clouds: "clouds", ColorGrade: "color" }[node.type];
+      const root = { Sun: "sun", Atmosphere: "atmosphere", Clouds: "clouds", ColorGrade: "color", Moon: "moon", Stars: "stars", Aurora: "aurora", Rainbow: "rainbow" }[node.type];
       if (root) for (const key of Object.keys(this.graph.registry.get(node.type).defaults)) if (state[root]?.[key] !== undefined) node.params[key] = cloneValue(state[root][key]);
     }
     this.store.set("nodes", serialized, { label: "Copy scene controls to graph" });

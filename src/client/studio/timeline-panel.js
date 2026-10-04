@@ -1,6 +1,11 @@
 import { cloneValue } from "../core/state-store.js";
 
 const TRACKS = [
+  ["moon.azimuth", "Moon · azimuth"], ["moon.elevation", "Moon · elevation"], ["moon.phase", "Moon · phase"], ["moon.brightness", "Moon · brightness"],
+  ["stars.brightness", "Stars · brightness"], ["stars.rotation", "Stars · rotation"],
+  ["aurora.intensity", "Aurora · intensity"], ["aurora.azimuth", "Aurora · azimuth"], ["aurora.speed", "Aurora · speed"],
+  ["rainbow.intensity", "Rainbow · intensity"], ["rainbow.rainAmount", "Rainbow · rain amount"],
+  ["atmosphere.rayleigh", "Atmosphere · Rayleigh"], ["atmosphere.turbidity", "Atmosphere · turbidity"], ["atmosphere.ozone", "Atmosphere · ozone"],
   ["sun.azimuth", "Sun · azimuth"], ["sun.elevation", "Sun · elevation"], ["sun.intensity", "Sun · intensity"],
   ["camera.exposure", "Preview exposure"], ["clouds.coverage", "Clouds · coverage"], ["clouds.density", "Clouds · density"],
   ["clouds.altitude", "Clouds · altitude"], ["clouds.thickness", "Clouds · thickness"], ["clouds.erosion", "Clouds · erosion"],

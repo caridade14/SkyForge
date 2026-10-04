@@ -1,3 +1,4 @@
+import { CLOUD_NOISE_GLSL } from './cloud-noise.js';
 // Bounded WebGL 1 preview budgets for integrated GPUs. These are preview
 // settings, independent of the offline render queue or HDR export settings.
 export const CLOUD_QUALITIES = Object.freeze({
@@ -50,6 +51,7 @@ export function cloudPreviewResolution(width, height, dpr = 1, settings = CLOUD_
 export function volumetricCloudFunctions(value = 'low') {
   const { samples, shadowSamples } = CLOUD_QUALITIES[cloudQuality(value)];
   return `
+${CLOUD_NOISE_GLSL}
 float cloudHash(vec3 p){
  p=fract(p*0.1031);p+=dot(p,p.yzx+33.33);
  return fract((p.x+p.y)*p.z);
@@ -69,16 +71,19 @@ float cloudDensity(vec3 point){
  // State/UI wind retains the legacy km/h unit; density coordinates are metres.
  p.xy+=vec2(sin(uWindDirection),cos(uWindDirection))*uTime*(uWindSpeed/3.6)/horizontalScale;
  if(uCloudKind==2.0)p.xy*=vec2(0.3,2.0);
- float base=cloudNoise(p)*0.72+cloudNoise(p*0.47+vec3(11.7,4.1,8.8))*0.28;
- float threshold=0.10+(1.0-uCoverage)*0.78;
+ vec3 shape=uHasCloudNoise>0.5?cloudShape(p):vec3(cloudNoise(p));
+ float base=shape.r*0.76+cloudNoise(p*0.37+vec3(11.7,4.1,8.8))*0.24;
+ float threshold=0.10+(1.0-uCoverage)*(uCloudKind==1.0||uCloudKind==4.0?0.78:0.92);
  float mass=smoothstep(threshold,threshold+0.22,base);
  if(mass<=0.001)return 0.0;
- float fine=cloudNoise(p*(5.0+uDetail*5.0)+vec3(2.3,12.1,6.7));
- mass=max(0.0,mass-uErosion*(1.0-fine)*0.48);
+ float fine=uHasCloudNoise>0.5?cloudShape(p*(1.6+uDetail*1.8)+vec3(2.3,12.1,6.7)).b:cloudNoise(p*(5.0+uDetail*5.0));
+ // Cellular erosion carves the exterior while preserving the dense core.
+ mass=max(0.0,mass-uErosion*(1.0-fine)*(0.18+0.2*height));
  mass*=mix(1.0,0.72+fine*0.4,uDetail);
  float top=uCloudKind==1.0||uCloudKind==4.0?0.85:0.55+mass*0.45;
  float envelope=smoothstep(0.0,0.12,height)*(1.0-smoothstep(top*0.6,top,height));
- if(uCloudKind==2.0)envelope*=0.35;
+ if(uCloudKind==2.0){envelope*=0.35;mass*=smoothstep(0.22,0.7,fine);}
+ if(uCloudKind==3.0){float anvil=smoothstep(0.55,0.82,height);envelope=mix(envelope,smoothstep(0.52,0.65,height)*(1.0-smoothstep(0.9,1.0,height)),anvil*0.55);}
  return mass*envelope*uDensity;
 }
 vec3 marchClouds(vec3 sky,vec3 ro,vec3 rd,float daylight){
@@ -91,27 +96,35 @@ vec3 marchClouds(vec3 sky,vec3 ro,vec3 rd,float daylight){
  }
  if(farT<=nearT)return sky;
  float stepSize=(farT-nearT)/float(${samples});
- float jitter=cloudHash(vec3(gl_FragCoord.xy,1.0));
- float distanceT=nearT+stepSize*(0.2+jitter*0.6),transmittance=1.0;
+ // A deterministic midpoint avoids screen-space random shimmer when orbiting.
+ float distanceT=nearT+stepSize*0.5,transmittance=1.0;
  vec3 radiance=vec3(0.0);
- float mu=dot(rd,uSun),g=0.65;
+ float mu=dot(rd,uSun),g=0.72;
  float hg=(1.0-g*g)/(12.5663706*pow(max(0.02,1.0+g*g-2.0*g*mu),1.5));
- float phase=0.4+0.8*hg/(1.0+hg);
+ float back=0.96/(12.5663706*pow(1.04+0.4*mu,1.5));
+ float phase=0.8*hg+0.2*back;
  for(int sampleIndex=0;sampleIndex<${samples};sampleIndex++){
   vec3 point=ro+rd*distanceT;
   float density=cloudDensity(point);
   if(density>0.001){
    float lightDepth=0.0;
    for(int lightIndex=0;lightIndex<${shadowSamples};lightIndex++){
-    float lightStep=240.0+float(lightIndex)*350.0;
-    lightDepth+=cloudDensity(point+uSun*lightStep)*350.0;
+    float lightLength=clamp((uAltitude+uThickness-point.z)/max(0.035,uSun.z),0.0,20000.0);
+    float a=float(lightIndex)/float(${shadowSamples}),b=float(lightIndex+1)/float(${shadowSamples});
+    float lightStep=(a*a+b*b)*0.5*lightLength;
+    lightDepth+=cloudDensity(point+uSun*lightStep)*(b*b-a*a)*lightLength;
    }
    // The solar zenith cosine belongs to ground irradiance, not radiance
    // incident on an airborne cloud. uSunTint already includes air extinction
    // and suppresses direct lighting while the sun is below the horizon.
-   float direct=exp(-lightDepth*0.003)*uIntensity;
-   vec3 ambient=max(vec3(0.001,0.0015,0.003),uSkyAmbient)*0.85;
-   vec3 light=ambient+uSunTint*direct*phase;
+   float optical=lightDepth*0.004;
+   float direct=exp(-optical)*phase;
+   // Two attenuated, broader scattering orders prevent black interiors.
+   // This is a finite-order approximation, not a full droplet phase solution.
+   float indirect=0.5*exp(-optical*0.5)*0.0795775+0.25*exp(-optical*0.25)*0.0795775;
+   float h=clamp((point.z-uAltitude)/uThickness,0.0,1.0);
+   vec3 ambient=uSkyAmbient*mix(0.45,1.6,h)+uMoonAmbient*0.7;
+   vec3 light=ambient+uSunTint*uIntensity*1.5*(direct+indirect);
    float opacity=1.0-exp(-density*stepSize*0.004);
    radiance+=transmittance*opacity*light;
    transmittance*=1.0-opacity;

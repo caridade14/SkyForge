@@ -24,6 +24,7 @@ export class ReferenceGizmo {
     this.listen('pointerdown', e => {
       if (e.target !== canvas || !isActive() || e.button !== 0 || e.altKey || e.ctrlKey || e.metaKey || this.drag) return;
       canvas.focus({ preventScroll: true });
+      if (['orbit','pan','dolly'].includes(store.get('viewport.navigationTool'))) return;
       const r = canvas.getBoundingClientRect(), p = [e.clientX - r.left, e.clientY - r.top];
       const selected = this.selected();
       const mode = this.mode(), space = this.space();
@@ -108,6 +109,7 @@ export class ReferenceGizmo {
       if (isActive() && !mod && !e.altKey && this.selected() && ['g', 'r', 's'].includes(key) &&
         (e.target === canvas || e.target?.closest?.('.sf-3d-host'))) {
         this.finish(true);
+        store.set('viewport.navigationTool','transform',{record:false,label:'Choose transform tool'});
         store.set('viewport.transformTool', { g: 'move', r: 'rotate', s: 'scale' }[key], { record: false, label: 'Transform tool' });
         this.invalidate(); this.eat(e);
       }
@@ -119,7 +121,7 @@ export class ReferenceGizmo {
   mode() { const value = this.store.get('viewport.transformTool'); return ['move', 'rotate', 'scale'].includes(value) ? value : 'move'; }
   space() { return this.store.get('viewport.transformSpace') === 'local' ? 'local' : 'global'; }
   handles(object, camera, width, height, fov) {
-    if (!object || object.visible === false || object.locked) return [];
+    if (!object || object.visible === false || object.locked || this.store.get('viewport.navigationTool') === 'select') return [];
     const mode = this.mode(), orientation = mode === 'scale' || this.space() === 'local' ? rotationMatrix3(object.rotation) : null;
     return (mode === 'rotate' ? rotationSegments : axisSegments)(object.position, camera, width, height, fov, orientation);
   }

@@ -11,7 +11,7 @@ A build v11 preserva a UI SF30, mas adiciona uma camada modular e não destrutiv
 - autosave e recuperação local;
 - ficheiro `.skyforge` versão 3 com checksum;
 - timeline com keyframes, interpolação, play, pause, loop e scrub;
-- node graph tipado com Sun, Atmosphere, Clouds, Sky Scene, Color Grade e Output;
+- node graph tipado com Sun, Atmosphere, Clouds, Moon, Stars, Aurora, Rainbow, Sky Scene, Color Grade e Output;
 - sincronização automática da UI com o motor físico Natural Light;
 - Command Center profissional, aberto com `Ctrl+Shift+H`;
 - splash screen antigo desativado por padrão;

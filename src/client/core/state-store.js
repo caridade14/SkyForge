@@ -1,3 +1,10 @@
+export const DEFAULT_CELESTIAL = Object.freeze({
+  stars: { enabled: false, count: 3200, brightness: 1, rotation: 0, seed: 2387 },
+  moon: { enabled: false, azimuth: 315, elevation: 32, angularDiameter: .52, phase: .5, brightness: 1, earthshine: .025 },
+  aurora: { enabled: false, intensity: 1, azimuth: 0, altitude: 100, height: 200, width: 12, curtains: 3, speed: .12 },
+  rainbow: { enabled: false, intensity: 1, rainAmount: .5, width: .4, secondary: true }
+});
+
 const hasStructuredClone = typeof globalThis.structuredClone === "function";
 
 export function cloneValue(value) {
@@ -75,6 +82,7 @@ export function setAtPath(object, path, value) {
 
 export const DEFAULT_SKYFORGE_STATE = Object.freeze({
   schemaVersion: 3,
+  ...DEFAULT_CELESTIAL,
   app: {
     version: "v11",
     build: "CORE11",
@@ -139,6 +147,8 @@ export const DEFAULT_SKYFORGE_STATE = Object.freeze({
     grid: true,
     overlays: true,
     referenceSphere: true,
+    skySource: "integrated",
+    navigationTool: "transform",
     cloudMode: "volumetric",
     cloudQuality: "low"
   },
@@ -194,6 +204,26 @@ export const DEFAULT_SKYFORGE_STATE = Object.freeze({
     }
   }
 });
+
+// Add optional fields to existing projects/autosaves without discarding unknown
+// data. Captured graph bases need the same defaults as their live scene roots.
+export function completeStateDefaults(payload) {
+  const fill = (value, defaults) => {
+    if (defaults && typeof defaults === 'object' && !Array.isArray(defaults)) {
+      const result = value && typeof value === 'object' && !Array.isArray(value) ? cloneValue(value) : {};
+      for (const [key, fallback] of Object.entries(defaults)) result[key] = fill(result[key], fallback);
+      return result;
+    }
+    return value === undefined || value === null ? cloneValue(defaults) : cloneValue(value);
+  };
+  const state = fill(payload, DEFAULT_SKYFORGE_STATE);
+  if (state.scene?.directState && typeof state.scene.directState === 'object') {
+    for (const root of ['sun', 'atmosphere', 'clouds', 'color', 'moon', 'stars', 'aurora', 'rainbow']) {
+      state.scene.directState[root] = fill(state.scene.directState[root], DEFAULT_SKYFORGE_STATE[root]);
+    }
+  }
+  return state;
+}
 
 function createDefaultState() {
   const state = cloneValue(DEFAULT_SKYFORGE_STATE);
@@ -482,7 +512,7 @@ export class SkyForgeStore {
       if (!raw) return false;
       const restored = JSON.parse(raw);
       if (!restored || typeof restored !== "object") return false;
-      this.state = restored;
+      this.state = completeStateDefaults(restored);
       this.history.length = 0;
       this.future.length = 0;
       this.notify({ type: "restore", path: "", label: "Autosave restored" });

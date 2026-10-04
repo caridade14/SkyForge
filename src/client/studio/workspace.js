@@ -1,3 +1,4 @@
+import { CelestialPanel } from './celestial-panel.js';
 import { LightingWorkbench } from './lighting-workbench.js';
 const STORAGE_KEY = 'skyforge.studio.layout.v1';
 const PRESETS = Object.freeze({
@@ -13,8 +14,8 @@ const MENUS = {
   File: [['new', 'New project'], ['open', 'Open .skyforge…'], ['save', 'Save .skyforge'], ['capture', 'Save preview PNG…']],
   Edit: [['undo', 'Undo'], ['redo', 'Redo'], ['duplicate', 'Duplicate selected reference'], ['delete', 'Delete selected reference']],
   View: [['home', 'Reset camera'], ['projection', 'Perspective / Orthographic'], ['grid', 'Toggle grid'], ['shadows', 'Toggle object Sun shadows'], ['overlays', 'Toggle overlays'], ['left', 'Outliner'], ['right', 'Inspector'], ['bottom', 'Editors'], ['maximize', 'Maximize viewport'], ['reset', 'Reset workspace'], ['legacy', 'Legacy workspace']],
-  Sky: [['sky-sun', 'Sun & atmosphere'], ['sky-clouds', 'Clouds'], ['sky-location', 'Location'], ['sky-lighting', 'Lighting bench'], ['physical', 'Use evaluated physical sun'], ['engine', 'Physical engine status']],
-  Scene: [['add-sphere', 'Add sphere'], ['add-cube', 'Add cube'], ['add-plane', 'Add plane'], ['lookdev', 'Add lighting reference bench'], ['frame', 'Frame selection']],
+  Sky: [['sky-sun', 'Sun & atmosphere'], ['sky-clouds', 'Clouds'], ['sky-location', 'Location'], ['sky-lighting', 'Lighting bench'], ['sky-effects', 'Stars / Moon / Aurora / Rainbow'], ['physical', 'Use evaluated physical sun'], ['engine', 'Physical engine status']],
+  Scene: [['add-sphere', 'Add sphere'], ['add-cube', 'Add cube'], ['add-plane', 'Add plane'], ['lookdev', 'Add lighting reference bench'], ['add-stars', 'Add stars'], ['add-moon', 'Add Moon'], ['add-aurora', 'Add aurora'], ['add-rainbow', 'Add rainbow'], ['frame', 'Frame selection']],
   Animation: [['timeline', 'Open timeline'], ['play', 'Play / pause'], ['add-key', 'Insert key for active track'], ['previous-key', 'Previous keyframe'], ['next-key', 'Next keyframe'], ['delete-keys', 'Delete selected keys']],
   Nodes: [['nodes', 'Open node editor'], ['frame-graph', 'Frame graph'], ['from-controls', 'Copy sky controls to graph'], ['direct', 'Use direct controls'], ['graph', 'Use node graph'], ['default-graph', 'Create default graph']],
   Help: [['hub', 'Core Command Center'], ['bridge', 'Blender Bridge'], ['help', 'Navigation & preview guide'], ['legacy', 'Legacy workspace']]
@@ -131,7 +132,7 @@ export class StudioWorkspace {
     this.move(this.builder, this.left.querySelector('.sf-studio-builder'));
     this.move(this.rpanel, this.right.querySelector('.sf-studio-selection'));
     this.move(this.sidebar, this.right.querySelector('.sf-studio-sky'));
-    this.initMenus(); this.initSkyControls(); this.lightingBench = new LightingWorkbench(this.api, this).init();
+    this.initMenus(); this.initSkyControls(); this.lightingBench = new LightingWorkbench(this.api, this).init(); this.effects = new CelestialPanel(this.api,this).init();
     this.outlinerNew = this.outliner?.querySelector('[onclick="sfCreateSceneObject()"]');
     this.outlinerNewTitle = this.outlinerNew?.title;
     this.on(this.root, 'click', event => {
@@ -220,7 +221,7 @@ export class StudioWorkspace {
   initSkyControls() {
     if (!this.sidebar) return;
     this.skyNav = this.document.createElement('nav'); this.skyNav.className = 'sf-studio-sky-nav'; this.skyNav.setAttribute('aria-label', 'Sky inspector sections');
-    this.skyNav.innerHTML = [['sun', 'Sun / Atmosphere'], ['clouds', 'Clouds'], ['location', 'Location'], ['lighting', 'Lighting']].map(([name, label]) => `<button type="button" data-studio-sky="${name}">${label}</button>`).join('');
+    this.skyNav.innerHTML = [['sun', 'Sun / Atmosphere'], ['clouds', 'Clouds'], ['location', 'Location'], ['lighting', 'Lighting'], ['effects', 'Sky effects']].map(([name, label]) => `<button type="button" data-studio-sky="${name}">${label}</button>`).join('');
     this.sidebar.before(this.skyNav);
     this.on(this.skyNav, 'click', event => { const tab = event.target.closest('[data-studio-sky]'); if (tab) this.showSky(tab.dataset.studioSky); });
     // Unsupported legacy rigs stay available in their workspace; the Studio
@@ -234,14 +235,14 @@ export class StudioWorkspace {
     const atmosphere = this.document.querySelector('#sec-sun .s-body-inner');
     if (atmosphere) {
       this.atmosphereTools = this.document.createElement('div'); this.atmosphereTools.className = 'sf-studio-atmosphere-controls';
-      this.atmosphereTools.innerHTML = [['Rayleigh', 0, 100], ['Mie anisotropy', 0, 95]].map(([name, min, max]) => `<div class="sl-wrap"><div class="sl-top"><span class="sl-name">${name}</span><span class="sl-val"></span></div><input type="range" class="sl" min="${min}" max="${max}" step="1" aria-label="${name}"></div>`).join('') + '<p class="sf-studio-preview-note">Sun direction, atmospheric extinction and sky fill share the same scene state. The sky uses a compatible physical LUT when available, otherwise a scattering approximation.</p>';
+      this.atmosphereTools.innerHTML = [['Rayleigh', 0, 100], ['Mie anisotropy', 0, 95]].map(([name, min, max]) => `<div class="sl-wrap"><div class="sl-top"><span class="sl-name">${name}</span><span class="sl-val"></span></div><input type="range" class="sl" min="${min}" max="${max}" step="1" aria-label="${name}"></div>`).join('') + '<p class="sf-studio-preview-note">Sun direction, atmospheric extinction and sky fill share the same scene state. Realtime atmosphere integrates spherical Rayleigh / Mie transport, ozone absorption and a bounded multiple-scattering approximation. Sun, cloud lighting and reference materials share linear radiance.</p>';
       atmosphere.append(this.atmosphereTools); this.api.ui?.bindControls(this.atmosphereTools);
       this.sunPresets = this.document.createElement('div'); this.sunPresets.className = 'sf-studio-cloud-presets';
       this.sunPresets.innerHTML = ['Noon', 'Golden', 'Sunset', 'Blue hour', 'Night'].map(name => `<button type="button" data-studio-sun-preset="${name}">${name}</button>`).join('');
       atmosphere.prepend(this.sunPresets);
       this.on(this.sunPresets, 'click', event => {
         const name = event.target.closest('[data-studio-sun-preset]')?.dataset.studioSunPreset;
-        const presets = { Noon: { elevation: 60, intensity: 1.8, temperature: 6500 }, Golden: { elevation: 7, intensity: 1.8, temperature: 5200 }, Sunset: { elevation: 2, intensity: 1.5, temperature: 5800 }, 'Blue hour': { elevation: -4, intensity: 1, temperature: 6500 }, Night: { elevation: -18, intensity: 1, temperature: 6500 } };
+        const presets = { Noon: { elevation: 60, intensity: 1.8, temperature: 5778 }, Golden: { elevation: 7, intensity: 1.8, temperature: 5778 }, Sunset: { elevation: 2, intensity: 1.5, temperature: 5778 }, 'Blue hour': { elevation: -4, intensity: 1, temperature: 6500 }, Night: { elevation: -18, intensity: 1, temperature: 6500 } };
         if (presets[name]) this.api.store.batch(`Sun preset ${name}`, draft => Object.assign(draft.sun, presets[name]));
       });
     }
@@ -261,7 +262,7 @@ export class StudioWorkspace {
     this.showSky('sun', false);
   }
   showSky(name = 'sun', reveal = true) {
-    const id = { sun: 'sec-sun', clouds: 'sec-clouds', location: 'sec-scene-location', lighting: 'sec-sf-lighting' }[name] || 'sec-sun';
+    const id = { sun: 'sec-sun', clouds: 'sec-clouds', location: 'sec-scene-location', lighting: 'sec-sf-lighting', effects: 'sec-sf-effects' }[name] || 'sec-sun';
     for (const section of this.sidebar?.querySelectorAll('.s-sec') || []) section.classList.toggle('sf-studio-sky-section', section.id === id);
     this.document.getElementById(id)?.classList.remove('closed');
     for (const tab of this.skyNav?.querySelectorAll('button') || []) tab.setAttribute('aria-pressed', String(tab.dataset.studioSky === name));
@@ -359,8 +360,10 @@ export class StudioWorkspace {
     if (action === 'maximize') return this.setLayout({ ...this.layout, maximized: !this.layout.maximized });
     if (action === 'legacy') return this.setLegacy(!this.legacy);
     if (['move', 'rotate', 'scale'].includes(action)) {
+      this.api.store.set('viewport.navigationTool','transform',{record:false,label:'Choose transform tool'});
       this.api.store.set('viewport.transformTool', action, { label: 'Set transform tool', record: false }); this.api.viewport?.canvas?.focus({ preventScroll: true }); return;
     }
+    if (['add-stars','add-moon','add-aurora','add-rainbow'].includes(action)) return this.effects.add(action.slice(4));
     if (['add-sphere', 'add-cube', 'add-plane'].includes(action)) { this.api.viewport?.objectAdapter?.add(action.slice(4)); return; }
     if (action === 'frame') return this.api.viewport?.referenceGizmo?.frameSelected();
     if (action === 'capture') return Promise.resolve().then(() => this.api.viewport?.capturePreview?.()).catch(error => {
@@ -447,7 +450,7 @@ export class StudioWorkspace {
     }
   }
   dispose() {
-    this.finishResize(true); this.finishExposure(true); this.lightingBench?.dispose(); this.unsubscribe?.();
+    this.finishResize(true); this.finishExposure(true); this.effects?.dispose(); this.lightingBench?.dispose(); this.unsubscribe?.();
     for (const [target, type, listener, capture] of this.listeners) target?.removeEventListener(type, listener, capture);
     for (const { node, marker } of this.moves) { marker.after(node); marker.remove(); }
     if (this.statusbar) { this.statusbar.append(...this.statusChildren); this.legacyStatus.remove(); this.studioStatus.remove(); }

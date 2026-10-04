@@ -109,3 +109,17 @@ body.sf-studio-legacy-layout .sf-studio-toolbar .sf-studio-tools,body.sf-studio-
 @media(max-width:1500px){.sf-studio-toolbar .sf-studio-file button span,.sf-studio-toolbar .sf-studio-view-actions button span{display:none}.sf-studio-toolbar .sf-studio-view-actions [data-studio-action=legacy] span{display:inline}.sf-studio-toolbar{gap:3px}}
 @media(max-width:1000px){.workspace.sf-studio-grid{grid-template-columns:minmax(0,var(--studio-left)) 4px minmax(160px,1fr) 4px minmax(0,var(--studio-right))}.sf-studio-toolbar .sf-studio-tools button span{display:none}.sf-studio-toolbar .sf-studio-view-actions [data-studio-action=legacy] span{display:none}.sf-studio-space{padding:0}.sf-studio-right .sf-field-grid.three{grid-template-columns:1fr}}
 @media(max-width:760px){.workspace.sf-studio-grid{position:relative;grid-template-columns:min(var(--studio-left),160px) 4px minmax(120px,1fr) 0 0}.sf-studio-grid .sf-studio-right{position:absolute;inset:0 0 0 auto;width:min(var(--studio-right),85vw);z-index:220;box-shadow:-12px 0 40px #0009}.sf-studio-grid .sf-studio-resize-right{display:none}.sf-studio-toolbar .sf-studio-space{display:none}.sf-studio-toolbar .sf-studio-presets button{padding:3px}.sf-studio-toolbar strong{font-size:9px}.sf-studio-grid.sf-studio-maximized{grid-template-columns:0 0 minmax(0,1fr) 0 0}}
+.sf-effects-panel{padding:8px;display:flex;flex-direction:column;gap:10px}
+.sf-effects-panel fieldset{margin:0;border:1px solid #3b4854;border-radius:6px;padding:9px;min-width:0}
+.sf-effects-panel legend{color:#dbe5ee;font:600 12px system-ui}
+.sf-effects-panel legend label{display:flex;align-items:center;gap:6px}
+.sf-effects-panel button,.sf-effects-quick button{font:11px system-ui;color:#d1dfeb;background:#263541;border:1px solid #465867;border-radius:4px;padding:6px;cursor:pointer}
+.sf-effects-panel button:hover,.sf-effects-quick button:hover{border-color:#e89542}
+.sf-effect-control{display:flex;align-items:center;justify-content:space-between;gap:8px;font:11px system-ui;color:#bdccda;margin:7px 0}
+.sf-effect-control input[type=number]{width:84px;min-width:0;background:#17232c;color:#dde8f0;border:1px solid #475867;border-radius:4px;padding:5px;font:11px monospace}
+.sf-effect-control input:focus-visible{outline:1px solid #e89542}
+.sf-effects-presets{display:flex;flex-wrap:wrap;gap:5px}
+.sf-moon-phase{display:block;color:#8fa5b7;font:10px system-ui;line-height:1.5}
+.sf-effects-quick{display:flex;gap:5px;padding:8px;flex-wrap:wrap;border-bottom:1px solid #394651}
+.sf-effects-quick>span{width:100%;font:10px system-ui;color:#8ba4b9;letter-spacing:1px}
+.sf-effects-quick [aria-pressed=true]{color:#aee0c9;border-color:#5d917e}
