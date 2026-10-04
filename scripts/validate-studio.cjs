@@ -286,16 +286,23 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
       for (const quality of ['low', 'medium', 'high']) {
         await page.locator('[data-vp="cloudQuality"]').selectOption(quality);
         await page.waitForFunction(quality => SkyForgeCore.viewport.renderer.cloudMetrics?.quality === quality && SkyForgeCore.viewport.frame === null, quality, { timeout: 45000 });
-        const sample = await evaluate(() => {
-          const viewport = SkyForgeCore.viewport, gl = viewport.renderer.gl, pixel = new Uint8Array(4);
-          const state = SkyForgeCore.store.snapshot(), timings = [];
-          for (let index = 0; index < 6; index++) {
-            const begin = performance.now(); viewport.renderer.draw(state, viewport.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-            if (index) timings.push(performance.now() - begin); // Discard warmup.
-          }
-          const sorted = [...timings].sort((a, b) => a - b);
-          return { ...viewport.renderer.cloudMetrics, drawReadbackMs: sorted[2], timings, error: gl.getError() };
-        });
+        const benchmark = await evaluate(() => ({ state: SkyForgeCore.store.snapshot(), camera: SkyForgeCore.viewport.camera }));
+        const timings = [];
+        let sample;
+        // Bound each GPU submission separately: six software-GPU readbacks
+        // can exceed the ordinary 20 s UI evaluation limit as a single batch.
+        for (let index = 0; index < 6; index++) {
+          sample = await timeout(page.evaluate(({ state, camera }) => {
+            const viewport = SkyForgeCore.viewport, gl = viewport.renderer.gl, pixel = new Uint8Array(4);
+            const begin = performance.now(); viewport.renderer.draw(state, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+            return { ...viewport.renderer.cloudMetrics, drawReadbackMs: performance.now() - begin, error: gl.getError() };
+          }, benchmark), 45000, `${quality} GPU draw/readback ${index + 1}`);
+          assert.equal(sample.error, 0); assert.equal(sample.quality, quality);
+          if (index) timings.push(sample.drawReadbackMs); // Discard one warmup.
+        }
+        sample.timings = timings;
+        sample.drawReadbackMs = [...timings].sort((a, b) => a - b)[2];
+        console.log(`Studio cloud quality: ${quality}, median draw/readback ${sample.drawReadbackMs.toFixed(1)} ms`);
         assert.equal(sample.mode, 'volumetric'); assert.equal(sample.error, 0); assert.ok(sample.samples <= 44 && sample.shadowSamples <= 3); assert.ok(sample.pixels <= 900000); results.performance.push(sample);
       }
       await page.locator('[data-vp="cloudQuality"]').selectOption('low');
