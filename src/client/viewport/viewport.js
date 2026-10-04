@@ -44,7 +44,7 @@ export class SkyForgeViewport {
     this.unsubscribe=this.store.subscribe((state)=>this.sync(state));
     this.on(this.root,'skyforge:natural-light-updated',e=>this.setLut(e.detail));
     this.on(this.root,'skyforge:lighting-preview',e=>this.setLut(e.detail));
-    this.on(doc,'visibilitychange',()=>{if(doc.hidden){this.sunGizmo.finish(true);this.referenceGizmo.finish(true);this.navigation.finish(true);this.cancelFrame();}else this.invalidate();});
+    this.on(doc,'visibilitychange',()=>{if(doc.hidden){this.sunGizmo.finish(true);this.referenceGizmo.finish(true);this.navigation.finish(true);this.cancelFrame();this.cancelCaptures('Show the window before capturing the preview.');}else this.invalidate();});
     this.on(this.canvas,'webglcontextlost',e=>{
       e.preventDefault();this.restoreActive=this.active;this.lost=true;this.sunGizmo.finish(true);this.referenceGizmo.finish(true);this.navigation.finish(true);this.setActive(false,false);
       // All handles are invalidated by context loss. Release JS ownership now,
@@ -80,7 +80,7 @@ export class SkyForgeViewport {
     }
     const desired=state.viewport?.mode!=='legacy';
     if(desired!==this.active)this.setActive(desired,false);
-    const signature=JSON.stringify([state.viewport,state.scene?.referenceObjects,state.scene?.selectedReferenceId,state.camera,state.sun,state.atmosphere,state.clouds,state.timeline?.currentFrame,state.timeline?.fps]);
+    const signature=JSON.stringify([state.viewport,state.scene?.referenceObjects,state.scene?.selectedReferenceId,state.camera,state.sun,state.atmosphere,state.clouds,state.color,state.timeline?.currentFrame,state.timeline?.fps]);
     if(signature!==this.signature){this.signature=signature;this.invalidate();}
     this.bar.querySelector('[data-vp="frame"]').disabled=!state.scene?.referenceObjects?.[state.scene?.selectedReferenceId];
     for(const key of ['grid','referenceSphere','overlays'])this.bar.querySelector(`[data-vp="${key}"]`).setAttribute('aria-pressed',String(state.viewport?.[key]!==false));
@@ -89,7 +89,7 @@ export class SkyForgeViewport {
   }
   setActive(active,persist=true){
     active=Boolean(active&&this.renderer&&!this.lost&&!this.error);
-    if(!active){this.sunGizmo?.finish(true);this.referenceGizmo?.finish(true);this.navigation?.finish(true);this.cancelFrame();}
+    if(!active){this.sunGizmo?.finish(true);this.referenceGizmo?.finish(true);this.navigation?.finish(true);this.cancelFrame();this.cancelCaptures('The viewport closed before capture.');}
     this.active=active;this.root.SF_VIEWPORT_3D_ACTIVE=active;
     this.container.parentElement?.classList.toggle('sf-3d-workspace',active);
     this.container.classList.toggle('sf-3d-active',active);this.host.hidden=!active;
@@ -115,7 +115,25 @@ export class SkyForgeViewport {
     }else if(['grid','referenceSphere','overlays'].includes(action))this.store.set(`viewport.${action}`,this.store.get(`viewport.${action}`)===false,{label:`Toggle ${action}`});
     this.canvas.focus({preventScroll:true});
   }
-  setLut(payload){this.payload=payload;this.renderer?.setLut(payload);this.invalidate();}
+  setLut(payload){this.payload=payload;this.renderer?.setLut(payload,this.store.get('atmosphere'));this.invalidate();}
+  capturePreview({download=true}={}){
+    if(!this.active||!this.renderer)return Promise.reject(new Error('Open 3D View to capture the WebGL preview.'));
+    if(this.root.document.hidden)return Promise.reject(new Error('Show the window before capturing the preview.'));
+    return new Promise((resolve,reject)=>{
+      const handle=this.root.requestAnimationFrame(()=>{
+        this.captureHandles?.delete(handle);
+        if(this.disposed||!this.active||!this.renderer||this.root.document.hidden)return reject(new Error('The viewport became unavailable before capture.'));
+        try{
+          const rect=this.container.getBoundingClientRect();this.renderer.resize(rect.width,rect.height,this.root.devicePixelRatio||1);
+          this.renderer.draw(this.store.snapshot(),this.camera);
+          const dataUrl=this.canvas.toDataURL('image/png');
+          if(download){const a=this.root.document.createElement('a');a.href=dataUrl;a.download='skyforge-webgl-preview.png';a.click();}
+          resolve({dataUrl,width:this.canvas.width,height:this.canvas.height,label:'SkyForge WebGL preview'});
+        }catch(error){reject(error);}
+      });
+      this.captureHandles ||= new Map();this.captureHandles.set(handle,reject);
+    });
+  }
   invalidate(){
     if(this.disposed||!this.active||this.root.document.hidden||this.frame!==null)return;
     this.frame=this.root.requestAnimationFrame(()=>{
@@ -141,8 +159,10 @@ export class SkyForgeViewport {
     }
   }
   cancelFrame(){if(this.frame!==null)this.root.cancelAnimationFrame(this.frame);this.frame=null;}
+  cancelCaptures(message){for(const [handle,reject] of this.captureHandles||[]){this.root.cancelAnimationFrame(handle);reject(new Error(message));}this.captureHandles?.clear();}
   dispose(){
     this.disposed=true;this.unsubscribe?.();this.referenceGizmo?.dispose();this.objectAdapter?.dispose();this.sunGizmo?.dispose();this.navigation?.dispose();this.cancelFrame();this.observer?.disconnect();
+    this.cancelCaptures('Viewport closed before capture.');
     this.listeners.forEach(([t,n,f])=>t.removeEventListener(n,f));this.listeners=[];this.renderer?.dispose();
     this.root.SF_VIEWPORT_3D_ACTIVE=false;this.container?.parentElement?.classList.remove('sf-3d-workspace');this.container?.classList.remove('sf-3d-active');this.host?.remove();this.bar?.remove();
     this.root.drawSky?.();

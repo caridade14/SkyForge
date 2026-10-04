@@ -5,8 +5,9 @@ const path = require('node:path');
 const source = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const url = s => 'data:text/javascript;base64,' + Buffer.from(s).toString('base64');
 const cameraUrl = url(source('src/client/viewport/camera.js'));
-const geometryUrl = () => url(source('src/client/viewport/reference-geometry.js').replaceAll("'./camera.js'", JSON.stringify(cameraUrl)));
-const moduleAt = p => import(url(source(p).replaceAll("'./camera.js'", JSON.stringify(cameraUrl)).replaceAll("'./reference-geometry.js'", JSON.stringify(geometryUrl()))));
+const transformUrl = url(source('src/client/viewport/transform-math.js').replaceAll("'./camera.js'", JSON.stringify(cameraUrl)));
+const geometryUrl = () => url(source('src/client/viewport/reference-geometry.js').replaceAll("'./camera.js'", JSON.stringify(cameraUrl)).replaceAll("'./transform-math.js'", JSON.stringify(transformUrl)));
+const moduleAt = p => import(url(source(p).replaceAll("'./camera.js'", JSON.stringify(cameraUrl)).replaceAll("'./transform-math.js'", JSON.stringify(transformUrl)).replaceAll("'./reference-geometry.js'", JSON.stringify(geometryUrl()))));
 
 async function fixture(projection = 'perspective') {
   const { SkyForgeStore } = await import(url(source('src/client/core/state-store.js')));

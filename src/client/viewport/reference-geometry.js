@@ -1,11 +1,11 @@
 import { add, mul, dot, unit, clamp, cameraBasis, normalizeCamera, rayAt } from './camera.js';
+import { rotationMatrix3, scaleVector, rotateVector, inverseRotateVector } from './transform-math.js';
 
 // Reference objects use metres in the viewport's Z-up world. Geometry is shared
-// between objects; only a uniform translation and scalar scale change per draw.
+// between objects. Picking applies the same rotation and scale as the renderer.
 export const REFERENCE_TYPES = Object.freeze(['sphere', 'cube', 'plane']);
 const axes = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
 const subtract = (a, b) => a.map((value, index) => value - b[index]);
-const scaleOf = object => clamp(Number(object?.scale) > 0 ? Number(object.scale) : 1, 0.01, 100000);
 const positionOf = object => [0, 1, 2].map(index => Number.isFinite(Number(object?.position?.[index])) ? Number(object.position[index]) : 0);
 const tangent = fov => Math.tan(clamp(Number(fov) || 60, 15, 120) * Math.PI / 360);
 
@@ -58,7 +58,9 @@ export function outlineGeometry(type) {
 }
 
 export function objectRadius(object) {
-  return scaleOf(object) * (object?.type === 'cube' ? Math.sqrt(3) : object?.type === 'plane' ? Math.sqrt(8) : 1);
+  const scale = scaleVector(object);
+  return object?.type === 'cube' ? Math.hypot(...scale)
+    : object?.type === 'plane' ? Math.hypot(scale[0] * 2, scale[1] * 2) : Math.max(...scale);
 }
 
 // x/y are normalized device coordinates (+Y up), matching rayAt and WebGL.
@@ -71,9 +73,13 @@ export function projectPoint(position, camera, aspect = 1, fov = 60) {
 }
 
 function hitSphere(origin, direction, radius) {
-  const b = dot(origin, direction), discriminant = b * b - dot(origin, origin) + radius * radius;
+  // The inverse transform deliberately keeps direction unnormalized, so the
+  // intersection parameter remains a distance along the original world ray.
+  const a = dot(direction, direction), b = dot(origin, direction);
+  const discriminant = b * b - a * (dot(origin, origin) - radius * radius);
+  if (a <= 1e-20) return null;
   if (discriminant < 0) return null;
-  const near = -b - Math.sqrt(discriminant), far = -b + Math.sqrt(discriminant);
+  const near = (-b - Math.sqrt(discriminant)) / a, far = (-b + Math.sqrt(discriminant)) / a;
   return near > 1e-5 ? near : far > 1e-5 ? far : null;
 }
 function hitCube(origin, direction, half) {
@@ -98,9 +104,11 @@ export function pickReferenceObject(mapOrValues, ray) {
   let best = null;
   for (const object of Array.isArray(mapOrValues) ? mapOrValues : Object.values(mapOrValues || {})) {
     if (!object || object.visible === false || !REFERENCE_TYPES.includes(object.type)) continue;
-    const origin = subtract(ray.origin, positionOf(object)), scale = scaleOf(object);
-    const distance = object.type === 'sphere' ? hitSphere(origin, ray.direction, scale)
-      : object.type === 'cube' ? hitCube(origin, ray.direction, scale) : hitPlane(origin, ray.direction, scale * 2);
+    const rotation = rotationMatrix3(object.rotation), scale = scaleVector(object);
+    const origin = inverseRotateVector(subtract(ray.origin, positionOf(object)), rotation).map((v, i) => v / scale[i]);
+    const direction = inverseRotateVector(ray.direction, rotation).map((v, i) => v / scale[i]);
+    const distance = object.type === 'sphere' ? hitSphere(origin, direction, 1)
+      : object.type === 'cube' ? hitCube(origin, direction, 1) : hitPlane(origin, direction, 2);
     if (distance !== null && (!best || distance < best.distance)) best = { object, distance };
   }
   return best;
@@ -115,15 +123,38 @@ export function frameObject(camera, object, aspect = 1, fov = 60) {
 
 // Screen-space handles maintain an approximately 80px length. A near-parallel
 // axis is unavailable instead of amplifying tiny drags into huge translations.
-export function axisSegments(position, camera, width, height, fov = 60) {
+export function axisSegments(position, camera, width, height, fov = 60, orientation = null) {
   const aspect = width / Math.max(1, height), origin = projectPoint(position, camera, aspect, fov);
   const pixels = point => [(point.x + 1) * width / 2, (1 - point.y) * height / 2];
   const depth = camera.projection === 'orthographic' ? camera.distance : Math.max(0.05, origin.depth);
   const lengthWorld = 160 * depth * tangent(fov) / Math.max(1, height);
-  return Object.entries(axes).map(([axis, vector]) => {
+  return Object.entries(axes).map(([axis, basis]) => {
+    const vector = orientation ? rotateVector(basis, orientation) : basis;
     const endpoint = projectPoint(add(position, mul(vector, lengthWorld)), camera, aspect, fov);
     const start = pixels(origin), end = pixels(endpoint);
-    return { axis, start, end, lengthWorld, enabled: !origin.behind && !endpoint.behind && Math.hypot(end[0] - start[0], end[1] - start[1]) >= 10 };
+    return { axis, vector, start, end, lengthWorld, enabled: !origin.behind && !endpoint.behind && Math.hypot(end[0] - start[0], end[1] - start[1]) >= 10 };
+  });
+}
+
+export function rotationSegments(position, camera, width, height, fov = 60, orientation = null) {
+  const aspect = width / Math.max(1, height), center = projectPoint(position, camera, aspect, fov);
+  const depth = camera.projection === 'orthographic' ? camera.distance : Math.max(.05, center.depth);
+  const lengthWorld = 160 * depth * tangent(fov) / Math.max(1, height);
+  const forward = cameraBasis(camera).forward;
+  return Object.entries(axes).map(([axis, basis], index) => {
+    const vector = orientation ? rotateVector(basis, orientation) : basis;
+    const u = Object.values(axes)[(index + 1) % 3], v = Object.values(axes)[(index + 2) % 3];
+    let visible = !center.behind;
+    const points = Array.from({ length: 97 }, (_, i) => {
+      const angle = i / 96 * Math.PI * 2;
+      let offset = add(mul(u, Math.cos(angle) * lengthWorld), mul(v, Math.sin(angle) * lengthWorld));
+      if (orientation) offset = rotateVector(offset, orientation);
+      const point = projectPoint(add(position, offset), camera, aspect, fov);
+      visible &&= !point.behind;
+      return [(point.x + 1) * width / 2, (1 - point.y) * height / 2];
+    });
+    return { axis, vector, points, start: points[0], end: points[1], lengthWorld,
+      enabled: visible && Math.abs(dot(vector, forward)) >= .1 };
   });
 }
 
@@ -136,7 +167,9 @@ function planeAtRay(ray, position, normal) {
 }
 
 export function startAxisDrag(position, axis, camera, xNdc, yNdc, aspect = 1, fov = 60) {
-  const vector = axes[axis]; if (!vector) return null;
+  const candidate = Array.isArray(axis) ? axis : axes[axis];
+  if (!candidate || !candidate.every(Number.isFinite) || Math.hypot(...candidate) < 1e-9) return null;
+  const vector = unit(candidate);
   const forward = cameraBasis(camera).forward;
   const normal = subtract(forward, mul(vector, dot(forward, vector)));
   if (Math.hypot(...normal) < 0.1) return null;

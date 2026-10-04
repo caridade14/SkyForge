@@ -26,6 +26,7 @@ export class NodeGraph {
   }
 
   emit(type, detail = {}) {
+    if (this.muted) return;
     const event = { type, ...detail };
     for (const listener of this.listeners) {
       try {
@@ -109,6 +110,18 @@ export class NodeGraph {
     if (!isCompatible(output.type || "any", input.type || "any")) {
       throw new Error(`Socket type mismatch: ${output.type} -> ${input.type}`);
     }
+    const existing = this.incoming(toNodeId, toSocket);
+    if (existing?.from.node === fromNodeId && existing?.from.socket === fromSocket) return cloneValue(existing);
+    // Validate before replacing an occupied input, so a rejected edit is atomic.
+    const remaining = [...this.connections.values()].filter((connection) =>
+      !(connection.to.node === toNodeId && connection.to.socket === toSocket));
+    const reaches = (id, target, visited = new Set()) => {
+      if (id === target) return true;
+      if (visited.has(id)) return false;
+      visited.add(id);
+      return remaining.some((edge) => edge.from.node === id && reaches(edge.to.node, target, visited));
+    };
+    if (reaches(toNodeId, fromNodeId)) throw new Error("This connection would create a cycle. Connect nodes towards Output.");
     for (const [connectionId, connection] of this.connections) {
       if (connection.to.node === toNodeId && connection.to.socket === toSocket) {
         this.connections.delete(connectionId);
@@ -187,17 +200,18 @@ export class NodeGraph {
     };
   }
 
-  load(serialized = {}) {
-    this.nodes.clear();
-    this.connections.clear();
-    this.version = Number(serialized.version || 1);
+  load(serialized = {}, options = {}) {
+    const next = new NodeGraph();
+    next.registry = this.registry;
+    next.muted = true;
+    next.version = Number(serialized.version || 1);
     for (const node of serialized.nodes || []) {
       if (!this.registry.has(node.type)) continue;
-      this.addNode(node.type, node);
+      next.addNode(node.type, node);
     }
     for (const connection of serialized.connections || []) {
       try {
-        this.connect(
+        next.connect(
           connection.from.node,
           connection.from.socket,
           connection.to.node,
@@ -205,13 +219,19 @@ export class NodeGraph {
           { id: connection.id }
         );
       } catch (error) {
+        if (!options.skipInvalid) throw error;
         console.warn("Skipped invalid SkyForge node connection", error);
       }
     }
-    this.emit("graph:load");
+    this.nodes = next.nodes;
+    this.connections = next.connections;
+    this.version = next.version;
+    if (!options.silent) this.emit("graph:load");
   }
 
   createDefaultGraph() {
+    const wasMuted = this.muted;
+    this.muted = true;
     this.nodes.clear();
     this.connections.clear();
     const sun = this.addNode("Sun", { id: "sun", position: { x: 40, y: 80 } });
@@ -225,6 +245,7 @@ export class NodeGraph {
     this.connect(clouds.id, "clouds", scene.id, "clouds");
     this.connect(scene.id, "scene", color.id, "input");
     this.connect(color.id, "output", output.id, "input");
+    this.muted = wasMuted;
     this.emit("graph:default");
     return this.serialize();
   }
@@ -236,21 +257,21 @@ export function registerDefaultNodeTypes(graph) {
       category: "Lighting",
       outputs: { sun: { type: "sun" } },
       defaults: { elevation: 7, azimuth: 215, intensity: 1.8, temperature: 5200 },
-      evaluate: ({ params, context }) => ({ sun: { ...params, ...(context.state?.sun || {}) } })
+      evaluate: ({ params, context }) => ({ sun: { ...(context.state?.sun || {}), ...params } })
     })
     .registerType("Atmosphere", {
       category: "Atmosphere",
       outputs: { atmosphere: { type: "atmosphere" } },
       defaults: { turbidity: 2.4, rayleigh: 2.8, haze: 0.3, ozone: 0.6 },
       evaluate: ({ params, context }) => ({
-        atmosphere: { ...params, ...(context.state?.atmosphere || {}) }
+        atmosphere: { ...(context.state?.atmosphere || {}), ...params }
       })
     })
     .registerType("Clouds", {
       category: "Atmosphere",
       outputs: { clouds: { type: "clouds" } },
-      defaults: { type: "Cumulus", coverage: 0.62, density: 0.7, altitude: 2400 },
-      evaluate: ({ params, context }) => ({ clouds: { ...params, ...(context.state?.clouds || {}) } })
+      defaults: { type: "Cumulus", coverage: 0.62, density: 0.7, altitude: 2400, thickness: 800, erosion: 0.45, detail: 0.6, windSpeed: 8, windDirection: 220 },
+      evaluate: ({ params, context }) => ({ clouds: { ...(context.state?.clouds || {}), ...params } })
     })
     .registerType("SkyScene", {
       category: "Compose",
@@ -266,11 +287,11 @@ export function registerDefaultNodeTypes(graph) {
       category: "Color",
       inputs: { input: { type: "scene", default: {} } },
       outputs: { output: { type: "scene" } },
-      defaults: { exposure: 0, contrast: 1, saturation: 1, workingSpace: "ACEScg" },
+      defaults: { exposure: 0, contrast: 1, saturation: 1 },
       evaluate: ({ inputs, params, context }) => ({
         output: {
           ...inputs.input,
-          color: { ...params, ...(context.state?.color || {}) }
+          color: { ...(context.state?.color || {}), ...params }
         }
       })
     })

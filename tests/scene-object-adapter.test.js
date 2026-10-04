@@ -221,3 +221,98 @@ test('Old Core projects reset only references, and disposing restores legacy fun
     adapter.dispose(); assert.equal(root.sfAddSceneObject, add);
   });
 });
+
+test('position edits preserve nonuniform scale; legacy uniform scale resizes local proportions', async () => {
+  await fixture(({ root, controls, store }) => {
+    const row = root.sfAddSceneObject('CUBE', 'Nonuniform cube'), id = row.dataset.sfReferenceId;
+    store.set(`scene.referenceObjects.${id}.rotation`, [12, 23, 34], { record: false });
+    store.set(`scene.referenceObjects.${id}.scale`, [2, 3, 4], { record: false });
+    controls['tri-pos-x'].value = '8.125'; root.sfSetSelectedTransformFromInputs();
+    assert.deepEqual(store.get(`scene.referenceObjects.${id}.scale`), [2, 3, 4]);
+    assert.deepEqual(store.get(`scene.referenceObjects.${id}.rotation`), [12, 23, 34]);
+    controls['tri-scale'].value = '2'; root.sfSetSelectedTransformFromInputs();
+    assert.deepEqual(store.get(`scene.referenceObjects.${id}.scale`), [1, 1.5, 2]);
+    store.undo(); assert.deepEqual(store.get(`scene.referenceObjects.${id}.scale`), [2, 3, 4]);
+    root.sfSetRowScale(row, 8); assert.deepEqual(store.get(`scene.referenceObjects.${id}.scale`), [4, 6, 8]);
+    root.sfSetRowRotation(row, 47.25); assert.deepEqual(store.get(`scene.referenceObjects.${id}.rotation`), [12, 23, 47.25]);
+  });
+});
+
+test('numeric transform previews cancel on selection, hiding, locking, deletion and project replacement', async () => {
+  for (const field of ['rotation', 'scale']) for (const cancel of ['select', 'hide', 'lock', 'delete', 'replace']) {
+    await fixture(({ root, adapter, store }) => {
+      const row = root.sfAddSceneObject('CUBE', 'Edited cube'), id = row.dataset.sfReferenceId;
+      const before = store.get(`scene.referenceObjects.${id}.${field}`), history = store.history.length;
+      const input = { value: field === 'rotation' ? '42.25' : '2.75', dataset: { studioTransform: field, axis: 'x' } };
+      adapter.startNumericEdit(input); adapter.previewNumericEdit(input);
+      assert.notDeepEqual(store.get(`scene.referenceObjects.${id}.${field}`), before);
+      assert.deepEqual(store.snapshot({ committed: true }).scene.referenceObjects[id][field], before);
+      if (cancel === 'select') adapter.select(null);
+      else if (cancel === 'hide') root.sfToggleSelectedVisibility();
+      else if (cancel === 'lock') root.sfToggleSelectedLock();
+      else if (cancel === 'delete') root.sfDeleteSelectedObject();
+      else store.replace({ project: { name: 'Old project' } }, { record: false });
+      adapter.finishNumericEdit(false);
+      if (cancel === 'delete') {
+        assert.equal(store.get(`scene.referenceObjects.${id}`), undefined);
+        assert.equal(store.history.length, history + 1); store.undo();
+        assert.deepEqual(store.get(`scene.referenceObjects.${id}.${field}`), before);
+      } else if (cancel !== 'replace') {
+        assert.deepEqual(store.get(`scene.referenceObjects.${id}.${field}`), before);
+        assert.equal(store.history.length, history + (['hide', 'lock'].includes(cancel) ? 1 : 0));
+      } else assert.equal(store.history.length, history);
+      assert.equal(store.activeEdit, null);
+    });
+  }
+});
+
+test('legacy rotation and uniform scale gestures each commit once and Escape restores all transforms', async () => {
+  for (const mode of ['rotation', 'scale']) await fixture(({ root, store }) => {
+    const row = root.sfAddSceneObject('CUBE', 'Legacy transformed cube'), id = row.dataset.sfReferenceId;
+    store.set(`scene.referenceObjects.${id}.rotation`, [12, 23, 34], { record: false });
+    store.set(`scene.referenceObjects.${id}.scale`, [2, 3, 4], { record: false });
+    root.SF_VIEWPORT_3D_ACTIVE = false;
+    const down = { button: 0, target: { closest: () => ({}) } }, before = store.get(`scene.referenceObjects.${id}.${mode}`);
+    const history = store.history.length, setter = mode === 'rotation' ? 'sfSetRowRotation' : 'sfSetRowScale';
+    root.emit('mousedown', down); root[setter](row, 5.25); root[setter](row, 7.5);
+    assert.equal(store.history.length, history);
+    assert.deepEqual(store.snapshot({ committed: true }).scene.referenceObjects[id][mode], before);
+    const after = store.get(`scene.referenceObjects.${id}.${mode}`);
+    root.emit('mouseup'); assert.equal(store.history.length, history + 1);
+    store.undo(); assert.deepEqual(store.get(`scene.referenceObjects.${id}.${mode}`), before);
+    store.redo(); assert.deepEqual(store.get(`scene.referenceObjects.${id}.${mode}`), after);
+    root.emit('mousedown', down); root[setter](row, 19.5);
+    root.emit('keydown', { key: 'Escape', preventDefault() {} }); root.emit('mouseup');
+    assert.deepEqual(store.get(`scene.referenceObjects.${id}.${mode}`), after);
+    assert.equal(store.history.length, history + 1);
+  });
+});
+
+test('hidden references remain editable numerically after the hiding gesture has cancelled', async () => {
+  await fixture(({ root, adapter, store }) => {
+    const row = root.sfAddSceneObject('CUBE', 'Hidden cube'), id = row.dataset.sfReferenceId;
+    root.sfToggleSelectedVisibility(); const history = store.history.length;
+    const input = { value: '37.5', dataset: { studioTransform: 'rotation', axis: 'z' } };
+    adapter.startNumericEdit(input); adapter.previewNumericEdit(input); adapter.finishNumericEdit(false);
+    assert.deepEqual(store.get(`scene.referenceObjects.${id}.rotation`), [0, 0, 37.5]);
+    assert.equal(store.get(`scene.referenceObjects.${id}.visible`), false); assert.equal(store.history.length, history + 1);
+  });
+});
+
+test('legacy transform metadata roundtrips fractional Euler XYZ and local scale while scalar ROT remains compatible', async () => {
+  await fixture(({ root, store, referenceToLegacy, referenceFromLegacy }) => {
+    const value = { id: 'transformed', name: 'Transformed cube', type: 'cube', position: [1.25, -2.5, 3.75], rotation: [12.125, -23.25, 34.5], scale: [2, 3, 4], visible: false, locked: true };
+    const legacy = referenceToLegacy(value);
+    assert.equal(legacy.scale, 4); assert.equal(legacy.rot, 34.5);
+    assert.deepEqual(legacy.referenceTransform, { upAxis: 'Z', rotation: value.rotation, scale: value.scale });
+    assert.deepEqual(referenceFromLegacy(legacy), value);
+    root.sfRestoreOutlinerObjects([legacy]);
+    assert.deepEqual(store.get('scene.referenceObjects.transformed'), value);
+    const exported = root.sfCollectOutlinerObjects()[0];
+    assert.deepEqual(exported.referenceTransform, legacy.referenceTransform);
+    root.sfRestoreOutlinerObjects([exported]); assert.deepEqual(store.get('scene.referenceObjects.transformed'), value);
+    root.sfRestoreOutlinerObjects([{ key: 'old', type: 'PLANE', rot: 43.125, scale: 2, x: 1, y: 2, z: 3 }]);
+    assert.deepEqual(store.get('scene.referenceObjects.old.rotation'), [0, 0, 43.125]);
+    assert.equal(store.get('scene.referenceObjects.old.scale'), 2);
+  });
+});

@@ -1,11 +1,27 @@
-import { cloneValue } from "./state-store.js";
+import { cloneValue, DEFAULT_SKYFORGE_STATE } from "./state-store.js";
 import { prepareReferenceScene } from "./scene-object-adapter.js";
+import { NodeGraph } from "./node-graph.js";
+import { applyTimelineSnapshot } from "./timeline-engine.js";
 
 const FILE_FORMAT = "SkyForge Project File";
 const FILE_KIND = "skyforge.project";
 const FILE_VERSION = 3;
 const FILE_MIME = "application/vnd.skyforge.project+json";
 const RECENTS_KEY = "skyforge.core.v11.recentProjects";
+
+// Old projects may omit entire service roots. Fill known defaults, preserving
+// unknown fields and legacy payloads rather than replacing the loaded document.
+export function completeProjectState(payload) {
+  const fill = (value, defaults) => {
+    if (defaults && typeof defaults === "object" && !Array.isArray(defaults)) {
+      const result = value && typeof value === "object" && !Array.isArray(value) ? cloneValue(value) : {};
+      for (const [key, fallback] of Object.entries(defaults)) result[key] = fill(result[key], fallback);
+      return result;
+    }
+    return value === undefined || value === null ? cloneValue(defaults) : cloneValue(value);
+  };
+  return fill(payload, DEFAULT_SKYFORGE_STATE);
+}
 
 function fnv1a(input) {
   let hash = 0x811c9dc5;
@@ -54,8 +70,22 @@ export class ProjectService {
 
   createDocument() {
     const state = this.store.snapshot({ committed: true });
-    if (this.timeline) state.timeline.keyframes = this.timeline.serializeKeyframes();
-    if (this.nodeGraph) state.nodes = this.nodeGraph.serialize();
+    if (state.scene?.authority === "graph" && state.nodes?.nodes?.length) {
+      const graph = new NodeGraph();
+      if (this.nodeGraph) graph.registry = this.nodeGraph.registry;
+      graph.load(state.nodes, { silent: true });
+      const base = state.scene.directState || state;
+      try {
+        const output = graph.evaluateOutput({ state: { ...state, ...base } });
+        for (const root of ["sun", "atmosphere", "clouds", "color"]) {
+          state[root] = { ...(base[root] || state[root]), ...(output?.[root] && typeof output[root] === "object" ? cloneValue(output[root]) : {}) };
+        }
+      } catch {
+        // A deliberately incomplete graph remains saveable for later editing.
+      }
+    }
+    applyTimelineSnapshot(state);
+    if (state.timeline) state.timeline.playing = false;
     const payloadText = JSON.stringify(state);
     return {
       format: FILE_FORMAT,
@@ -78,8 +108,9 @@ export class ProjectService {
 
   validateDocument(document) {
     if (!document || typeof document !== "object") throw new Error("Invalid SkyForge document");
-    const payload = document.payload || document.scene || document;
-    if (!payload || typeof payload !== "object") throw new Error("SkyForge project payload is missing");
+    const legacyWrapper = document.scene && !document.schemaVersion && !document.sun && !document.nodes && !document.timeline;
+    const payload = document.payload || (legacyWrapper ? document.scene : document);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("SkyForge project payload is missing");
     if (document.checksum) {
       const expected = `fnv1a:${fnv1a(JSON.stringify(payload))}`;
       if (document.checksum !== expected) throw new Error("SkyForge project checksum does not match");
@@ -88,14 +119,19 @@ export class ProjectService {
   }
 
   loadDocument(document, options = {}) {
-    const payload = prepareReferenceScene(cloneValue(this.validateDocument(document)));
+    const payload = completeProjectState(prepareReferenceScene(cloneValue(this.validateDocument(document))));
+    const validatedGraph = new NodeGraph();
+    if (this.nodeGraph) validatedGraph.registry = this.nodeGraph.registry;
+    if (payload.nodes?.nodes?.length) validatedGraph.load(payload.nodes);
+    else validatedGraph.createDefaultGraph();
+    payload.nodes = validatedGraph.serialize();
+    // Validation above is atomic: malformed sockets/cycles cannot replace state.
+    this.store.cancelEdit();
+    this.store.history.length = 0;
+    this.store.future.length = 0;
     this.store.replace(payload, { label: options.label || "Open project", record: false });
     if (this.timeline) this.timeline.loadKeyframes(payload.timeline?.keyframes || {});
-    if (this.nodeGraph) {
-      const serialized = payload.nodes;
-      if (serialized?.nodes?.length) this.nodeGraph.load(serialized);
-      else this.nodeGraph.createDefaultGraph();
-    }
+    if (this.nodeGraph) this.nodeGraph.load(payload.nodes, { silent: true });
     this.store.markSaved();
     this.addRecent({
       name: payload.project?.name || document.metadata?.projectName || "Untitled Sky",
@@ -167,8 +203,12 @@ export class ProjectService {
       draft.project.id = `project-${Date.now().toString(36)}`;
       draft.project.name = String(name || "Untitled Sky");
       draft.project.modified = false;
-    }, { record: false });
-    if (this.nodeGraph) this.nodeGraph.createDefaultGraph();
+    }, { transient: true, record: false });
+    if (this.nodeGraph) {
+      const graph = new NodeGraph(); graph.registry = this.nodeGraph.registry; graph.createDefaultGraph();
+      this.store.set("nodes", graph.serialize(), { transient: true, record: false });
+      this.nodeGraph.load(graph.serialize(), { silent: true });
+    }
     if (this.timeline) this.timeline.loadKeyframes({});
     return this.store.snapshot();
   }

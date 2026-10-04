@@ -3,11 +3,15 @@ import { SkyForgeViewport } from "../viewport/viewport.js";
 import { createSkyForgeStore } from "./state-store.js";
 import { TimelineEngine } from "./timeline-engine.js";
 import { NodeGraph } from "./node-graph.js";
-import { ProjectService } from "./project-service.js";
+import { ProjectService, completeProjectState } from "./project-service.js";
 import { BlenderBridgeClient } from "./blender-bridge.js";
 import { LightingSync } from "./lighting-sync.js";
 import { RenderService } from "./render-service.js";
 import { SkyForgeUIBridge } from "./ui-bridge.js";
+import { Composition } from "../studio/composition.js";
+import { TimelinePanel } from "../studio/timeline-panel.js";
+import { NodePanel } from "../studio/node-panel.js";
+import { StudioWorkspace } from "../studio/workspace.js";
 
 function boot() {
   if (globalThis.SkyForgeCore?.version === "v11") return globalThis.SkyForgeCore;
@@ -18,6 +22,7 @@ function boot() {
     autosaveDelay: 700
   });
   store.restore();
+  store.replace(completeProjectState(store.snapshot()), { transient: true, record: false });
 
   const nodeGraph = new NodeGraph({ serialized: store.get("nodes") });
   if (!nodeGraph.nodes.size) nodeGraph.createDefaultGraph();
@@ -29,18 +34,6 @@ function boot() {
   const lighting = new LightingSync(store);
   const render = new RenderService(store);
   const ui = new SkyForgeUIBridge({ store, timeline, nodeGraph, projects, blender, lighting, render });
-
-  nodeGraph.subscribe((_event, serialized) => {
-    store.set("nodes", serialized, { label: "Edit node graph" });
-  });
-  timeline.subscribe((event) => {
-    if (event.type === "seek" || event.type === "play" || event.type === "pause") {
-      store.batch("Update timeline transport", (draft) => {
-        draft.timeline.currentFrame = event.currentFrame;
-        draft.timeline.playing = event.playing;
-      }, { transient: true, record: false });
-    }
-  });
 
   ui.init();
   const viewport = new SkyForgeViewport(store).init();
@@ -74,6 +67,11 @@ function boot() {
     sendToBlender: (options) => blender.send(options),
     queueRender: (options) => render.queue(options),
     dispose() {
+      globalThis.removeEventListener?.("pagehide", onPageHide);
+      api.timelinePanel?.dispose();
+      api.nodePanel?.dispose();
+      api.workspace?.dispose();
+      api.composition?.dispose();
       viewport.dispose();
       blender.stopPolling();
       lighting.dispose();
@@ -85,6 +83,16 @@ function boot() {
     }
   };
 
+  const onPageHide = (event) => { if (!event.persisted) api.dispose(); };
+  globalThis.addEventListener?.("pagehide", onPageHide);
+
+  api.composition = new Composition(api).init();
+  api.workspace = new StudioWorkspace(api).init();
+  if (api.workspace.editors) {
+    api.timelinePanel = new TimelinePanel(api).init(api.workspace.editors.timeline);
+    api.nodePanel = new NodePanel(api).init(api.workspace.editors.nodes);
+  }
+
   globalThis.SkyForgeCore = api;
   globalThis.dispatchEvent?.(new CustomEvent("skyforge:core-ready", { detail: api }));
   return api;
@@ -94,4 +102,3 @@ if (document.readyState === "loading") document.addEventListener("DOMContentLoad
 else boot();
 
 export { boot };
-

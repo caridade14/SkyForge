@@ -56,6 +56,8 @@ test("Default node graph evaluates a complete sky scene", async () => {
   const graphModule = await import(dataUrl(graphSource));
   const graph = new graphModule.NodeGraph();
   graph.createDefaultGraph();
+  graph.updateNode("sun", { params: { elevation: 25 } });
+  graph.updateNode("atmosphere", { params: { turbidity: 3 } });
   const result = graph.evaluateOutput({ state: { sun: { elevation: 25 }, atmosphere: { turbidity: 3 }, clouds: { coverage: 0.4 }, color: { workingSpace: "ACEScg" } } });
   assert.equal(result.sun.elevation, 25);
   assert.equal(result.atmosphere.turbidity, 3);

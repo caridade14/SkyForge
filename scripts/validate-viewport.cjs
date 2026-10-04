@@ -164,6 +164,9 @@ fs.mkdirSync(out, { recursive: true });
   try {
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => globalThis.SkyForgeCore?.viewport?.renderer?.frames > 0, {}, { timeout: 30000 });
+    // Exercise the detailed legacy/navigation regressions in their original layout.
+    await page.waitForFunction(() => !SkyForgeCore.workspace || getComputedStyle(document.getElementById('sf-studio-toolbar')).display === 'flex');
+    await page.evaluate(() => { SkyForgeCore.workspace?.setLegacy(true); SkyForgeCore.store.set('viewport.cloudMode', 'layer', { transient: true, record: false }); });
     assert.equal(await page.evaluate(() => SkyForgeCore.viewport.active), true, 'WebGL initializes on the real page');
     const webgl = await page.evaluate(() => {
       const gl = SkyForgeCore.viewport.renderer.gl;
@@ -576,6 +579,8 @@ fs.mkdirSync(out, { recursive: true });
     }, savedReferences);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => globalThis.SkyForgeCore?.viewport?.active && SkyForgeCore.viewport.renderer.frames > 0);
+    await page.waitForFunction(() => !SkyForgeCore.workspace || getComputedStyle(document.getElementById('sf-studio-toolbar')).display === 'flex');
+    await page.evaluate(() => { SkyForgeCore.workspace?.setLegacy(true); SkyForgeCore.store.set('viewport.cloudMode', 'layer', { transient: true, record: false }); });
     assert.equal((await readCamera()).yaw, 1.234, 'autosave restores camera after reload');
     assert.deepEqual(await readSun(), savedSun, 'autosave restores committed sun gesture after reload');
     assert.deepEqual(await readReferences(), savedReferences, 'autosave restores reference objects and translated positions after reload');

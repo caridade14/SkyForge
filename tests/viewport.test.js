@@ -9,9 +9,12 @@ const url=s=>'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
 const cameraUrl=url(source('src/client/viewport/camera.js'));
 const storeUrl=url(source('src/client/core/state-store.js'));
 const adapterUrl=url(source('src/client/core/scene-object-adapter.js'));
-const referenceUrl=url(source('src/client/viewport/reference-geometry.js').replace("'./camera.js'",JSON.stringify(cameraUrl)));
+const graphUrl=url(source('src/client/core/node-graph.js').replace('"./state-store.js"',JSON.stringify(storeUrl)));
+const timelineUrl=url(source('src/client/core/timeline-engine.js').replace('"./state-store.js"',JSON.stringify(storeUrl)));
+const transformUrl=url(source('src/client/viewport/transform-math.js').replace("'./camera.js'",JSON.stringify(cameraUrl)));
+const referenceUrl=url(source('src/client/viewport/reference-geometry.js').replace("'./camera.js'",JSON.stringify(cameraUrl)).replace("'./transform-math.js'",JSON.stringify(transformUrl)));
 const camera=()=>import(cameraUrl);
-const renderer=()=>import(url(source('src/client/viewport/renderer.js').replace("'./camera.js'",JSON.stringify(cameraUrl)).replace("'./reference-geometry.js'",JSON.stringify(referenceUrl))));
+const renderer=()=>import(url(source('src/client/viewport/renderer.js').replace("'./camera.js'",JSON.stringify(cameraUrl)).replace("'./reference-geometry.js'",JSON.stringify(referenceUrl)).replace("'./transform-math.js'",JSON.stringify(transformUrl))));
 const close=(a,b,eps=1e-6)=>assert.ok(Math.abs(a-b)<eps,`${a} != ${b}`);
 
 test('viewport modules parse without a build system',()=>{
@@ -67,7 +70,7 @@ test('LUT upload preserves float radiance and handles RGB/RGBA and invalid data'
 });
 test('viewport camera roundtrips projects, autosave and undo without scheduling physical light',async()=>{
  const {SkyForgeStore}=await import(storeUrl);const {LightingSync}=await import(url(source('src/client/core/lighting-sync.js')));
- const {ProjectService}=await import(url(source('src/client/core/project-service.js').replace('"./state-store.js"',JSON.stringify(storeUrl)).replace('"./scene-object-adapter.js"',JSON.stringify(adapterUrl))));
+ const {ProjectService}=await import(url(source('src/client/core/project-service.js').replace('"./state-store.js"',JSON.stringify(storeUrl)).replace('"./scene-object-adapter.js"',JSON.stringify(adapterUrl)).replace('"./node-graph.js"',JSON.stringify(graphUrl)).replace('"./timeline-engine.js"',JSON.stringify(timelineUrl))));
  const values=new Map(),storage={setItem:(k,v)=>values.set(k,v),getItem:k=>values.get(k)};
  const s=new SkyForgeStore({storage}),lighting=new LightingSync(s);let calls=0;lighting.schedule=()=>calls++;
  const before=s.get('viewport.camera');s.set('viewport.camera',{...before,yaw:1.1},{label:'Orbit'});assert.equal(calls,0);

@@ -35,6 +35,9 @@ export class SkyForgeUIBridge {
     this.observer = null;
     this.disposed = false;
     this.sunControlDocuments = new Map();
+    this.controlListeners = new Map();
+    this.keyboardOwner = null;
+    this.keyboardHandler = null;
   }
 
   init() {
@@ -156,6 +159,7 @@ export class SkyForgeUIBridge {
   }
 
   bindControls(root) {
+    if (this.disposed) return;
     matchingControls(root, "input,select").forEach((control) => {
       if (this.bound.has(control)) return;
       const [path, scale] = CONTROL_BINDINGS[controlLabel(control)] || [];
@@ -164,12 +168,14 @@ export class SkyForgeUIBridge {
       control.dataset.sfCorePath = path;
       if (path === "sun.azimuth" || path === "sun.elevation") this.bindSunControlEvents(control.ownerDocument || document);
       const commit = () => {
+        if (this.disposed) return;
         const numeric = Number(control.value);
         const value = control.type === "checkbox" ? control.checked : Number.isFinite(numeric) ? numeric * scale : control.value;
         this.store.set(path, value, { label: `Change ${controlLabel(control)}` });
       };
       control.addEventListener("input", commit);
       control.addEventListener("change", commit);
+      this.controlListeners.set(control, commit);
       const value = this.store.get(path);
       if (value !== undefined) control.type === "checkbox" ? control.checked = Boolean(value) : control.value = typeof value === "number" ? value / scale : value;
     });
@@ -218,12 +224,17 @@ export class SkyForgeUIBridge {
   }
 
   observe() {
+    if (this.disposed) return;
+    this.observer?.disconnect();
     this.observer = new MutationObserver((mutations) => mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => { if (node.nodeType === 1) this.bindControls(node); })));
     this.observer.observe(document.body, { childList: true, subtree: true });
   }
 
   bindKeyboard() {
-    document.addEventListener("keydown", (event) => {
+    if (this.disposed || this.keyboardHandler) return;
+    this.keyboardOwner = document;
+    this.keyboardHandler = (event) => {
+      if (this.disposed) return;
       if (event.key === "Escape" && !this.hub.hidden) { event.preventDefault(); return this.closeHub(); }
       const mod = event.ctrlKey || event.metaKey;
       if (mod && event.shiftKey && event.key.toLowerCase() === "h") { event.preventDefault(); return this.openHub(); }
@@ -233,7 +244,8 @@ export class SkyForgeUIBridge {
       if (mod && event.shiftKey && event.key.toLowerCase() === "z") { event.preventDefault(); this.store.redo(); return; }
       if (mod && event.key.toLowerCase() === "z") { event.preventDefault(); this.store.undo(); return; }
       if (event.code === "Space" && !editable(event.target)) { event.preventDefault(); this.timeline.toggle(); }
-    });
+    };
+    this.keyboardOwner.addEventListener("keydown", this.keyboardHandler);
   }
 
   refresh(state, change = {}) {
@@ -255,7 +267,16 @@ export class SkyForgeUIBridge {
   }
 
   dispose() {
+    if (this.disposed) return;
     this.disposed = true;
+    for (const [control, commit] of this.controlListeners) {
+      control.removeEventListener("input", commit);
+      control.removeEventListener("change", commit);
+    }
+    this.controlListeners.clear();
+    this.keyboardOwner?.removeEventListener("keydown", this.keyboardHandler);
+    this.keyboardOwner = null;
+    this.keyboardHandler = null;
     for (const [documentRef, sync] of this.sunControlDocuments) {
       documentRef.removeEventListener("input", sync);
       documentRef.removeEventListener("change", sync);
