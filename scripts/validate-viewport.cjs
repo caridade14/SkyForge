@@ -89,7 +89,16 @@ fs.mkdirSync(out, { recursive: true });
     return position;
   };
   const assertIdle = async () => {
-    await page.waitForTimeout(180);
+    // Let finite startup/resize/LUT work settle even on the software CI GPU.
+    // A continuous render loop cannot satisfy the quiet interval.
+    await page.evaluate(() => { globalThis.__sfGateIdle = null; });
+    await page.waitForFunction(() => {
+      const viewport = SkyForgeCore.viewport, count = viewport.renderer.frames, now = performance.now();
+      if (!globalThis.__sfGateIdle || globalThis.__sfGateIdle.count !== count || viewport.frame !== null) {
+        globalThis.__sfGateIdle = { count, since: now }; return false;
+      }
+      return now - globalThis.__sfGateIdle.since >= 800;
+    }, null, { timeout: 15000 });
     const frames = await frameCount();
     await page.waitForTimeout(350);
     assert.equal(await frameCount(), frames, 'rendering sleeps after the gesture');
