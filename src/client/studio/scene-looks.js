@@ -1,13 +1,13 @@
 import { cloneValue, DEFAULT_CELESTIAL } from '../core/state-store.js';
 import { frameSky } from '../viewport/camera.js';
 
-export const STUDIO_VERSION='Studio R15';
+export const STUDIO_VERSION='Studio R16';
 export const SCENE_LOOKS=Object.freeze({
  'Cumulus daylight':{sun:{elevation:35,azimuth:215,intensity:1.6,temperature:5778},clouds:{type:'Cumulus',coverage:.66,density:.68,altitude:1800,thickness:1400,erosion:.28,detail:.8,seed:3301},azimuth:180,elevation:12},
  'Warm sunset':{sun:{elevation:3.5,azimuth:255,intensity:1.8,temperature:5778},clouds:{type:'Cumulus',coverage:.6,density:.65,altitude:1600,thickness:1600,erosion:.34,detail:.85,seed:731},azimuth:245,elevation:10},
  'Storm front':{sun:{elevation:25,azimuth:215,intensity:1.3,temperature:5778},clouds:{type:'Cumulonimbus',coverage:.87,density:.88,altitude:900,thickness:4000,erosion:.3,detail:.75,seed:481},azimuth:145,elevation:15},
  'Moonlit night':{sun:{elevation:-18,azimuth:215,intensity:1.8,temperature:5778},clouds:{type:'Cumulus',coverage:.2,density:.5,altitude:2000,thickness:1200,erosion:.45,detail:.75},stars:{enabled:true},moon:{enabled:true,azimuth:315,elevation:32,phase:.5},azimuth:315,elevation:32,exposure:3},
- 'Aurora night':{sun:{elevation:-18,azimuth:215,intensity:1.8,temperature:5778},clouds:{type:'Cumulus',coverage:.12,density:.4,altitude:2000,thickness:1200,erosion:.5,detail:.7},stars:{enabled:true},aurora:{enabled:true,intensity:.85,azimuth:0},azimuth:0,elevation:34,exposure:3},
+ 'Aurora night':{sun:{elevation:-18,azimuth:215,intensity:1.8,temperature:5778},clouds:{type:'Cumulus',coverage:.12,density:.4,altitude:2000,thickness:1200,erosion:.5,detail:.7},stars:{enabled:true},aurora:{enabled:true,intensity:.85,azimuth:0,width:6,height:210,curtains:2},azimuth:0,elevation:28,exposure:3},
  'Sunshower':{sun:{elevation:12,azimuth:210,intensity:1.8,temperature:5778},clouds:{type:'Cumulus',coverage:.3,density:.6,altitude:1800,thickness:1200,erosion:.5,detail:.8},rainbow:{enabled:true,rainAmount:.6},azimuth:30,elevation:20,fov:70}
 });
 

@@ -16,6 +16,7 @@ fs.mkdirSync(out, { recursive: true });
   const browser = await chromium.launch(launch);
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   const page = await context.newPage(); page.setDefaultTimeout(20000);
+  const studioCommand=async(menu,action)=>{if(!(await page.locator('#sf-studio-menus').isVisible())){const original={physical:'sun',home:'home',frame:'frame',grid:'grid',overlays:'overlays'}[action];return original?page.locator(`[data-vp="${original}"]`).click():page.locator(`[data-studio-action="${action}"]`).click();}await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
   const errors = [], requests = [], failedLighting = [], results = { backend: process.env.SKYFORGE_WEBGL_BACKEND || 'swiftshader', checks: [], metrics: {} };
   page.on('pageerror', error => errors.push(error.stack || error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(`${message.text()} ${message.location().url}`); });
@@ -96,7 +97,7 @@ fs.mkdirSync(out, { recursive: true });
     await command('Edit', 'undo'); assert.equal(await read('sun.elevation'), 2);
 
     stage('Core, workspace reset and editor menus expose their actual panels');
-    await page.locator('[data-studio-action="hub"]').click(); assert.equal(await page.locator('.sf-core-hub [data-panel="project"]').isVisible(), true);
+    await studioCommand('Help','hub'); assert.equal(await page.locator('.sf-core-hub [data-panel="project"]').isVisible(), true);
     await page.locator('.sf-core-hub [data-action="close"]').last().click();
     await page.locator('[data-studio-action="maximize"]').click();
     await command('Help', 'hub'); await page.locator('.sf-core-hub [data-action="reset-layout"]').click();

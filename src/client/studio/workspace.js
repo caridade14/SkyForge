@@ -19,7 +19,7 @@ const MENUS = {
   Scene: [['add-sphere', 'Add sphere'], ['add-cube', 'Add cube'], ['add-plane', 'Add plane'], ['lookdev', 'Add lighting reference bench'], ['add-stars', 'Add stars'], ['add-moon', 'Add Moon'], ['add-aurora', 'Add aurora'], ['add-rainbow', 'Add rainbow'], ['frame', 'Frame selection']],
   Animation: [['timeline', 'Open timeline'], ['play', 'Play / pause'], ['add-key', 'Insert key for active track'], ['previous-key', 'Previous keyframe'], ['next-key', 'Next keyframe'], ['delete-keys', 'Delete selected keys']],
   Nodes: [['nodes', 'Open node editor'], ['frame-graph', 'Frame graph'], ['from-controls', 'Copy sky controls to graph'], ['direct', 'Use direct controls'], ['graph', 'Use node graph'], ['default-graph', 'Create default graph']],
-  Help: [['hub', 'Core Command Center'], ['bridge', 'Blender Bridge'], ['graphics', 'Graphics diagnostics'], ['help', 'Navigation & preview guide'], ['legacy', 'Legacy workspace']]
+  Help: [['hub', 'Core Command Center'], ['bridge', 'Blender Bridge'], ['graphics', 'Graphics diagnostics'], ['help', 'Navigation & preview guide']]
 };
 
 export function normalizeStudioLayout(value = {}) {
@@ -202,7 +202,10 @@ export class StudioWorkspace {
         const open = trigger.getAttribute('aria-expanded') === 'true'; this.closeMenus();
         if (!open) { trigger.setAttribute('aria-expanded', 'true'); trigger.nextElementSibling.hidden = false; }
       }
-      if (command) { this.closeMenus(); this.action(command.dataset.studioCommand); }
+      if (command) {
+        const trigger=command.closest('.sf-studio-menu')?.querySelector('[data-studio-menu]');
+        this.closeMenus();trigger?.focus();this.action(command.dataset.studioCommand);
+      }
     });
     this.on(this.menus, 'keydown', event => {
       const menu = event.target.closest('.sf-studio-menu'); if (!menu) return;
@@ -271,7 +274,7 @@ export class StudioWorkspace {
   }
   finishCloudScale(cancel){const edit=this.cloudScaleEdit;this.cloudScaleEdit=null;if(edit?.active)cancel?edit.cancel():edit.commit();if(this.cloudScale)this.cloudScale.value=String(this.api.store.get('clouds.scale')??1200);}
   initLooks(){
-    this.toolbar.querySelector('strong').append(Object.assign(this.document.createElement('span'),{className:'sf-studio-version',textContent:'R15',title:STUDIO_VERSION}));
+    this.toolbar.querySelector('strong').append(Object.assign(this.document.createElement('span'),{className:'sf-studio-version',textContent:'R16',title:STUDIO_VERSION}));
     this.looks=this.document.createElement('section');this.looks.id='sec-sf-looks';this.looks.className='s-sec';
     this.looks.innerHTML='<div class="s-head">Sky looks</div><div class="s-body-inner sf-sky-looks"><p>Select a look to set the sky, display exposure and camera together. Undo restores the previous look.</p>'+Object.keys(SCENE_LOOKS).map((name,index)=>`<button type="button" data-scene-look="${name}" class="sf-look-${index}"><span class="sf-look-swatch" aria-hidden="true"></span><strong>${name}</strong></button>`).join('')+'</div>';
     this.sidebar?.querySelector('.s-body')?.append(this.looks);

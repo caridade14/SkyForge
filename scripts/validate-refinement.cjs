@@ -15,7 +15,7 @@ const out=process.env.SKYFORGE_TEST_OUTPUT||'/tmp/skyforge-refinement';fs.mkdirS
  try{
   await ready(page);stage('native display resolution with an independently bounded float cloud pass');
   const initial=await frame(page);assert.equal(initial.error,0);assert.equal(initial.clouds.pipeline,'separate');assert.ok(initial.clouds.pixels<=250000);assert.ok(initial.w*initial.h>initial.clouds.pixels);assert.ok(initial.w*initial.h<=2000000);assert.ok(['rgba16f','rgba32f','rgba8-log'].includes(initial.clouds.bufferFormat));results.metrics.initial=initial.clouds;
-  assert.equal(await page.locator('.sf-studio-version').textContent(),'R15');
+  assert.equal(await page.locator('.sf-studio-version').textContent(),'R16');
   assert.equal(await page.locator('[data-vp="mode"]').textContent(),'3D View');assert.equal(await page.locator('[data-vp="mode"]').getAttribute('aria-pressed'),'true');
   stage('adding a celestial layer from Legacy opens real 3D in one Undo; navigation buttons reflect the active tool');
   await page.evaluate(()=>SkyForgeCore.store.set('viewport.mode','legacy'));assert.equal(await page.locator('.sf-3d-alert').isVisible(),true);
@@ -60,7 +60,7 @@ const out=process.env.SKYFORGE_TEST_OUTPUT||'/tmp/skyforge-refinement';fs.mkdirS
   stage('visible graphics failure and a working retry; diagnostic download reports the actual renderer');
   await page.evaluate(()=>{const v=SkyForgeCore.viewport;v.error='Regression recovery example';v.setActive(false,false);});assert.equal(await page.locator('.sf-3d-alert').isVisible(),true);
   assert.match(await page.locator('.sf-studio-status').textContent(),/Legacy View/);await page.locator('.sf-3d-alert button').click();const recovered=await frame(page);assert.equal(recovered.error,0);assert.equal(await page.locator('.sf-3d-alert').isVisible(),false);assert.equal(await page.evaluate(()=>SkyForgeCore.viewport.error),null);
-  await page.evaluate(()=>SkyForgeCore.workspace.showGraphics());const report=JSON.parse(await page.locator('.sf-graphics-report pre').textContent());assert.equal(report.version,'Studio R15');assert.equal(report.renderer,'WebGL');assert.equal(report.clouds.pipeline,'separate');
+  await page.evaluate(()=>SkyForgeCore.workspace.showGraphics());const report=JSON.parse(await page.locator('.sf-graphics-report pre').textContent());assert.equal(report.version,'Studio R16');assert.equal(report.renderer,'WebGL');assert.equal(report.clouds.pipeline,'separate');
   const download=page.waitForEvent('download');await page.locator('[data-graphics-download]').click();assert.equal((await download).suggestedFilename(),'skyforge-graphics-report.json');await page.locator('.sf-graphics-report form button').click();
   stage('a renderer initialization failure after real context restoration remains retryable');
   await page.evaluate(()=>{const v=SkyForgeCore.viewport,restore=v.createRenderer.bind(v);v.createRenderer=()=>{v.createRenderer=restore;throw new Error('Context restoration regression');};globalThis.refinementLoseContext=v.renderer.gl.getExtension('WEBGL_lose_context');refinementLoseContext.loseContext();});

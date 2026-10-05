@@ -18,6 +18,7 @@ fs.mkdirSync(out, { recursive: true });
   const browser = await chromium.launch(launch);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(15000);
+  const studioCommand=async(menu,action)=>{if(!(await page.locator('#sf-studio-menus').isVisible())){const original={physical:'sun',home:'home',frame:'frame',grid:'grid',overlays:'overlays'}[action];return original?page.locator(`[data-vp="${original}"]`).click():page.locator(`[data-studio-action="${action}"]`).click();}await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
   const errors = [];
   page.on('pageerror', e => errors.push(e.stack || e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -355,7 +356,7 @@ fs.mkdirSync(out, { recursive: true });
 
     // Physical evaluation remains explicit and uses its existing LUT once angles match.
     await page.getByLabel('Sky lighting source',{exact:true}).selectOption('backend');
-    await page.locator('[data-vp=sun]').click();
+    await studioCommand('Sky','physical');
     await page.waitForFunction(() => SkyForgeCore.viewport.renderer.usingLut === true, {}, { timeout: 10000 });
     const solar = await page.evaluate(() => SkyForgeCore.viewport.payload.evaluation.solarPosition);
     assert.equal((await readSun()).azimuth, solar.azimuthDeg);
@@ -404,7 +405,7 @@ fs.mkdirSync(out, { recursive: true });
       const id = referenceIds[type];
       await page.locator(`[data-sf-reference-id="${id}"]`).click();
       const frameBefore = await frameCount();
-      await page.locator('[data-vp="frame"]').click(); await nextFrame(frameBefore);
+      await studioCommand('Scene','frame'); await nextFrame(frameBefore);
       assert.deepEqual((await readCamera()).target, (await readReference(id)).position, 'toolbar frames the selected reference');
       await mutateAndDraw(() => SkyForgeCore.store.set('scene.selectedReferenceId', null, { record: false }));
       const point = await referenceScreenPoint(id);

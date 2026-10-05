@@ -12,8 +12,10 @@ on:
       - feature/lighting-workbench
       - feature/atmosphere-celestial-studio
       - feature/studio-render-refinement
+      - feature/celestial-realism-ui
   pull_request:
     branches:
+      - feature/studio-render-refinement
       - feature/atmosphere-celestial-studio
       - feature/lighting-workbench
       - fix/studio-natural-preview-ui

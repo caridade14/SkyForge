@@ -1,5 +1,5 @@
 import { normalizeCelestial } from '../core/celestial-state.js';
-import { moonIlluminatedFraction } from '../viewport/celestial-effects.js';
+import { moonIlluminatedFraction, moonDiameterPixels } from '../viewport/celestial-effects.js';
 import { frameSky } from '../viewport/camera.js';
 
 const FIELDS={
@@ -14,7 +14,7 @@ export class CelestialPanel {
   on(target,type,fn){target.addEventListener(type,fn);this.listeners.push([target,type,fn]);}
   init(){
     const doc=this.document;this.section=doc.createElement('section');this.section.id='sec-sf-effects';this.section.className='s-sec';
-    this.section.innerHTML=`<div class="s-head">Sky effects</div><div class="s-body-inner sf-effects-panel"><div class="sf-effects-presets">${['Moonlit night','Aurora night','Sunshower'].map(name=>`<button type="button" data-effects-preset="${name}">${name}</button>`).join('')}</div>${Object.entries(FIELDS).map(([root,fields])=>`<fieldset data-effect="${root}"><legend><label><input type="checkbox" data-celestial-path="${root}.enabled">${LABELS[root]}</label></legend>${root!=='stars'?`<button type="button" data-effect-focus="${root}">Frame ${LABELS[root]}</button>`:''}${fields.map(([key,label,min,max,step])=>`<label class="sf-effect-control"><span>${label}</span><input type="number" min="${min}" max="${max}" step="${step}" data-celestial-path="${root}.${key}" aria-label="${LABELS[root]} ${label}"></label>`).join('')}${root==='moon'?'<output class="sf-moon-phase"></output>':root==='rainbow'?'<label class="sf-effect-control"><span>Secondary bow</span><input type="checkbox" data-celestial-path="rainbow.secondary"></label>':''}</fieldset>`).join('')}<p class="sf-studio-preview-note">Stars are procedural. Moon phase and position are art directed. Aurora is a folded emission sheet preview. The rainbow follows the Sun and rain amount. Enable a layer and frame it; stars and aurora are easiest to see at night.</p></div>`;
+    this.section.innerHTML=`<div class="s-head">Sky effects</div><div class="s-body-inner sf-effects-panel"><div class="sf-effect-tabs" role="tablist" aria-label="Effect controls">${Object.entries(LABELS).map(([key,label])=>`<button type="button" role="tab" data-effect-tab="${key}" id="sf-effect-tab-${key}" aria-controls="sf-effect-pane-${key}">${label}</button>`).join('')}</div>${Object.entries(FIELDS).map(([root,fields])=>`<fieldset class="sf-effect-pane" data-effect="${root}" id="sf-effect-pane-${root}" role="tabpanel" aria-labelledby="sf-effect-tab-${root}"><legend><label><input type="checkbox" data-celestial-path="${root}.enabled">${LABELS[root]}</label></legend>${root!=='stars'?`<button type="button" data-effect-focus="${root}">Frame ${LABELS[root]}</button>`:''}${fields.map(([key,label,min,max,step])=>`<label class="sf-effect-control"><span>${label}</span><input type="number" min="${min}" max="${max}" step="${step}" data-celestial-path="${root}.${key}" aria-label="${LABELS[root]} ${label}"></label>`).join('')}${root==='moon'?'<div class="sf-moon-size-actions"><button type="button" data-moon-size="physical">Real size · 0.52°</button><button type="button" data-moon-size="zoom">Telephoto view</button></div><output class="sf-moon-size"></output><output class="sf-moon-phase"></output>':root==='rainbow'?'<label class="sf-effect-control"><span>Secondary bow</span><input type="checkbox" data-celestial-path="rainbow.secondary"></label>':''}</fieldset>`).join('')}<p class="sf-studio-preview-note">Enable a layer, then frame it. Night scenes show stars and aurora best. Telephoto view changes the lens; Real size restores the Moon’s angular diameter. Scene presets are in Sky looks.</p></div>`;
     (this.workspace.sidebar?.querySelector('.s-body')||this.workspace.sidebar)?.append(this.section);
     this.quick=doc.createElement('div');this.quick.className='sf-effects-quick';this.quick.setAttribute('aria-label','Sky layers');
     this.quick.innerHTML='<span>SKY LAYERS</span>'+Object.entries(LABELS).map(([key,label])=>`<button type="button" data-effect-add="${key}">${label}</button>`).join('');
@@ -22,7 +22,9 @@ export class CelestialPanel {
     this.on(this.quick,'click',event=>{const key=event.target.closest('[data-effect-add]')?.dataset.effectAdd;if(key)this.add(key);});
     this.on(this.section,'click',event=>{
       const focus=event.target.closest('[data-effect-focus]')?.dataset.effectFocus;if(focus)this.frame(focus);
-      const preset=event.target.closest('[data-effects-preset]')?.dataset.effectsPreset;if(preset)this.preset(preset);
+      const tab=event.target.closest('[data-effect-tab]')?.dataset.effectTab;if(tab)this.select(tab);
+      const size=event.target.closest('[data-moon-size]')?.dataset.moonSize;
+      if(size){this.finish(false);this.api.store.batch(size==='physical'?'Set physical Moon size':'Moon telephoto framing',draft=>{if(size==='physical')draft.moon.angularDiameter=.52;else{draft.camera.fov=20;draft.viewport.camera=frameSky(draft.viewport.camera,draft.moon.azimuth,draft.moon.elevation);draft.viewport.mode='webgl';}});if(size==='zoom')this.api.viewport.open3D();}
     });
     for(const input of this.section.querySelectorAll('input[data-celestial-path]')){
       const path=input.dataset.celestialPath;
@@ -44,6 +46,8 @@ export class CelestialPanel {
         this.on(input,'keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();this.finish(true);input.blur();}});
       }
     }
+    this.on(this.section,'keydown',event=>{const tab=event.target.closest('[data-effect-tab]');if(!tab)return;const keys=Object.keys(LABELS),i=keys.indexOf(tab.dataset.effectTab);let next;if(event.key==='ArrowRight')next=keys[(i+1)%keys.length];if(event.key==='ArrowLeft')next=keys[(i+keys.length-1)%keys.length];if(event.key==='Home')next=keys[0];if(event.key==='End')next=keys.at(-1);if(next){event.preventDefault();event.stopPropagation();this.select(next);this.section.querySelector(`[data-effect-tab="${next}"]`).focus();}});
+    this.select('moon');
     this.on(this.root,'blur',()=>this.finish(true));
     this.on(doc,'visibilitychange',()=>{if(doc.hidden)this.finish(true);});
     this.unsubscribe=this.api.store.subscribe(state=>this.sync(state));this.sync(this.api.store.snapshot());return this;
@@ -56,44 +60,31 @@ export class CelestialPanel {
       if(input.type==='checkbox')input.checked=Boolean(value);
       else if(this.edit?.input!==input)input.value=String(Number(value.toFixed(4)));
     }
+    const pixels=moonDiameterPixels(effects.moon.angularDiameter,state.camera?.fov,this.api.viewport.canvas?.height);
+    this.section.querySelector('.sf-moon-size').textContent=`${effects.moon.angularDiameter.toFixed(2)}° · ~${pixels.toFixed(1)} pixels at frame centre · ${effects.moon.angularDiameter<=.6&&effects.moon.angularDiameter>=.48?'Natural scale':'Art directed scale'}`;
     this.section.querySelector('.sf-moon-phase').textContent=`${Math.round(moonIlluminatedFraction(effects.moon.phase)*100)}% illuminated · New 0 / Full 0.5`;
     for(const button of this.quick.querySelectorAll('[data-effect-add]'))button.setAttribute('aria-pressed',String(effects[button.dataset.effectAdd].enabled));
+  }
+  select(root){
+    if(!FIELDS[root])return;this.finish(false);this.active=root;
+    for(const pane of this.section.querySelectorAll('[data-effect]'))pane.hidden=pane.dataset.effect!==root;
+    for(const tab of this.section.querySelectorAll('[data-effect-tab]')){const active=tab.dataset.effectTab===root;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
   }
   finish(cancel){const edit=this.edit;if(!edit)return;this.edit=null;cancel?edit.session.cancel():edit.session.commit();this.sync(this.api.store.snapshot());}
   add(root){
     if(!FIELDS[root])return;
     this.finish(false);this.api.store.batch(`Add ${LABELS[root]} sky layer`,draft=>{draft[root].enabled=true;draft.viewport.mode='webgl';});this.api.viewport.open3D();this.workspace.showSky('effects');
-    this.section.querySelector(`[data-effect="${root}"]`)?.scrollIntoView({block:'nearest'});
+    this.select(root);this.section.querySelector(`[data-effect="${root}"]`)?.scrollIntoView({block:'nearest'});
   }
   frame(root){
     this.finish(false);const state=this.api.store.snapshot();let azimuth,elevation;
     if(root==='moon'){azimuth=state.moon.azimuth;elevation=state.moon.elevation;}
-    else if(root==='aurora'){azimuth=state.aurora.azimuth;elevation=34;}
+    else if(root==='aurora'){azimuth=state.aurora.azimuth;elevation=28;}
     else if(root==='rainbow'){azimuth=(state.sun.azimuth+180)%360;elevation=Math.max(4,42-state.sun.elevation);}
     else return;
     this.api.store.batch(`Frame ${root}`,draft=>{draft.viewport.camera=frameSky(draft.viewport.camera,azimuth,elevation);draft.viewport.mode='webgl';});
     this.api.viewport.open3D();
   }
-  preset(name){
-    this.finish(false);
-    this.api.store.batch(`Sky effects preset ${name}`,draft=>{
-      draft.viewport.skySource='integrated';
-      draft.viewport.mode='webgl';draft.viewport.cloudMode='volumetric';
-      if(name==='Sunshower'){
-        Object.assign(draft.sun,{elevation:12,intensity:1.8,temperature:5778});draft.camera.exposure=1;
-        Object.assign(draft.clouds,{type:'Cumulus',coverage:.35,density:.65,precipitation:.6});Object.assign(draft.rainbow,{enabled:true,rainAmount:.5,intensity:1});
-        draft.stars.enabled=false;draft.aurora.enabled=false;
-      }else{
-        Object.assign(draft.sun,{elevation:-18,intensity:1.8,temperature:5778});draft.camera.exposure=4;
-        Object.assign(draft.clouds,{type:'Cumulus',coverage:.22,density:.55});Object.assign(draft.stars,{enabled:true,brightness:1});Object.assign(draft.moon,{enabled:true,phase:.5,brightness:1});draft.rainbow.enabled=false;
-        draft.aurora.enabled=name==='Aurora night';if(draft.aurora.enabled)draft.aurora.intensity=1;
-      }
-      const root=name==='Sunshower'?'rainbow':name==='Aurora night'?'aurora':'moon';
-      const az=root==='rainbow'?(draft.sun.azimuth+180)%360:draft[root].azimuth;
-      const el=root==='rainbow'?30:root==='aurora'?34:draft.moon.elevation;
-      draft.viewport.camera=frameSky(draft.viewport.camera,az,el);
-    });
-    this.api.viewport.open3D();this.workspace.showSky('effects');
-  }
+  preset(name){this.finish(false);if(['Moonlit night','Aurora night','Sunshower'].includes(name))this.workspace.selectLook(name);}
   dispose(){this.finish(true);this.unsubscribe?.();for(const [target,type,fn]of this.listeners)target.removeEventListener(type,fn);this.listeners=[];this.section?.remove();this.quick?.remove();}
 }

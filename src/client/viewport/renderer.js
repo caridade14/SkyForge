@@ -8,7 +8,7 @@ import { SkyReflectionProbe } from './sky-reflections.js';
 import { AtmosphereTransport, blackbodyTint, encodeAtmosphereRGBM, opticalDepth } from './atmosphere-transport.js';
 import { makeCloudNoise } from './cloud-noise.js';
 import { CloudRenderPass, CLOUD_COMPOSITE_GLSL, DISPLAY_BUDGET } from './cloud-pass.js';
-import { CELESTIAL_UNIFORMS, CELESTIAL_GLSL, celestialUniforms, normalizeCelestial, starField } from './celestial-effects.js';
+import { CELESTIAL_UNIFORMS, CELESTIAL_GLSL, celestialUniforms, normalizeCelestial, starCatalogue } from './celestial-effects.js';
 
 
 const SKY_VERTEX = `attribute vec2 aPosition; varying vec2 vNdc;
@@ -301,7 +301,7 @@ export class SkyViewportRenderer {
       this.lutSize=[1,1];
       this.transport=new AtmosphereTransport();
       this.cloudPass=new CloudRenderPass(gl,program,(...args)=>this.uniform(...args),p=>this.bindTransport(p));
-      this.integratedTexture=this.createTexture();this.noiseTexture=this.createTexture(true);this.starTexture=this.createTexture(true,true);gl.bindTexture(gl.TEXTURE_2D,this.starTexture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      this.integratedTexture=this.createTexture();this.noiseTexture=this.createTexture(true);this.starTexture=this.createTexture(false,true);gl.bindTexture(gl.TEXTURE_2D,this.starTexture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     }catch(error){this.dispose();throw error;}
   }
   createTexture(linear=false,repeat=false){
@@ -324,8 +324,8 @@ export class SkyViewportRenderer {
     }
     const stars=normalizeCelestial(state).stars,key=JSON.stringify([stars.seed,stars.count]);
     if(stars.enabled&&this.starKey!==key){
-      const field=starField(stars.seed,stars.count);g.activeTexture(g.TEXTURE5);g.bindTexture(g.TEXTURE_2D,this.starTexture);
-      g.texImage2D(g.TEXTURE_2D,0,g.RGBA,field.width,field.height,0,g.RGBA,g.UNSIGNED_BYTE,field.data);this.starKey=key;
+      const field=starCatalogue(stars.seed,stars.count);g.activeTexture(g.TEXTURE5);g.bindTexture(g.TEXTURE_2D,this.starTexture);
+      g.texImage2D(g.TEXTURE_2D,0,g.RGBA,field.width,field.height,0,g.RGBA,g.UNSIGNED_BYTE,field.data);this.starKey=key;this.starFieldSize=[field.width,field.height];this.starPackedCount=field.packedCount;
     }
     g.activeTexture(g.TEXTURE0);return physical;
   }
@@ -334,6 +334,7 @@ export class SkyViewportRenderer {
     for(const [unit,texture,uniform] of [[3,this.integratedTexture,'uIntegratedSky'],[4,this.noiseTexture,'uCloudNoise'],[5,this.starTexture,'uStarField']]){
       g.activeTexture(g.TEXTURE0+unit);g.bindTexture(g.TEXTURE_2D,texture);this.uniform(p,uniform,'uniform1i',unit);
     }
+    this.uniform(p,'uStarFieldSize','uniform2fv',this.starFieldSize||[512,256]);
     g.activeTexture(g.TEXTURE0);
   }
   buffer(data){const g=this.gl,b=g.createBuffer();this.resources.push(b);g.bindBuffer(g.ARRAY_BUFFER,b);g.bufferData(g.ARRAY_BUFFER,data,g.STATIC_DRAW);return b;}
@@ -473,7 +474,7 @@ export class SkyViewportRenderer {
     this.frameTimeMs=performance.now()-started;
     const cloudSize=separate?size:{width:this.canvas.width,height:this.canvas.height};
     this.cloudMetrics={mode:skyProgram===this.sky?'layer':'volumetric',quality:this.cloudSettings.quality,samples:skyProgram===this.sky?0:this.cloudSettings.samples,shadowSamples:skyProgram===this.sky?0:this.cloudSettings.shadowSamples,cloudShadows:this.mesh===this.cloudMesh,...cloudSize,pixels:cloudSize.width*cloudSize.height,pipeline:separate?'separate':'full-frame',displayWidth:this.canvas.width,displayHeight:this.canvas.height,displayPixels:this.canvas.width*this.canvas.height,bufferFormat:separate?this.cloudPass.format:null,cloudDraws:this.cloudPass.draws,bufferFallback:this.cloudPass.error||null,frameTimeMs:this.frameTimeMs};
-    this.lightingMetrics={objectShadows:this.objectShadows.active,shadowMapSize:this.objectShadows.resolution||0,shadowDraws:this.objectShadows.draws,shadowFallback:this.objectShadows.error||this.objectShadows.reason||null,cloudSunAltitudeMetres:cloudSunAltitude,cloudSunTransmission,geometricShadowReceivers:this.geometricReceivers,skySource:this.usingLut?'backend relative LUT':'integrated atmosphere',atmosphereBuilds:this.transport.builds,opticalBuilds:this.transport.opticalBuilds,atmosphereSize:[physical.width,physical.height],celestial:normalizeCelestial(state),reflectionSamples:5,reflectionProbe:this.reflectionProbe.active,reflectionSize:[this.reflectionProbe.width||0,this.reflectionProbe.height||0],reflectionDraws:this.reflectionProbe.draws,reflectionFallback:this.reflectionProbe.error||null};
+    this.lightingMetrics={objectShadows:this.objectShadows.active,shadowMapSize:this.objectShadows.resolution||0,shadowDraws:this.objectShadows.draws,shadowFallback:this.objectShadows.error||this.objectShadows.reason||null,cloudSunAltitudeMetres:cloudSunAltitude,cloudSunTransmission,geometricShadowReceivers:this.geometricReceivers,skySource:this.usingLut?'backend relative LUT':'integrated atmosphere',atmosphereBuilds:this.transport.builds,opticalBuilds:this.transport.opticalBuilds,atmosphereSize:[physical.width,physical.height],starCatalogueSize:this.starFieldSize||null,starPackedCount:this.starPackedCount||0,celestial:normalizeCelestial(state),reflectionSamples:5,reflectionProbe:this.reflectionProbe.active,reflectionSize:[this.reflectionProbe.width||0,this.reflectionProbe.height||0],reflectionDraws:this.reflectionProbe.draws,reflectionFallback:this.reflectionProbe.error||null};
   }
   drawMesh(buffer,count,mode,lines,offset=[0,0,0],scale=[1,1,1],rotation=identityRotation,material){
     const g=this.gl;g.bindBuffer(g.ARRAY_BUFFER,buffer);const enabled=[];
