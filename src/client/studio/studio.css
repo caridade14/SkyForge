@@ -141,3 +141,27 @@ body.sf-studio-legacy-layout .sf-studio-toolbar .sf-studio-tools,body.sf-studio-
 .sf-graphics-report button{background:#293e50;border:1px solid #597083;border-radius:4px;padding:7px 12px;color:#e1ebf3;cursor:pointer}
 .sf-studio-cloud-scale{display:flex;align-items:center;justify-content:space-between;color:#bccbd9;font:11px system-ui;margin:12px 0}
 .sf-studio-cloud-scale input{width:90px;min-width:0;border:1px solid #4c6478;border-radius:4px;background:#152330;color:#dce8f3;padding:5px;font:11px monospace}
+
+/* One Studio command surface per task. Existing Legacy DOM and listeners are
+   preserved and become visible again when that workspace is selected. */
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-file,
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-tools>button,
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-view-actions [data-studio-action="capture"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-view-actions [data-studio-action="hub"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-view-actions [data-studio-action="left"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-view-actions [data-studio-action="right"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-view-actions [data-studio-action="bottom"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-core-badge,
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-core-status{display:none!important}
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-3d-toolbar [data-vp="home"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-3d-toolbar [data-vp="frame"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-3d-toolbar [data-vp="grid"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-3d-toolbar [data-vp="overlays"],
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-3d-toolbar [data-vp="sun"]{display:none!important}
+.sf-effect-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;margin-bottom:12px}
+.sf-effect-tabs [role=tab]{padding:8px 3px;background:var(--bg2,#25282d);color:var(--t1,#ddd);border:1px solid var(--b1,#353840);border-radius:4px;cursor:pointer;font:11px system-ui}
+.sf-effect-tabs [aria-selected=true]{border-color:var(--acc,#e8812a);color:var(--acc,#e8812a);background:var(--accd,#e8812a22)}
+.sf-effect-tabs [role=tab]:focus-visible{outline:2px solid var(--acc,#e8812a);outline-offset:2px}
+.sf-effect-pane[hidden]{display:none!important}
+.sf-moon-size-actions{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.sf-moon-size{display:block;font:11px/1.6 system-ui;color:var(--t2,#bfc4cc);margin:8px 0}

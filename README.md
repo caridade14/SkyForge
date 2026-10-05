@@ -2,6 +2,10 @@
 
 SkyForge é uma workstation local para criação de céus físicos, atmosfera, HDRI, animação de iluminação e integração com aplicações 3D. O projeto utiliza Node.js sem frameworks externos e mantém a persistência principal em SQLite (`data/skyforge.db`).
 
+O **Studio R16** refina Lua, estrelas, aurora e arco-íris e consolida os menus.
+A Lua tem tamanho angular explícito e enquadramento telefoto; os efeitos têm
+abas individuais. Detalhes e limites: [Celestial realism / UI](docs/CELESTIAL_REALISM_UI.md).
+
 O **Studio R15** acrescenta seis looks completos com Undo, dimensão das nuvens em
 metros, render de nuvens separado da resolução da viewport, correções de sombras
 e enquadramento, ativação dos efeitos a partir do Legacy e diagnóstico gráfico.
