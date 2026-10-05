@@ -25,7 +25,7 @@ const vector = value => Array.isArray(value) ? value : [value, value, value];
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   const page = await context.newPage();
   page.setDefaultTimeout(20000);
-  const studioCommand=async(menu,action)=>{await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
+  const studioCommand=async(menu,action)=>{if(!(await page.locator('#sf-studio-menus').isVisible())){return action==='physical'?page.locator('[data-vp="sun"]').click():page.locator(`[data-studio-action="${action}"]`).click();}await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
   // Cold shader compilation on a software WebGL device can outlast normal UI
   // interactions. Keep navigation bounded while allowing that startup cost.
   page.setDefaultNavigationTimeout(45000);

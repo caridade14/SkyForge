@@ -16,7 +16,7 @@ fs.mkdirSync(out, { recursive: true });
   const browser = await chromium.launch(launch);
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   const page = await context.newPage(); page.setDefaultTimeout(20000);
-  const studioCommand=async(menu,action)=>{await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
+  const studioCommand=async(menu,action)=>{if(!(await page.locator('#sf-studio-menus').isVisible())){return action==='physical'?page.locator('[data-vp="sun"]').click():page.locator(`[data-studio-action="${action}"]`).click();}await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
   const errors = [], requests = [], failedLighting = [], results = { backend: process.env.SKYFORGE_WEBGL_BACKEND || 'swiftshader', checks: [], metrics: {} };
   page.on('pageerror', error => errors.push(error.stack || error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(`${message.text()} ${message.location().url}`); });

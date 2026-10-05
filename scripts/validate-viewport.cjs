@@ -18,7 +18,7 @@ fs.mkdirSync(out, { recursive: true });
   const browser = await chromium.launch(launch);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(15000);
-  const studioCommand=async(menu,action)=>{await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
+  const studioCommand=async(menu,action)=>{if(!(await page.locator('#sf-studio-menus').isVisible())){return action==='physical'?page.locator('[data-vp="sun"]').click():page.locator(`[data-studio-action="${action}"]`).click();}await page.locator(`[data-studio-menu="${menu}"]`).click();await page.locator(`#sf-studio-menus [aria-label="${menu}"] [data-studio-command="${action}"]`).click();};
   const errors = [];
   page.on('pageerror', e => errors.push(e.stack || e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
