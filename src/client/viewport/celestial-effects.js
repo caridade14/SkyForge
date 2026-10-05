@@ -216,7 +216,7 @@ vec3 addRainbow(vec3 sky,vec3 rd){
  // gap between bows gets no added caustic light (Alexander's band).
  float interior=(1.0-smoothstep(.707,.74,angle))*.012;
  vec2 shaft=rd.xy/max(.15,rd.z)*3.0;
- float rainShaft=smoothstep(.16,.8,noise(shaft+vec2(12.6,35.8)));
+ float rainShaft=.55+.45*noise(shaft*.35+vec2(12.6,35.8));
  float horizon=smoothstep(0.0,0.035,rd.z);
  return sky+(primary+secondary+vec3(interior))*uSunTint*uIntensity*uRainbowIntensity*horizon*rainShaft;
 }
