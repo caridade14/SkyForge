@@ -74,7 +74,10 @@ existing scene data. `scripts/validate-celestial-realism.cjs` measures actual
 Moon disc pixels at two lenses, star component sizes, emission/animation changes,
 Alexander's band, real UI commands, edit history, idle rendering and disposal.
 The six earlier WebGL/UI gates remain enabled and use the consolidated command
-surfaces. CI retains screenshots and JSON results as artifacts.
+surfaces. CI runs all seven gates in four isolated groups (viewport, Studio/UI,
+lighting, celestial), each with its own checkout, database and gateway. A failure
+in one group does not skip the other groups. Screenshots and JSON results remain
+available as separate artifacts.
 
 The preview remains relative linear RGB with the existing display mapping. This
 change does not add a calibrated professional HDR/EXR renderer or an OCIO pipeline.
