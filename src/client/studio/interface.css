@@ -124,3 +124,7 @@ body.sf-studio-enabled:not(.sf-studio-legacy-layout) .sf-studio-right{border-lef
 @media(prefers-reduced-motion:reduce){
 body.sf-studio-enabled:not(.sf-studio-legacy-layout) :is(button,input,select){transition:none!important}
 }
+
+/* Fixed popups must use viewport coordinates, including inside a scrolling menubar. */
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) .menubar{backdrop-filter:none;-webkit-backdrop-filter:none;filter:none}
+body.sf-studio-enabled:not(.sf-studio-legacy-layout) :is(.sidebar,.rpanel,.center-col){backdrop-filter:none;-webkit-backdrop-filter:none}

@@ -144,6 +144,7 @@ export class StudioWorkspace {
     this.move(this.rpanel, this.right.querySelector('.sf-studio-selection'));
     this.move(this.sidebar, this.right.querySelector('.sf-studio-sky'));
     this.initMenus(); this.initSkyControls(); this.lightingBench = new LightingWorkbench(this.api, this).init(); this.effects = new CelestialPanel(this.api,this).init();this.initLooks();
+    for (const button of this.left.querySelectorAll('[data-effect-add]')) button.setAttribute('aria-label', button.textContent.trim());
     this.outlinerNew = this.outliner?.querySelector('[onclick="sfCreateSceneObject()"]');
     this.outlinerNewTitle = this.outlinerNew?.title;
     this.on(this.root, 'click', event => {
@@ -401,10 +402,14 @@ initMenus() {
   sync(state) {
     if (!this.toolbar) return;
     const projectName = this.projectLabel.querySelector('.sf-studio-document-name');
-    projectName.textContent = state.project?.name || 'Untitled SkyForge Scene'; projectName.title = projectName.textContent;
-    const projectState = this.projectLabel.querySelector('.sf-studio-document-state');
-    projectState.textContent = state.project?.modified ? 'Modified' : 'Saved'; projectState.dataset.modified = String(Boolean(state.project?.modified));
-    this.left.querySelector('.sf-studio-empty').hidden = Object.keys(state.scene?.referenceObjects || {}).length > 0;
+    const name = state.project?.name || 'Untitled SkyForge Scene';
+    if (projectName.textContent !== name) { projectName.textContent = name; projectName.title = name; }
+    const projectState = this.projectLabel.querySelector('.sf-studio-document-state'), modified = Boolean(state.project?.modified);
+    const label = modified ? 'Modified' : 'Saved';
+    if (projectState.textContent !== label) projectState.textContent = label;
+    if (projectState.dataset.modified !== String(modified)) projectState.dataset.modified = String(modified);
+    const empty = this.left.querySelector('.sf-studio-empty'), populated = Object.keys(state.scene?.referenceObjects || {}).length > 0;
+    if (empty.hidden !== populated) empty.hidden = populated;
     const tool = state.viewport?.transformTool || 'move';
     const transforms=(state.viewport?.navigationTool||'transform')==='transform';
     for (const name of ['move', 'rotate', 'scale']) this.toolbar.querySelector(`[data-studio-action="${name}"]`).setAttribute('aria-pressed', String(transforms&&tool === name));

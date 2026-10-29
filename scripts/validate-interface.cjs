@@ -97,7 +97,7 @@ fs.mkdirSync(out, { recursive: true });
         const trigger = page.locator('[data-studio-menu="' + name + '"]');
         await trigger.click();
         const rect = await page.locator('#sf-studio-menu-' + name).boundingBox();
-        assert.ok(rect && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= size.width + 1 && rect.y + rect.height <= size.height + 1, name + ' fits ' + size.width);
+        assert.ok(rect && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= size.width + 1 && rect.y + rect.height <= size.height + 1, name + ' fits ' + size.width + ': ' + JSON.stringify(rect));
         await page.keyboard.press('Escape');
       }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
