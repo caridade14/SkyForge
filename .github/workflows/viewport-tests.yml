@@ -39,7 +39,8 @@ jobs:
             scripts: scripts/validate-lighting.cjs
           - group: celestial
             scripts: scripts/validate-celestial.cjs scripts/validate-refinement.cjs scripts/validate-celestial-realism.cjs
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 supports this LTS image; ubuntu-latest now selects 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
