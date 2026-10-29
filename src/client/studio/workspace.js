@@ -1,3 +1,4 @@
+import { menuPlacement, menuIndex } from './menu-navigation.js';
 import { CelestialPanel } from './celestial-panel.js';
 import { LightingWorkbench } from './lighting-workbench.js';
 import { STUDIO_VERSION, SCENE_LOOKS, applySceneLook, graphicsReport } from './scene-looks.js';
@@ -11,7 +12,7 @@ const bounded = (value, min, max, fallback) => Number.isFinite(Number(value)) ? 
 
 // Every Studio command below owns a current Core service. The complete legacy
 // menubar is retained with its original DOM/listeners in Legacy workspace.
-const MENUS = {
+export const MENUS = {
   File: [['new', 'New project'], ['open', 'Open .skyforge…'], ['save', 'Save .skyforge'], ['capture', 'Save preview PNG…']],
   Edit: [['undo', 'Undo'], ['redo', 'Redo'], ['duplicate', 'Duplicate selected reference'], ['delete', 'Delete selected reference']],
   View: [['home', 'Reset camera'], ['projection', 'Perspective / Orthographic'], ['grid', 'Toggle grid'], ['shadows', 'Toggle object Sun shadows'], ['overlays', 'Toggle overlays'], ['left', 'Outliner'], ['right', 'Inspector'], ['bottom', 'Editors'], ['maximize', 'Maximize viewport'], ['reset', 'Reset workspace'], ['legacy', 'Legacy workspace']],
@@ -75,7 +76,11 @@ const ICONS = {
   sphere: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
   plane: '<path d="m3 15 10-9 8 4-10 9z"/>',
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
-  new: '<path d="M6 2h8l4 4v16H6zm8 0v5h4m-6 4v7m-3-3h6"/>'
+  new: '<path d="M6 2h8l4 4v16H6zm8 0v5h4m-6 4v7m-3-3h6"/>',
+  clouds: '<path d="M6 18h12a4 4 0 0 0 0-8h-1a6 6 0 0 0-11 1 3.5 3.5 0 0 0 0 7z"/>',
+  location: '<path d="M18 10c0 5-6 11-6 11S6 15 6 10a6 6 0 1 1 12 0z"/><circle cx="12" cy="10" r="2"/>',
+  lighting: '<path d="M9 18h6m-5 3h4M8 13a6 6 0 1 1 8 0l-1 2H9z"/>',
+  effects: '<path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/>'
 };
 export function studioIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS.panel}</svg>`;
@@ -103,10 +108,15 @@ export class StudioWorkspace {
     this.builder = doc.getElementById('sf-new-type')?.closest('.sf-outliner-panel');
     this.css = doc.createElement('link'); this.css.rel = 'stylesheet';
     this.css.href = new URL('./studio.css', import.meta.url).href; doc.head.append(this.css);
+    this.interfaceCSS = doc.createElement('link'); this.interfaceCSS.rel = 'stylesheet';
+    this.interfaceCSS.href = new URL('./interface.css', import.meta.url).href; doc.head.append(this.interfaceCSS);
     this.toolbar = doc.createElement('div'); this.toolbar.id = 'sf-studio-toolbar'; this.toolbar.className = 'sf-studio-toolbar';
     this.toolbar.setAttribute('role', 'toolbar'); this.toolbar.setAttribute('aria-label', 'SkyForge Studio workspace');
     this.toolbar.innerHTML = `<strong>STUDIO</strong><div class="sf-studio-presets" aria-label="Workspace layout">${['Sky', 'Animation', 'Nodes'].map(name => `<button type="button" data-studio-preset="${name}">${name}</button>`).join('')}</div><div class="sf-studio-file">${this.button('new', 'New', 'new')}${this.button('open', 'Open', 'open')}${this.button('save', 'Save', 'save')}${this.button('undo', 'Undo', 'undo')}${this.button('redo', 'Redo', 'redo')}</div><div class="sf-studio-tools">${this.button('move', 'Move', 'move', 'Move references (G)')}${this.button('rotate', 'Rotate', 'rotate', 'Rotate references (R)')}${this.button('scale', 'Scale', 'scale', 'Scale references (S)')}<label class="sf-studio-space">Axes<select data-studio-space aria-label="Transform orientation"><option value="global">Global</option><option value="local">Local</option></select></label>${this.button('frame', 'Frame', 'frame', 'Frame selected (F)')}</div><div class="sf-studio-view-actions">${this.button('capture', 'Preview PNG', 'capture', 'Save a PNG image of the WebGL preview')}${this.button('left', 'Outliner', 'panel')}${this.button('right', 'Inspector', 'panel')}${this.button('bottom', 'Editors', 'timeline')}${this.button('maximize', 'Maximize', 'maximize', 'Maximize viewport (Shift Space)')}${this.button('hub', 'Core', 'nodes', 'Open Core Command Center')}${this.button('legacy', 'Legacy workspace', 'panel', 'Restore the original workspace and all legacy tools')}</div>`;
     this.grid.before(this.toolbar);
+    this.projectLabel = doc.createElement('div'); this.projectLabel.className = 'sf-studio-document';
+    this.projectLabel.innerHTML = '<span class="sf-studio-document-name"></span><span class="sf-studio-document-state"></span>';
+    this.toolbar.querySelector('.sf-studio-tools').before(this.projectLabel);
     this.statusbar = doc.querySelector('.statusbar');
     if (this.statusbar) {
       this.legacyStatus = doc.createElement('div'); this.legacyStatus.className = 'sf-studio-legacy-status'; this.legacyStatus.hidden = true;
@@ -115,10 +125,10 @@ export class StudioWorkspace {
       this.statusbar.append(this.legacyStatus, this.studioStatus);
     }
     this.left = doc.createElement('aside'); this.left.className = 'sf-studio-left'; this.left.setAttribute('aria-label', 'Scene outliner');
-    this.left.innerHTML = '<header class="sf-studio-panel-heading">Scene Outliner</header><div class="sf-studio-outliner"></div><div class="sf-studio-add" aria-label="Add reference geometry"></div><div class="sf-studio-builder"></div>';
+    this.left.innerHTML = '<header class="sf-studio-panel-heading">Scene Outliner</header><div class="sf-studio-outliner"></div><p class="sf-studio-empty">No reference objects yet.<br>Add geometry below to evaluate your lighting.</p><div class="sf-studio-add" aria-label="Add reference geometry"></div><div class="sf-studio-builder"></div>';
     this.left.querySelector('.sf-studio-add').innerHTML = ['sphere', 'cube', 'plane'].map(type => this.button(`add-${type}`, type[0].toUpperCase() + type.slice(1), type)).join('');
     this.right = doc.createElement('aside'); this.right.className = 'sf-studio-right'; this.right.setAttribute('aria-label', 'Contextual inspector');
-    this.right.innerHTML = '<header class="sf-studio-panel-heading"><button type="button" data-studio-inspector="selection">Selection</button><button type="button" data-studio-inspector="sky">Sky</button></header><div class="sf-studio-selection"></div><div class="sf-studio-sky"><div class="sf-studio-sky-controls"><label>Preview exposure ×<input id="sf-studio-exposure" type="number" min="0.01" max="32" step="0.1" aria-label="Preview exposure multiplier" title="Display preview exposure multiplier. Escape cancels the edit."></label></div></div>';
+    this.right.innerHTML = '<header class="sf-studio-panel-heading"><span class="sf-studio-inspector-title">Inspector</span><button type="button" data-studio-inspector="selection">Selection</button><button type="button" data-studio-inspector="sky">Sky</button></header><div class="sf-studio-selection"></div><div class="sf-studio-sky"><div class="sf-studio-sky-controls"><label>Display exposure ×<input id="sf-studio-exposure" type="number" min="0.01" max="32" step="0.1" aria-label="Preview exposure multiplier" title="Display preview exposure multiplier. Escape cancels the edit."></label></div></div>';
     this.exposure = this.right.querySelector('#sf-studio-exposure');
     this.bottom = doc.createElement('section'); this.bottom.className = 'sf-studio-bottom'; this.bottom.setAttribute('aria-label', 'Timeline and node editors');
     this.bottom.innerHTML = `<header class="sf-studio-panel-heading"><button type="button" data-studio-editor-tab="timeline">${studioIcon('timeline')}Timeline</button><button type="button" data-studio-editor-tab="nodes">${studioIcon('nodes')}Nodes</button><span class="sf-studio-bottom-hint">Shared project state</span></header><div class="sf-studio-editor" data-studio-editor="timeline"></div><div class="sf-studio-editor" data-studio-editor="nodes"></div>`;
@@ -191,42 +201,76 @@ export class StudioWorkspace {
     const marker = this.document.createComment('SkyForge Studio original location'); node.before(marker);
     this.moves.push({ node, destination, marker }); destination.append(node);
   }
-  initMenus() {
+initMenus() {
     const menubar = this.document.querySelector('.menubar'); if (!menubar) return;
-    this.menus = this.document.createElement('nav'); this.menus.id = 'sf-studio-menus'; this.menus.setAttribute('aria-label', 'Studio menus');
-    this.menus.innerHTML = Object.entries(MENUS).map(([name, commands]) => `<div class="sf-studio-menu"><button type="button" data-studio-menu="${name}" aria-haspopup="menu" aria-expanded="false">${name}</button><div class="sf-studio-dropdown" role="menu" aria-label="${name}" hidden>${commands.map(([action, label]) => `<button type="button" role="menuitem" data-studio-command="${action}">${label}</button>`).join('')}</div></div>`).join('');
+    this.menus = this.document.createElement('nav'); this.menus.id = 'sf-studio-menus';
+    this.menus.setAttribute('aria-label', 'Studio menus'); this.menus.setAttribute('role', 'menubar');
+    const modifier = /Mac|iPhone|iPad/.test(this.root.navigator?.platform || '') ? '⌘' : 'Ctrl+';
+    const shortcuts = { new: modifier+'N', open: modifier+'O', save: modifier+'S', undo: modifier+'Z', redo: modifier+'Shift+Z', frame: 'F', home: 'Home', play: 'Space', maximize: 'Shift+Space' };
+    this.menus.innerHTML = Object.entries(MENUS).map(([name, commands], index) => `<div class="sf-studio-menu"><button type="button" role="menuitem" tabindex="${index === 0 ? 0 : -1}" data-studio-menu="${name}" aria-haspopup="menu" aria-expanded="false" aria-controls="sf-studio-menu-${name}">${name}</button><div id="sf-studio-menu-${name}" class="sf-studio-dropdown" role="menu" aria-label="${name}" hidden>${commands.map(([action, label]) => `<button type="button" role="menuitem" tabindex="-1" aria-label="${label}" data-studio-command="${action}"><span class="sf-menu-label">${label}</span>${shortcuts[action] ? `<kbd aria-hidden="true">${shortcuts[action]}</kbd>` : ''}</button>`).join('')}</div></div>`).join('');
     menubar.querySelector('.mb-menus')?.before(this.menus);
     this.on(this.menus, 'click', event => {
       const trigger = event.target.closest('[data-studio-menu]'), command = event.target.closest('[data-studio-command]');
       if (trigger) {
-        const open = trigger.getAttribute('aria-expanded') === 'true'; this.closeMenus();
-        if (!open) { trigger.setAttribute('aria-expanded', 'true'); trigger.nextElementSibling.hidden = false; }
+        const open = trigger.getAttribute('aria-expanded') === 'true'; this.closeMenus(); this.focusMenu(trigger);
+        if (!open) this.openMenu(trigger);
       }
       if (command) {
-        const trigger=command.closest('.sf-studio-menu')?.querySelector('[data-studio-menu]');
-        this.closeMenus();trigger?.focus();this.action(command.dataset.studioCommand);
+        const trigger = command.closest('.sf-studio-menu')?.querySelector('[data-studio-menu]');
+        this.closeMenus(); trigger?.focus(); this.action(command.dataset.studioCommand);
       }
     });
     this.on(this.menus, 'keydown', event => {
       const menu = event.target.closest('.sf-studio-menu'); if (!menu) return;
-      const trigger = menu.querySelector('[data-studio-menu]'), items = [...menu.querySelectorAll('[role=menuitem]:not(:disabled)')];
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); this.closeMenus(); trigger.focus(); }
-      if (['ArrowDown', 'ArrowUp'].includes(event.key) && items.length) {
-        event.preventDefault(); trigger.setAttribute('aria-expanded', 'true'); trigger.nextElementSibling.hidden = false;
-        const index = items.indexOf(this.document.activeElement), delta = event.key === 'ArrowDown' ? 1 : -1;
-        items[(index < 0 ? delta > 0 ? 0 : items.length - 1 : (index + delta + items.length) % items.length)].focus();
+      const trigger = menu.querySelector('[data-studio-menu]');
+      const commands = [...menu.querySelectorAll('[data-studio-command]:not(:disabled)')];
+      const key = event.key;
+      if (key === 'Escape') { event.preventDefault(); event.stopPropagation(); this.closeMenus(); trigger.focus(); }
+      if (key === 'Tab') this.closeMenus();
+      if (['ArrowDown', 'ArrowUp'].includes(key) && commands.length) {
+        event.preventDefault(); event.stopPropagation();
+        const index = commands.indexOf(this.document.activeElement);
+        this.openMenu(trigger); commands[menuIndex(index, key, commands.length)].focus();
+      }
+      if (['ArrowLeft', 'ArrowRight'].includes(key)) {
+        event.preventDefault(); event.stopPropagation();
+        const triggers = [...this.menus.querySelectorAll('[data-studio-menu]')];
+        const next = triggers[menuIndex(triggers.indexOf(trigger), key, triggers.length)];
+        const wasOpen = trigger.getAttribute('aria-expanded') === 'true';
+        this.closeMenus(); this.focusMenu(next);
+        if (wasOpen) { this.openMenu(next); next.nextElementSibling.querySelector('button:not(:disabled)')?.focus(); }
+      }
+      if (['Home', 'End'].includes(key)) {
+        event.preventDefault(); event.stopPropagation();
+        if (event.target.hasAttribute('data-studio-command')) commands[menuIndex(0, key, commands.length)]?.focus();
+        else {
+          const triggers = [...this.menus.querySelectorAll('[data-studio-menu]')];
+          this.closeMenus(); this.focusMenu(triggers[menuIndex(0, key, triggers.length)]);
+        }
       }
     });
     this.on(this.document, 'pointerdown', event => { if (!this.menus.contains(event.target)) this.closeMenus(); });
     this.on(this.root, 'blur', () => this.closeMenus());
+    this.on(this.root, 'resize', () => this.closeMenus());
+  }
+  focusMenu(trigger) {
+    for (const item of this.menus.querySelectorAll('[data-studio-menu]')) item.tabIndex = item === trigger ? 0 : -1;
+    trigger.focus({ preventScroll: true }); trigger.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+  openMenu(trigger) {
+    this.closeMenus(); trigger.setAttribute('aria-expanded', 'true');
+    const popup = trigger.nextElementSibling; popup.hidden = false;
+    const placement = menuPlacement(trigger.getBoundingClientRect(), { width: 292, height: popup.scrollHeight }, { width: this.root.innerWidth, height: this.root.innerHeight });
+    Object.assign(popup.style, { left: placement.left+'px', top: placement.top+'px', width: Math.min(292, placement.maxWidth)+'px', minWidth: '0', maxWidth: placement.maxWidth+'px', maxHeight: placement.maxHeight+'px' });
   }
   closeMenus() {
     for (const trigger of this.menus?.querySelectorAll('[data-studio-menu]') || []) { trigger.setAttribute('aria-expanded', 'false'); trigger.nextElementSibling.hidden = true; }
   }
+
   initSkyControls() {
     if (!this.sidebar) return;
     this.skyNav = this.document.createElement('nav'); this.skyNav.className = 'sf-studio-sky-nav'; this.skyNav.setAttribute('aria-label', 'Sky inspector sections');
-    this.skyNav.innerHTML = [['sun', 'Sun / Atmosphere'], ['clouds', 'Clouds'], ['location', 'Location'], ['lighting', 'Lighting'], ['effects', 'Sky effects']].map(([name, label]) => `<button type="button" data-studio-sky="${name}">${label}</button>`).join('');
+    this.skyNav.innerHTML = [['sun', 'Atmosphere'], ['clouds', 'Clouds'], ['location', 'Location'], ['lighting', 'Lighting'], ['effects', 'Sky effects']].map(([name, label]) => `<button type="button" data-studio-sky="${name}">${studioIcon(name === 'sun' ? 'sun' : name)}<span>${label}</span></button>`).join('');
     this.sidebar.before(this.skyNav);
     this.on(this.skyNav, 'click', event => { const tab = event.target.closest('[data-studio-sky]'); if (tab) this.showSky(tab.dataset.studioSky); });
     // Unsupported legacy rigs stay available in their workspace; the Studio
@@ -274,7 +318,7 @@ export class StudioWorkspace {
   }
   finishCloudScale(cancel){const edit=this.cloudScaleEdit;this.cloudScaleEdit=null;if(edit?.active)cancel?edit.cancel():edit.commit();if(this.cloudScale)this.cloudScale.value=String(this.api.store.get('clouds.scale')??1200);}
   initLooks(){
-    this.toolbar.querySelector('strong').append(Object.assign(this.document.createElement('span'),{className:'sf-studio-version',textContent:'R16',title:STUDIO_VERSION}));
+    this.toolbar.querySelector('strong').append(Object.assign(this.document.createElement('span'),{className:'sf-studio-version',textContent:'R17',title:STUDIO_VERSION}));
     this.looks=this.document.createElement('section');this.looks.id='sec-sf-looks';this.looks.className='s-sec';
     this.looks.innerHTML='<div class="s-head">Sky looks</div><div class="s-body-inner sf-sky-looks"><p>Select a look to set the sky, display exposure and camera together. Undo restores the previous look.</p>'+Object.keys(SCENE_LOOKS).map((name,index)=>`<button type="button" data-scene-look="${name}" class="sf-look-${index}"><span class="sf-look-swatch" aria-hidden="true"></span><strong>${name}</strong></button>`).join('')+'</div>';
     this.sidebar?.querySelector('.s-body')?.append(this.looks);
@@ -356,6 +400,11 @@ export class StudioWorkspace {
   }
   sync(state) {
     if (!this.toolbar) return;
+    const projectName = this.projectLabel.querySelector('.sf-studio-document-name');
+    projectName.textContent = state.project?.name || 'Untitled SkyForge Scene'; projectName.title = projectName.textContent;
+    const projectState = this.projectLabel.querySelector('.sf-studio-document-state');
+    projectState.textContent = state.project?.modified ? 'Modified' : 'Saved'; projectState.dataset.modified = String(Boolean(state.project?.modified));
+    this.left.querySelector('.sf-studio-empty').hidden = Object.keys(state.scene?.referenceObjects || {}).length > 0;
     const tool = state.viewport?.transformTool || 'move';
     const transforms=(state.viewport?.navigationTool||'transform')==='transform';
     for (const name of ['move', 'rotate', 'scale']) this.toolbar.querySelector(`[data-studio-action="${name}"]`).setAttribute('aria-pressed', String(transforms&&tool === name));
@@ -499,7 +548,7 @@ export class StudioWorkspace {
     this.document?.body.classList.remove('sf-studio-enabled', 'sf-studio-legacy-layout', 'sf-studio-resizing');
     if (this.originalTitle !== undefined) this.document.title = this.originalTitle;
     this.grid?.classList.remove('sf-studio-grid', 'sf-studio-maximized'); this.center?.classList.remove('sf-studio-center');
-    for (const node of [this.toolbar, this.left, this.right, this.bottom, this.css, this.menus, this.skyNav, this.cloudTools, this.atmosphereTools, this.sunPresets, this.helpDialog,this.graphicsDialog,this.looks, ...(this.handles || [])]) node?.remove();
+    for (const node of [this.toolbar, this.left, this.right, this.bottom, this.css, this.interfaceCSS, this.menus, this.skyNav, this.cloudTools, this.atmosphereTools, this.sunPresets, this.helpDialog,this.graphicsDialog,this.looks, ...(this.handles || [])]) node?.remove();
     for (const row of this.sidebar?.querySelectorAll('[data-studio-legacy]') || []) delete row.dataset.studioLegacy;
     for (const section of this.sidebar?.querySelectorAll('.sf-studio-sky-section') || []) section.classList.remove('sf-studio-sky-section');
     if (this.outlinerNew) this.outlinerNew.title = this.outlinerNewTitle;

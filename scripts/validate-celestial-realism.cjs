@@ -20,7 +20,7 @@ const output=process.env.SKYFORGE_TEST_OUTPUT||'/tmp/skyforge-celestial-realism'
  try{
   await page.goto(process.env.SKYFORGE_TEST_URL||'http://127.0.0.1:3000',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>globalThis.SkyForgeCore?.workspace?.effects&&SkyForgeCore.viewport.renderer?.frames>0);
   stage('one command menu, compact toolbar and real Legacy restore');
-  assert.equal(await page.locator('.sf-studio-version').textContent(),'R16');assert.equal(await page.locator('.sf-studio-file').isVisible(),false);assert.equal(await page.locator('.sf-core-status').isVisible(),false);
+  assert.equal(await page.locator('.sf-studio-version').textContent(),'R17');assert.equal(await page.locator('.sf-studio-file').isVisible(),false);assert.equal(await page.locator('.sf-core-status').isVisible(),false);
   for(const action of ['move','rotate','scale']){assert.equal(await page.locator(`[data-studio-action="${action}"]`).isVisible(),false);assert.equal(await page.locator(`[data-vp-rail="${action}"]`).isVisible(),true);}
   for(const action of ['home','frame','grid','overlays','sun'])assert.equal(await page.locator(`[data-vp="${action}"]`).isVisible(),false);
   assert.equal(await page.locator('.menubar .mb-menus').isVisible(),false);assert.equal(await page.locator('#sf-studio-menus').count(),1);

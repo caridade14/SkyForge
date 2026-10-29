@@ -1,9 +1,9 @@
 name: Real 3D Viewport
 on:
   push:
-    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo, feature/viewport-reference-objects, feature/studio-editors, feature/studio-volumetric-preview, fix/studio-natural-preview-ui, feature/lighting-workbench, feature/atmosphere-celestial-studio, feature/studio-render-refinement, feature/celestial-realism-ui]
+    branches: [feature/real-3d-viewport, feature/viewport-sun-gizmo, feature/viewport-reference-objects, feature/studio-editors, feature/studio-volumetric-preview, fix/studio-natural-preview-ui, feature/lighting-workbench, feature/atmosphere-celestial-studio, feature/studio-render-refinement, feature/celestial-realism-ui, feature/studio-interface-redesign]
   pull_request:
-    branches: [feature/studio-render-refinement, feature/atmosphere-celestial-studio, feature/lighting-workbench, fix/studio-natural-preview-ui, feature/studio-volumetric-preview, feature/studio-editors, feature/viewport-reference-objects, feature/viewport-sun-gizmo, feature/real-3d-viewport, feature/natural-light-engine, main]
+    branches: [feature/celestial-realism-ui, feature/studio-render-refinement, feature/atmosphere-celestial-studio, feature/lighting-workbench, fix/studio-natural-preview-ui, feature/studio-volumetric-preview, feature/studio-editors, feature/viewport-reference-objects, feature/viewport-sun-gizmo, feature/real-3d-viewport, feature/natural-light-engine, main]
 permissions:
   contents: read
 concurrency:
@@ -33,6 +33,8 @@ jobs:
             scripts: scripts/validate-viewport.cjs
           - group: studio-ui
             scripts: scripts/validate-studio.cjs scripts/validate-preview-ui.cjs
+          - group: interface
+            scripts: scripts/validate-interface.cjs
           - group: lighting
             scripts: scripts/validate-lighting.cjs
           - group: celestial

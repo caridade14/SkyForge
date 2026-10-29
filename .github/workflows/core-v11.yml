@@ -13,8 +13,10 @@ on:
       - feature/atmosphere-celestial-studio
       - feature/studio-render-refinement
       - feature/celestial-realism-ui
+      - feature/studio-interface-redesign
   pull_request:
     branches:
+      - feature/celestial-realism-ui
       - feature/studio-render-refinement
       - feature/atmosphere-celestial-studio
       - feature/lighting-workbench

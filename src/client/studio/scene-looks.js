@@ -1,7 +1,7 @@
 import { cloneValue, DEFAULT_CELESTIAL } from '../core/state-store.js';
 import { frameSky } from '../viewport/camera.js';
 
-export const STUDIO_VERSION='Studio R16';
+export const STUDIO_VERSION='Studio R17';
 export const SCENE_LOOKS=Object.freeze({
  'Cumulus daylight':{sun:{elevation:35,azimuth:215,intensity:1.6,temperature:5778},clouds:{type:'Cumulus',coverage:.66,density:.68,altitude:1800,thickness:1400,erosion:.28,detail:.8,seed:3301},azimuth:180,elevation:12},
  'Warm sunset':{sun:{elevation:3.5,azimuth:255,intensity:1.8,temperature:5778},clouds:{type:'Cumulus',coverage:.6,density:.65,altitude:1600,thickness:1600,erosion:.34,detail:.85,seed:731},azimuth:245,elevation:10},

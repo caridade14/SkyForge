@@ -38,7 +38,7 @@ test('R16 scene looks retain authored objects, graph documents and complete reve
  const {SkyForgeStore}=await load('src/client/core/state-store.js'),{applySceneLook,STUDIO_VERSION}=await load('src/client/studio/scene-looks.js');
  const store=new SkyForgeStore({storage:null});store.set('moon.angularDiameter',3);store.set('scene.referenceObjects',{x:{id:'x',name:'Kept'}});store.set('future',{keep:true});
  const before=store.snapshot();store.batch('Aurora look',draft=>applySceneLook(draft,'Aurora night'));
- assert.equal(STUDIO_VERSION,'Studio R16');assert.equal(store.get('moon.angularDiameter'),.52);assert.equal(store.get('aurora.width'),6);
+ assert.equal(STUDIO_VERSION,'Studio R17');assert.equal(store.get('moon.angularDiameter'),.52);assert.equal(store.get('aurora.width'),6);
  assert.deepEqual(store.get('scene.referenceObjects'),before.scene.referenceObjects);assert.deepEqual(store.get('future'),before.future);
  store.undo();assert.equal(store.get('moon.angularDiameter'),3);assert.deepEqual(store.get('aurora'),before.aurora);store.destroy();
 });
